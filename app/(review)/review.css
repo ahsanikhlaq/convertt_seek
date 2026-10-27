@@ -1,0 +1,10 @@
+html,body{margin:0;height:100%;overflow:hidden;background:#f8f6f8}
+*{box-sizing:border-box}
+a{color:#4b154a}
+a:hover{color:#3e133e}
+kbd{font:500 10px 'Outfit',system-ui,sans-serif;opacity:.6}
+
+/* hover states the prototype set with style-hover */
+a.rv-full:hover{color:#d4aad4}
+.rv-prev:hover:not(:disabled){border-color:#261325!important}
+button:disabled{opacity:.45;cursor:default!important}
