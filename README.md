@@ -27,3 +27,21 @@ The review page frames `/app` and the two stay in sync both ways.
 - `lib/seek/engine.js` — the prototype's app logic, kept as-is apart from mount/unmount wiring and one bug fix
   (opening a thread on a message with no replies crashed the app)
 - `lib/seek/steps.ts` — the ten review steps
+
+## Desktop app (Electron)
+
+`desktop/` wraps the same Seek app in a native window (Mac, Windows, Linux). It exports the Next.js
+build to static files (`SEEK_DESKTOP=1`, see `next.config.mjs`) and serves them from a local
+127.0.0.1 server, so it works offline and the web build on Vercel is unaffected.
+
+```bash
+cd desktop
+npm install
+npm start            # builds the web export and opens the app
+npm run smoke        # headless check: loads the app and visits 7 screens
+npm run dist:mac     # desktop/dist/Seek-<version>.dmg  (also dist:win, dist:linux)
+```
+
+Native extras: app menu with **Go** shortcuts (⌘/Ctrl+1–7 jump to Team, DMs, Client chat, Meetings,
+Decisions, AI agents, Apps), remembered window size and position, single instance, external links open in
+the system browser. Installers are unsigned; sign them with your own certificates before sharing widely.

@@ -5,3 +5,8 @@ next-env.d.ts
 *.tsbuildinfo
 .env*.local
 .claude/
+
+# desktop app
+desktop/web/
+desktop/dist/
+desktop/node_modules/

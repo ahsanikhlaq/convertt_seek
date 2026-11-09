@@ -1,0 +1,33 @@
+{
+  "name": "seek-desktop",
+  "productName": "Seek",
+  "version": "1.0.0",
+  "description": "Seek by Convertt, desktop app",
+  "author": "Convertt",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "build:web": "cd .. && SEEK_DESKTOP=1 npx next build",
+    "start": "npm run build:web && electron .",
+    "electron": "electron .",
+    "smoke": "electron . --smoke-test",
+    "dist": "npm run build:web && electron-builder",
+    "dist:mac": "npm run build:web && electron-builder --mac",
+    "dist:win": "npm run build:web && electron-builder --win",
+    "dist:linux": "npm run build:web && electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "co.convertt.seek",
+    "productName": "Seek",
+    "copyright": "Convertt",
+    "files": ["main.js", "package.json", "web/**/*", "!web/cache/**/*", "!web/types/**/*", "!web/server/**/*", "!web/*.json"],
+    "directories": { "output": "dist", "buildResources": "build" },
+    "mac": { "category": "public.app-category.productivity", "target": ["dmg", "zip"], "icon": "build/icon.png" },
+    "win": { "target": ["nsis"], "icon": "build/icon.png" },
+    "linux": { "target": ["AppImage"], "category": "Office", "icon": "build/icon.png" }
+  }
+}
