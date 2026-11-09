@@ -563,3 +563,19 @@ html.dark .codes.ok input{background:#1d3328!important}
 html.dark .main,html.dark .pane{box-shadow:0 1px 2px rgba(0,0,0,.3)!important}
 html.dark .rail{}
 @media (max-width:760px){html.dark .rail{background:var(--card)!important;border-top-color:var(--ln)!important}}
+
+/* ===== React app additions ===== */
+a.ri,a.si,a.btn{text-decoration:none}
+a.btn{color:var(--ink)}a.btn.pri,a.btn.gold{color:#fff}
+.linkbtn{border:0;background:none;padding:0;font:inherit;color:var(--v);cursor:pointer;text-align:left}
+.linkbtn:hover{color:var(--vd);text-decoration:underline}
+.msg .src.linkbtn{font-size:12px;color:var(--ai)}
+.fine .linkbtn{font-size:inherit}
+.auth .fm .top .linkbtn{font-weight:600}
+:focus-visible{outline:2px solid var(--v);outline-offset:2px}
+.inp:focus-visible,.comp textarea:focus-visible,.codes input:focus-visible,.tagin input:focus-visible{outline:none}
+.mhd kbd{font:500 11px 'Geist Mono',monospace;color:var(--sb);border:1px solid var(--ln);border-radius:4px;padding:1px 5px}
+.splash{height:100%;display:grid;place-items:center;background:var(--body)}
+.splash .slogo{transform:scale(1.4);animation:fi .6s}
+.modal:focus{outline:none}
+@media (max-width:760px){.mhd .hide-m{display:none}}

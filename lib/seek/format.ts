@@ -1,0 +1,10 @@
+export const now = () => {
+  const d = new Date();
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+};
+
+export const isEmail = (v: string) => /^\S+@\S+\.\S+$/.test(v);
+
+export const slugify = (v: string) => (v || 'workspace').toLowerCase().replace(/[^a-z0-9]+/g, '') || 'workspace';
+
+export const channelId = (v: string) => v.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');

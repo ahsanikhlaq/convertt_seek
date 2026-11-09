@@ -6,6 +6,8 @@ const path = require('path');
 const WEB_DIR = path.join(__dirname, 'web');
 const STATE_FILE = () => path.join(app.getPath('userData'), 'window-state.json');
 const SMOKE = process.argv.includes('--smoke-test');
+// the smoke test runs against a throw-away profile so it never touches real data
+if (SMOKE) app.setPath('userData', fs.mkdtempSync(path.join(require('os').tmpdir(), 'seek-smoke-')));
 const isMac = process.platform === 'darwin';
 
 const MIME = {
@@ -53,16 +55,17 @@ function saveState(win) {
 
 let server, origin, mainWindow;
 
-/** Jumps to one of the app's ten screens; the engine listens for hash changes. */
+/** Opens one of the app's screens with in-app navigation (no reload). */
 function goTo(route) {
   if (!mainWindow) return;
-  mainWindow.webContents.executeJavaScript(`location.hash = ${JSON.stringify('#' + route)}`).catch(() => {});
+  const js = `window.dispatchEvent(new CustomEvent('seek:navigate', { detail: ${JSON.stringify(route)} }))`;
+  mainWindow.webContents.executeJavaScript(js).catch(() => {});
 }
 
 function buildMenu() {
   const screens = [
-    ['Team channels', 'channels'], ['Direct messages', 'dms'], ['Client chat', 'client'], ['Schedule a call', 'schedule'],
-    ['Decisions', 'decisions'], ['AI agents', 'agents'], ['Apps and integrations', 'apps'],
+    ['Team channels', '/channels'], ['Direct messages', '/dms'], ['Clients', '/clients'], ['Schedule a call', '/meetings'],
+    ['Decisions', '/decisions'], ['AI agents', '/agents'], ['Apps and integrations', '/apps'],
   ];
   const template = [
     ...(isMac ? [{ role: 'appMenu' }] : []),
@@ -71,12 +74,12 @@ function buildMenu() {
     {
       label: 'Go',
       submenu: [
-        { label: 'Sign up', click: () => goTo('signup') },
-        { label: 'Workspace setup', click: () => goTo('setup') },
-        { type: 'separator' },
         ...screens.map(([label, route], i) => ({ label, accelerator: `CmdOrCtrl+${i + 1}`, click: () => goTo(route) })),
         { type: 'separator' },
-        { label: 'Invite a client', click: () => goTo('invite') },
+        { label: 'Invite a client', click: () => goTo('/invite') },
+        { type: 'separator' },
+        { label: 'Back', accelerator: isMac ? 'Cmd+[' : 'Alt+Left', click: () => mainWindow?.webContents.navigationHistory.goBack() },
+        { label: 'Forward', accelerator: isMac ? 'Cmd+]' : 'Alt+Right', click: () => mainWindow?.webContents.navigationHistory.goForward() },
       ],
     },
     {
@@ -120,28 +123,48 @@ function createWindow() {
   });
   win.webContents.on('page-title-updated', e => { e.preventDefault(); });
 
-  win.loadURL(`${origin}/app/`);
+  win.loadURL(`${origin}/`);
   return win;
 }
 
 async function smokeTest(win) {
   const wc = win.webContents;
-  await new Promise(r => wc.once('did-finish-load', r));
-  await new Promise(r => setTimeout(r, 800));
-  const probe = async route => {
-    await wc.executeJavaScript(`location.hash='#${route}'`);
-    await new Promise(r => setTimeout(r, 300));
-    return wc.executeJavaScript(`({route:'${route}',hash:location.hash,nodes:document.querySelectorAll('#root *').length,text:(document.querySelector('.main,.auth')||document.body).innerText.slice(0,60).replace(/\\n/g,' | ')})`);
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const js = code => wc.executeJavaScript(code);
+  const waitFor = async (cond, ms = 5000) => {
+    for (let t = 0; t < ms; t += 100) { if (await js(cond)) return true; await wait(100); }
+    return false;
   };
-  const out = [];
-  for (const r of ['signup', 'channels', 'dms', 'client', 'decisions', 'agents', 'apps']) out.push(await probe(r));
-  const font = await wc.executeJavaScript(`document.fonts.check('16px Outfit')`);
+  const clickText = async text => {
+    const find = `[...document.querySelectorAll('button')].find(b => b.textContent.includes(${JSON.stringify(text)}))`;
+    if (!(await waitFor(`!!${find}`))) return false;
+    await js(`${find}.click()`);
+    return true;
+  };
+  await new Promise(r => wc.once('did-finish-load', r));
+  const steps = [];
+  // a new install opens on sign-up; sign in with Google, then finish workspace setup
+  steps.push({ step: 'signup', ok: await waitFor(`location.pathname.startsWith('/signup')`) });
+  await clickText('Continue with Google');
+  steps.push({ step: 'setup', ok: await waitFor(`location.pathname.startsWith('/setup')`) });
+  await clickText('Continue to #general');
+  steps.push({ step: 'channels', ok: await waitFor(`location.pathname.startsWith('/channels') && !!document.querySelector('.feed')`) });
+  // every screen through the same navigation the Go menu uses
+  for (const r of ['/dms', '/clients', '/meetings', '/decisions', '/agents', '/apps', '/invite', '/channels']) {
+    goTo(r);
+    const ok = await waitFor(`location.pathname.replace(/[/]$/, '') === ${JSON.stringify(r)} && document.querySelectorAll('body *').length > 40`);
+    steps.push({ step: r, ok, text: (await js(`(document.querySelector('.mh .tt b, .inv h1, .modal b') || document.body).innerText.slice(0, 50)`)) });
+  }
+  // a hard reload keeps the session and the screen
+  wc.reload();
+  await new Promise(r => wc.once('did-finish-load', r));
+  steps.push({ step: 'reload keeps session', ok: await waitFor(`location.pathname.startsWith('/channels') && !!document.querySelector('.feed')`) });
+  const font = await js(`document.fonts.check('16px Outfit')`);
   const img = await win.webContents.capturePage();
   const shot = process.env.SMOKE_SHOT;
   if (shot) fs.writeFileSync(shot, img.toPNG());
-  console.log('SMOKE_RESULT ' + JSON.stringify({ url: wc.getURL(), title: win.getTitle(), font, screens: out }));
-  const ok = out.every(o => o.nodes > 20 && o.hash === '#' + o.route);
-  app.exit(ok ? 0 : 1);
+  console.log('SMOKE_RESULT ' + JSON.stringify({ url: wc.getURL(), title: win.getTitle(), font, steps }));
+  app.exit(steps.every(s => s.ok) ? 0 : 1);
 }
 
 if (!app.requestSingleInstanceLock() && !SMOKE) {
