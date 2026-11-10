@@ -56,7 +56,7 @@ export function SignupPage() {
   };
 
   return (
-    <div className="auth">
+    <main className="auth">
       <div className="art">
         <Brand>
           <span className="tag" style={{ marginLeft: 'auto', background: 'rgba(255,255,255,.14)', color: '#fff' }}>
@@ -179,7 +179,7 @@ export function SignupPage() {
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -229,7 +229,7 @@ export function SetupPage() {
   };
 
   return (
-    <div className="auth">
+    <main className="auth">
       <div className="art">
         <Brand />
         <h2>
@@ -410,6 +410,6 @@ export function SetupPage() {
           <p className="fine">🔒 Secure sign-in · Your data is encrypted</p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

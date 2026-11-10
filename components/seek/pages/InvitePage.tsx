@@ -41,7 +41,7 @@ export function InvitePage() {
   };
 
   return (
-    <div className="inv">
+    <main className="inv">
       <div className="hd">
         <Link className="btn sm" href={ROUTES.clients}>
           ← Clients
@@ -114,7 +114,7 @@ export function InvitePage() {
                 <small style={{ color: 'var(--sb)' }}>to {i.email}</small>
               </div>
             </div>
-            <h3>Ahsan invited you to {i.space}</h3>
+            <h2>Ahsan invited you to {i.space}</h2>
             <p>{i.msg || 'Chat with the team, follow progress and approve work in one place.'}</p>
             <button
               type="button"
@@ -141,7 +141,7 @@ export function InvitePage() {
             </span>
             <div>
               <b style={{ fontSize: 13, color: 'var(--sb)' }}>{i.space} · Your project space</b>
-              <h3 style={{ margin: '4px 0 0', fontSize: 21 }}>Welcome, Chris</h3>
+              <h2 style={{ margin: '4px 0 0', fontSize: 21 }}>Welcome, Chris</h2>
             </div>
             <p style={{ margin: 0, color: 'var(--mu)' }}>Enter the 6-digit code we just emailed you.</p>
             <CodeInput key={i.step} disabled={i.step < 3} onComplete={openSpace} label="Client sign-in code" />
@@ -151,6 +151,6 @@ export function InvitePage() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

@@ -105,7 +105,7 @@ export function DmsPage() {
         </div>
         <div>
           <span>Status</span>
-          <b style={{ color: 'var(--ok)' }}>● Available</b>
+          <b className="oktxt">● Available</b>
         </div>
       </div>
       <div>

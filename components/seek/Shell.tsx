@@ -146,7 +146,9 @@ export function Sidebar({ title, sub, action, children }: { title: string; sub: 
           ))}
         </div>
         <div className="t">
-          <b>{title}</b>
+          <b role="heading" aria-level={1}>
+            {title}
+          </b>
           {action}
           <button type="button" className="btn sm ghost close" style={{ display: 'none' }} onClick={() => setUI({ sideOpen: false })} aria-label="Close menu">
             ✕

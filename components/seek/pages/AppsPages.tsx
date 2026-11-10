@@ -246,7 +246,7 @@ export function AppsPage() {
           </div>
           <div>
             <span>Status</span>
-            <b style={{ color: a.on ? 'var(--ok)' : 'var(--sb)' }}>{a.on ? '● On' : 'Off'}</b>
+            <b className={a.on ? 'oktxt' : undefined} style={a.on ? undefined : { color: 'var(--sb)' }}>{a.on ? '● On' : 'Off'}</b>
           </div>
         </div>
         <p style={{ margin: 0, fontSize: 12.5, color: 'var(--mu)' }}>Digest waits for the next summary. Normal notifies as usual. Urgent can break through Focus.</p>

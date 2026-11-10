@@ -9,7 +9,7 @@ export const PEOPLE: Record<PersonKey, Person> = {
   MO: { name: 'Momina', color: '#b4531f', role: 'Developer' },
   ZA: { name: 'Zara', color: '#b0306a', role: 'Design intern' },
   CH: { name: 'Chris Hale', color: '#8a5300', role: 'Client · approver' },
-  PR: { name: 'Priya Shah', color: '#a0702a', role: 'Client · copy' },
+  PR: { name: 'Priya Shah', color: '#966826', role: 'Client · copy' },
   AI: { name: 'Standup agent', color: '#5a48c0', role: 'AI' },
 };
 

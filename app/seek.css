@@ -193,7 +193,7 @@ textarea.inp{height:auto;min-height:70px;padding:10px 13px;resize:vertical}
 .ip.on .k b{color:var(--v)}
 .ip .c{padding:16px;display:flex;flex-direction:column;gap:13px}
 .email .fr{display:flex;gap:10px;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--ln)}
-.email h3{margin:0;font-size:19px;line-height:1.25;letter-spacing:-.01em}
+.email :is(h2,h3){margin:0;font-size:19px;line-height:1.25;letter-spacing:-.01em}
 .email p{margin:0;color:var(--mu)}
 /* decisions */
 .dl{flex:1;overflow:auto;padding:16px 22px 30px;display:flex;flex-direction:column;gap:10px}
@@ -212,7 +212,7 @@ textarea.inp{height:auto;min-height:70px;padding:10px 13px;resize:vertical}
 .pause.on{background:var(--reds);border-color:#efc4c4}
 .ag{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 .agc{border:1px solid var(--ln);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;background:#fff;transition:opacity .2s}
-.agc.off{opacity:.6;background:var(--bg)}
+.agc.off{background:var(--bg)}.agc.off :is(.ic,.tg,.rules){filter:grayscale(1)}.agc.off>.ct b{color:var(--mu)} /* was opacity:.6, which faded the text below 4.5:1 */
 .agc .ct{display:flex;gap:10px;align-items:flex-start}
 .agc .ic{width:34px;height:34px;border-radius:10px;background:var(--ais);color:var(--ai);display:grid;place-items:center;font-weight:700;flex:none}
 .agc .ct div{flex:1}.agc .ct b{display:block;font-size:14.5px}.agc .ct small{color:var(--mu);font-size:12.5px;line-height:1.4;display:block}
@@ -551,7 +551,7 @@ html.dark{color-scheme:dark}
 html.dark body,html.dark .app{color:var(--ink)}
 html.dark :is(.btn,.inp,.chip,.tagin,.comp,.file,.card,.dec,.rx,.mt,.mm,.modal,.drawer,.emp,.bpop,.mnp,.slot,.pf-st button,.bpg button,.codes input,.ip,.ar,.al,.stat,.agc,.tierSel,.kv,.ip .k,.email,.pause,.how,.hist,.task,.timer){background-color:var(--card)!important;color:var(--ink);border-color:var(--ln)!important}
 html.dark .btn.pri{background:var(--v)!important;border-color:var(--v)!important;color:#fff}
-html.dark .btn.gold{background:#b07a1a!important;color:#fff}
+html.dark .btn.gold{background:#946615!important;color:#fff} /* was #b07a1a: white text only reached 3.7:1 */
 html.dark .chip.on{background:var(--v)!important;color:#fff}
 html.dark .btn:hover,html.dark .ar:hover{background-color:var(--bg)!important}
 html.dark .ar.on,html.dark .slot.on,html.dark .pf-st button.on{background:var(--vs)!important;color:var(--vd)}
@@ -592,3 +592,26 @@ a.btn{color:var(--ink)}a.btn.pri,a.btn.gold{color:#fff}
 .splash .slogo{transform:scale(1.4);animation:fi .6s}
 .modal:focus{outline:none}
 @media (max-width:760px){.mhd .hide-m{display:none}}
+
+/* ===== Contrast fixes (WCAG AA, 4.5:1 for text) ===== */
+/* light: secondary grey a touch darker so small labels on beige chips pass */
+:root{--sb:#745b73}
+/* sidebar: the wait tag on the selected client row */
+.side .si.on .tag{background:rgba(0,0,0,.2)!important;color:var(--sonfg)!important}
+/* sign-up: links inside sentences need more than colour to stand out */
+.auth .fine a,.auth .fine .linkbtn{text-decoration:underline;text-underline-offset:2px}
+/* status text set from components */
+.oktxt{color:var(--ok)}
+/* dark: brand colours used as text switch to their lighter tints */
+/* (dark --sb is set in lib/seek/theme.ts) */
+html.dark :is(.file i,.rlink,.dec .k span,.linkbtn,.how i,.steps .c i,.ip.on .k b,.tb.on:not(.gold)){color:var(--vd)}
+html.dark :is(.tb.on.gold,.dec.gold .k span,.comp.gold .cr small){color:#e9c37c}
+html.dark .tb.on.gold{border-bottom-color:#e9c37c}
+html.dark :is(.msg .src,.msg .src.linkbtn,.agc .ic){color:#b8aaf5}
+html.dark .oktxt{color:#7fd3a5}
+html.dark .jump{color:var(--body)}
+html.dark .auth .fine a{color:var(--vd)}
+/* iPhone: Safari zooms into any field under 16px when it is tapped, which pushes the page off-screen */
+@media (max-width:760px){input:not([type=checkbox]):not([type=radio]):not(.codes input),textarea,select{font-size:16px!important}}
+/* iPhone: no grey flash on tap */
+button,a,[role=button]{-webkit-tap-highlight-color:transparent}

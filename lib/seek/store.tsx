@@ -123,7 +123,8 @@ export function SeekProvider({ children }: { children: React.ReactNode }) {
   const update = useCallback((fn: (d: State) => void) => {
     setS((prev) => {
       if (!prev) return prev;
-      const d = structuredClone(prev);
+      // structuredClone needs Safari 15.4+; older iPhones fall back to a JSON copy (state is plain JSON)
+      const d: State = typeof structuredClone === 'function' ? structuredClone(prev) : JSON.parse(JSON.stringify(prev));
       fn(d);
       return d;
     });

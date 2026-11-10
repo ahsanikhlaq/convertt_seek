@@ -33,7 +33,7 @@ export function applyTheme(t: Theme, dark: boolean) {
   root.classList.toggle('dark', dark);
   if (dark) {
     set('--body', '#1a1d21'); set('--card', '#222529'); set('--bg', '#27292e'); set('--soft', '#2c2f34');
-    set('--ln', '#383b40'); set('--ln2', '#4b4e54'); set('--ink', '#e8e8ea'); set('--mu', '#b9bbbf'); set('--sb', '#8f9399');
+    set('--ln', '#383b40'); set('--ln2', '#4b4e54'); set('--ink', '#e8e8ea'); set('--mu', '#b9bbbf'); set('--sb', '#9a9ea4'); // lighter than before so small grey text passes 4.5:1
     if (!light) {
       set('--sbg', hexMix(sb, 0.45, 'b'));
       set('--rbg', hexMix(sb, 0.62, 'b'));
