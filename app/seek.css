@@ -444,6 +444,18 @@ html,body{background:var(--body)!important}
 .ri.on:before{background:var(--sfg)!important}
 .ri .dot{background:#f5b14c!important;box-shadow:0 0 0 2px var(--rbg)!important}
 .rail .me{margin-top:auto;border:0;background:none;padding:0;position:relative;cursor:pointer}
+/* the selected workspace's 4px ring needs its own room, or it runs into the next button */
+.rail .wsb.on{margin:4px 0}
+/* polish: overlapping header avatars keep their initials readable */
+.stack .av+.av{margin-left:-4px}
+/* polish: the "This week" count sits at the end of the intro row, not mid-row */
+@media (min-width:761px){.intro .tag{margin-left:auto}}
+/* polish: "Pause all AI" stays a compact card at the end of the row instead of stretching */
+@media (min-width:761px){.pg .intro>.pause{flex:none;min-width:0;margin-left:auto}}
+/* polish: every invite step header is the same height, with or without a tag */
+.ip .k{min-height:43px}
+/* polish: the "new messages" pill floats clear of the composer's top edge */
+@media (min-width:761px){.jump{bottom:120px}}
 .st{position:absolute;right:0;bottom:0;width:11px;height:11px;border-radius:50%;background:#2eb67d;box-shadow:0 0 0 2.5px var(--rbg)}
 .st.mt{background:#e8912d}.st.fc{background:#8b5cf6}.st.aw{background:transparent;box-shadow:inset 0 0 0 2px #9a8f9a,0 0 0 2.5px var(--rbg)}
 .tme .st,.mprof .st{box-shadow:0 0 0 2.5px var(--body)}

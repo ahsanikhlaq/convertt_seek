@@ -52,7 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             whiteSpace: 'nowrap',
           }}
         >
-          Build 2 · 10 Nov · prototype aligned
+          Build 3 · 10 Nov · layout polish
         </div>
       </body>
     </html>

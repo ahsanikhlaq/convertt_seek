@@ -86,7 +86,10 @@ export function DecisionsPage() {
         sub="What the team agreed, who agreed it, and the message it came from."
         right={
           <button type="button" className="btn sm" onClick={exportCsv}>
-            ⇩ Export
+            <span aria-hidden="true" style={{ marginRight: 4 }}>
+              ⇩
+            </span>
+            Export
           </button>
         }
       />
