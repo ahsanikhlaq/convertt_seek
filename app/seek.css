@@ -309,7 +309,8 @@ textarea.inp{height:auto;min-height:70px;padding:10px 13px;resize:vertical}
  .ar .w{display:none}
  .slots{grid-template-columns:1fr}
  .scrim{padding:0;place-items:end stretch}
- .modal{border-radius:18px 18px 0 0;max-height:92%;width:100%}
+ /* !important: dialogs set a desktop width inline (e.g. 440px), which must not push past a phone screen */
+ .modal{border-radius:18px 18px 0 0;max-height:92%;width:100%!important}
  #toast{bottom:76px}
 }
 

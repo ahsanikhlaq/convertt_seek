@@ -32,28 +32,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <AppFrame>{children}</AppFrame>
           </PopoverProvider>
         </SeekProvider>
-        {/* TEMPORARY: shows which deploy is live. Remove this block once the deploy is confirmed. */}
-        <div
-          id="build-badge"
-          aria-hidden="true"
-          style={{
-            position: 'fixed',
-            top: 8,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 200,
-            pointerEvents: 'none',
-            padding: '3px 10px',
-            borderRadius: 99,
-            background: '#ecb22e',
-            color: '#261325',
-            font: "600 11px/1.4 'Outfit', system-ui, sans-serif",
-            boxShadow: '0 2px 8px rgba(0,0,0,.18)',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          Build 3 · 10 Nov · layout polish
-        </div>
       </body>
     </html>
   );
