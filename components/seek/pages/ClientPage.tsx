@@ -199,7 +199,7 @@ export function ClientPage({ scheduling }: { scheduling?: boolean }) {
                   Nudge Chris
                 </button>
                 <button type="button" className="btn sm gold" onClick={approve}>
-                  Record Chris's approval
+                  Simulate: Chris approves
                 </button>
               </>
             )}

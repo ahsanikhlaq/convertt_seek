@@ -4,42 +4,57 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PEOPLE, STATUSES, WORKSPACES, type PersonKey } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
-import { ROUTES, routeOf, type RouteKey } from '@/lib/seek/routes';
+import { prototypeName, ROUTES, routeFromPrototype, routeOf, type RouteKey } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { ConfirmDialog, Modal } from './Dialogs';
 import { usePopovers } from './Popovers';
 import { Avatar, ModeSeg, Switch } from './ui';
 
-const AUTH_ROUTES: RouteKey[] = ['signup', 'setup'];
-
-/** Wraps every screen: sends signed-out people to sign-up, and hosts the palette, profile and shortcuts. */
+/**
+ * Wraps every screen and hosts the palette, profile and shortcuts. As in the product prototype, every
+ * screen opens directly (no sign-in gate); only `/` picks a screen from where this person is.
+ */
 export function AppFrame({ children }: { children: React.ReactNode }) {
   const { s, ui, setUI } = useSeek();
   const router = useRouter();
   const pathname = usePathname();
   const route = routeOf(pathname);
 
-  // where this person is allowed to be
-  const target: string | null = (() => {
-    if (s.session === 'in') return route && AUTH_ROUTES.includes(route) ? ROUTES.channels : null;
-    if (s.session === 'setup') return route === 'setup' || route === 'signup' ? null : ROUTES.setup;
-    return route === 'signup' ? null : ROUTES.signup;
-  })();
-
+  // prototype links (`#client`, `#schedule`, …) and its review page (`seekGo`) open the matching screen
   useEffect(() => {
-    if (target) router.replace(target);
-  }, [target, router]);
+    const open = (name: unknown) => {
+      const r = typeof name === 'string' ? routeFromPrototype(name) : null;
+      if (r) router.replace(ROUTES[r]);
+      return !!r;
+    };
+    // the new path replaces the URL, hash included
+    const onHash = () => open(location.hash);
+    const onMsg = (e: MessageEvent) => {
+      if (e.data && typeof e.data === 'object' && 'seekGo' in e.data) open(e.data.seekGo);
+    };
+    onHash();
+    window.addEventListener('hashchange', onHash);
+    window.addEventListener('message', onMsg);
+    return () => {
+      window.removeEventListener('hashchange', onHash);
+      window.removeEventListener('message', onMsg);
+    };
+  }, [router]);
 
-  // close transient UI when the screen changes
+  // close transient UI when the screen changes, and tell a review page around us where we are
   useEffect(() => {
     setUI({ sideOpen: false, menu: null, palette: false, logOf: null });
     document.querySelector('.feed,.dl,.pg,.inv,.auth')?.scrollTo?.(0, 0);
-  }, [pathname, setUI]);
+    if (route && window.parent !== window) {
+      try {
+        window.parent.postMessage({ seekRoute: prototypeName(route) }, '*');
+      } catch {}
+    }
+  }, [pathname, route, setUI]);
 
   // keyboard: ⌘K / Ctrl+K search, Escape closes the top-most layer
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (s.session !== 'in') return;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setUI((u) => ({ palette: !u.palette }));
@@ -58,7 +73,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [s.session, setUI]);
+  }, [setUI]);
 
   // the desktop app's menu navigates by dispatching this event
   useEffect(() => {
@@ -70,13 +85,11 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('seek:navigate', onNav);
   }, [router]);
 
-  if (target) return null;
-
   return (
     <>
       {children}
-      {s.session === 'in' && ui.palette && <Palette />}
-      {s.session === 'in' && ui.profile && <ProfileDrawer />}
+      {ui.palette && <Palette />}
+      {ui.profile && <ProfileDrawer />}
     </>
   );
 }
@@ -102,7 +115,7 @@ function Palette() {
     const all: Hit[] = [
       ...ws.channels.map((c) => ({
         label: '# ' + c.id,
-        kind: 'channel',
+        kind: 'channels',
         go: to('channels', () =>
           update((d) => {
             d.workspaces[d.wsId].ch = c.id;
@@ -113,7 +126,7 @@ function Palette() {
       })),
       ...(Object.keys(s.dms) as PersonKey[]).map((k) => ({
         label: 'DM · ' + PEOPLE[k].name,
-        kind: 'person',
+        kind: 'dms',
         go: to('dms', () =>
           update((d) => {
             d.dm = k;
@@ -122,7 +135,7 @@ function Palette() {
         ),
       })),
       ...s.spaces.map((sp) => ({
-        label: sp.name + ' · Client space',
+        label: sp.name + ' · Client chat',
         kind: 'client',
         go: to('clients', () =>
           update((d) => {
@@ -131,11 +144,13 @@ function Palette() {
           }),
         ),
       })),
-      { label: 'Schedule a call', kind: 'meeting', go: to('meetings') },
-      { label: 'Decisions log', kind: 'screen', go: to('decisions') },
-      { label: 'AI agents', kind: 'screen', go: to('agents') },
-      { label: 'All apps', kind: 'screen', go: to('apps') },
-      { label: 'Invite a client', kind: 'screen', go: to('invite') },
+      { label: 'Schedule a call', kind: 'schedule', go: to('meetings') },
+      { label: 'Decisions log', kind: 'decisions', go: to('decisions') },
+      { label: 'AI agents', kind: 'agents', go: to('agents') },
+      { label: 'All apps', kind: 'apps', go: to('apps') },
+      { label: 'Invite a client', kind: 'invite', go: to('invite') },
+      { label: 'Workspace setup', kind: 'setup', go: to('setup') },
+      { label: 'Sign up screen', kind: 'signup', go: to('signup') },
     ];
     const ql = q.trim().toLowerCase();
     return ql ? all.filter((h) => h.label.toLowerCase().includes(ql)) : all;
@@ -151,7 +166,7 @@ function Palette() {
       <div className="mhd">
         <input
           className="inp"
-          placeholder={`Jump to a channel, person or screen in ${WORKSPACES[s.wsId].name}…`}
+          placeholder="Jump to a channel, person or screen…"
           aria-label="Search"
           value={q}
           onChange={(e) => setQ(e.target.value)}

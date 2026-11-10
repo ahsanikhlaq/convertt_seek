@@ -1,16 +1,23 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { ROUTES } from '@/lib/seek/routes';
+import { useEffect, useRef } from 'react';
+import { ROUTES, routeFromPrototype } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 
-/** Opens the right screen for where this person is: sign-up, setup or their channels. */
+/**
+ * Opens the screen a prototype link names (/#client, /#schedule, …), otherwise the right one for where
+ * this person is: sign-up, setup or their channels. Decides once, so a later state change can't overrule it.
+ */
 export default function Home() {
   const { s } = useSeek();
   const router = useRouter();
+  const done = useRef(false);
   useEffect(() => {
-    router.replace(s.session === 'in' ? ROUTES.channels : s.session === 'setup' ? ROUTES.setup : ROUTES.signup);
+    if (done.current) return;
+    done.current = true;
+    const linked = routeFromPrototype(location.hash);
+    router.replace(linked ? ROUTES[linked] : s.session === 'in' ? ROUTES.channels : s.session === 'setup' ? ROUTES.setup : ROUTES.signup);
   }, [s.session, router]);
   return null;
 }

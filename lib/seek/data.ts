@@ -58,6 +58,8 @@ export type Decision = {
   client?: boolean;
   old?: boolean;
   a: string;
+  /** History lines shown on a replaced decision ("Fri 15:02 · … logged by Ahsan"). */
+  hist?: string[];
 };
 export type Agent = { n: string; d: string; lv: string; sc: string; on: boolean; st: string };
 export type App = { id: string; n: string; d: string; to: string; tier: string; c: string; by: string; acc: string; on: boolean };
@@ -239,7 +241,7 @@ export function initialState(): State {
       { id: 1, t: 'Deploy moves to Thursday 11:00', by: "Logged by Ahsan from Syed's message", where: 'launch-squad', time: 'Mon 10:12', type: 'dec', a: 'Source message' },
       { id: 2, t: 'Hero direction: option B', by: 'Agreed by Chris in Client chat · formal approval pending', where: 'HB', time: 'Fri 09:12', type: 'appr', client: true, a: 'Source message' },
       { id: 3, t: 'Icon set: rounded, 2px stroke', by: 'Logged by Syed in a huddle', where: 'design', time: 'Thu 16:40', type: 'dec', a: 'Huddle notes' },
-      { id: 4, t: 'Deploy on Wednesday 17:00', by: 'Replaced by "Deploy moves to Thursday 11:00" · history kept', where: 'launch-squad', time: 'Fri 15:02', type: 'dec', old: true, a: 'History' },
+      { id: 4, t: 'Deploy on Wednesday 17:00', by: 'Replaced by "Deploy moves to Thursday 11:00" · history kept', where: 'launch-squad', time: 'Fri 15:02', type: 'dec', old: true, a: 'History', hist: ['Fri 15:02 · "Deploy on Wednesday 17:00" logged by Ahsan', 'Mon 10:12 · Replaced by "Deploy moves to Thursday 11:00"'] },
     ],
     pauseAll: false,
     agents: [

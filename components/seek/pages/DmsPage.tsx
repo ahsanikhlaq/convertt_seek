@@ -140,7 +140,7 @@ export function DmsPage() {
         below={
           <div className="tabs" role="tablist">
             {['Messages', 'Files', 'Pins'].map((t, i) => (
-              <button key={t} type="button" role="tab" aria-selected={i === 0} className={'tb' + (i === 0 ? ' on' : '')} onClick={() => i && toast(t + ' with ' + p.name)}>
+              <button key={t} type="button" role="tab" aria-selected={i === 0} className={'tb' + (i === 0 ? ' on' : '')} onClick={() => toast(t)}>
                 {t}
               </button>
             ))}

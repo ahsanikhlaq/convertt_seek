@@ -25,19 +25,21 @@ export function Modal({
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
+    // capture phase, so only this dialog closes: drawers and popovers underneath see defaultPrevented
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        closeRef.current();
-      }
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const scrims = document.querySelectorAll('.scrim');
+      if (scrims[scrims.length - 1] !== box.current?.parentElement) return; // a dialog on top of this one
+      e.preventDefault();
+      closeRef.current();
     };
-    document.addEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
     const prev = document.activeElement as HTMLElement | null;
     // focus the first field, else the dialog itself
     const first = box.current?.querySelector<HTMLElement>('input,textarea,select');
     (first || box.current)?.focus();
     return () => {
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', onKey, true);
       prev?.focus?.();
     };
   }, []);

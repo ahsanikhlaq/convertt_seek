@@ -28,7 +28,10 @@ tab bar on phones, links and buttons on each screen, and the ⌘K / Ctrl+K searc
 | `/agents` | AI agents: on/off, pause all, activity log |
 | `/apps` | Connected apps, posting tiers and install requests |
 
-New visitors start at sign-up; signed-in people go straight to their channels. The layout adapts to the
+Opening `/` takes new visitors to sign-up and signed-in people to their channels. As in the product prototype,
+every screen also opens directly by its URL, and the prototype's hash links work too (`/#client` opens
+`/clients`, `/#schedule` opens `/meetings`). When Seek runs inside the prototype's review page, it follows that
+page's `seekGo` messages and reports the screen it is on with `seekRoute`. The layout adapts to the
 window by itself: desktop shows rail, list, conversation and detail panel side by side; phones get a bottom tab
 bar, a ☰ list drawer and full-screen panels.
 

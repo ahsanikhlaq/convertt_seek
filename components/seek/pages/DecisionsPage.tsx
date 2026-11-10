@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { Decision } from '@/lib/seek/data';
+import { now } from '@/lib/seek/format';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { PromptDialog } from '../Dialogs';
@@ -15,7 +16,8 @@ export function DecisionsPage() {
   const router = useRouter();
   const [editing, setEditing] = useState<Decision | null>(null);
 
-  const places = Array.from(new Set(s.decs.map((d) => d.where)));
+  // same order as the prototype (launch-squad, design, Hollow & Bright), then any other place in log order
+  const places = Array.from(new Set(['launch-squad', 'design', 'HB', ...s.decs.map((d) => d.where)])).filter((p) => s.decs.some((d) => d.where === p));
   const W: [string, string, number][] = [['All', 'All channels', s.decs.length], ...places.map((p): [string, string, number] => [p, p === 'HB' ? 'Hollow & Bright' : p.startsWith('DM ') ? p : '# ' + p, s.decs.filter((d) => d.where === p).length])];
   const T: [string, string][] = [
     ['All', 'All types'],
@@ -118,10 +120,9 @@ export function DecisionsPage() {
               {ui.hist === d.id && (
                 <div className="hist">
                   <b style={{ color: 'var(--ink)' }}>History</b>
-                  <span>
-                    {d.time} · "{d.t}" logged
-                  </span>
-                  <span>{d.by}</span>
+                  {(d.hist || [`${d.time} · "${d.t}" logged`, d.by]).map((line, i) => (
+                    <span key={i}>{line}</span>
+                  ))}
                 </div>
               )}
             </div>
@@ -161,6 +162,8 @@ export function DecisionsPage() {
               if (!d) return;
               x.decs.splice(x.decs.indexOf(d), 0, { id: nextId(), t: n, by: 'Edited by Ahsan · replaces previous', where: d.where, time: 'Just now', type: d.type, client: d.client, a: 'Source message' });
               d.old = true;
+              const logger = /\bby (\w+)/.exec(d.by)?.[1] || 'Ahsan';
+              d.hist = [`${d.time} · "${d.t}" logged by ${logger}`, `${new Date().toLocaleDateString('en-GB', { weekday: 'short' })} ${now()} · Replaced by "${n}"`];
               d.by = 'Replaced by "' + n + '" · history kept';
               d.a = 'History';
             });

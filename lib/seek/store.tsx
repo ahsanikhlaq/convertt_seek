@@ -136,7 +136,8 @@ export function SeekProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback((text: string, undo?: () => void) => {
     clearTimeout(toastTimer.current);
     setT({ text, undo: undo || null, key: Date.now() });
-    toastTimer.current = setTimeout(() => setT(null), undo ? 6000 : 2600);
+    // the toast promises 10s to undo, so keep it up that long
+    toastTimer.current = setTimeout(() => setT(null), undo ? 10000 : 2600);
   }, []);
 
   const nextId = useCallback(() => ++uidRef.current, []);
@@ -175,7 +176,7 @@ export function SeekProvider({ children }: { children: React.ReactNode }) {
                 >
                   Undo
                 </button>
-                <i>6s</i>
+                <i>10s</i>
               </>
             )}
           </>

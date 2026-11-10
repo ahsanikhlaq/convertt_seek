@@ -79,14 +79,17 @@ function useOutside(ref: React.RefObject<HTMLElement | null>, anchor: HTMLElemen
       if ((t as HTMLElement).closest?.('.scrim')) return;
       onClose();
     };
+    // capture phase, so the drawer behind the popover stays open; a dialog opened from the popover closes first
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('.modal')) return;
+      e.preventDefault();
+      onClose();
     };
     document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
     return () => {
       document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', onKey, true);
     };
   }, [ref, anchor, onClose]);
 }

@@ -172,7 +172,8 @@ export function SignupPage() {
                 Didn't get it?{' '}
                 <button type="button" className="linkbtn" onClick={() => toast('New code sent')}>
                   Resend code
-                </button>
+                </button>{' '}
+                · Tip: any 6 digits work in this prototype
               </p>
             </>
           )}
