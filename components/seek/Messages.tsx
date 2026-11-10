@@ -28,7 +28,7 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
   const pop = usePopovers();
   const menuOpen = ui.menu === m.id;
   const rx = m.rx || {};
-  const p = PEOPLE[m.who];
+  const p = PEOPLE[m.who] ?? { name: 'Someone', color: '#7a6179', role: '' };
 
   const edit = (fn: (x: ChatMessage, list: FeedItem[]) => void) =>
     update((d) => {
@@ -534,7 +534,16 @@ export function useSendTo(feed: FeedRef) {
   };
 }
 
-export function ThreadPane({ feed, people }: { feed: FeedRef; people: PersonKey[] }) {
+export function ThreadPane({
+  feed,
+  people,
+  onReply,
+}: {
+  feed: FeedRef;
+  people: PersonKey[];
+  /** with a backend, replies are saved (and appear through the live feed) instead of only in local state */
+  onReply?: (rootId: number, text: string, alsoToChannel: boolean) => void;
+}) {
   const { s, ui, update, setUI, nextId } = useSeek();
   const root = ui.thread != null ? findMsg(feed.get(s), ui.thread) : undefined;
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -573,6 +582,10 @@ export function ThreadPane({ feed, people }: { feed: FeedRef; people: PersonKey[
           autoFocus
           people={people}
           onSend={(text, also) => {
+            if (onReply) {
+              onReply(root.id, text, !!also);
+              return;
+            }
             const id = nextId();
             update((d) => {
               const list = feed.get(d);

@@ -57,7 +57,10 @@ Seek runs in two modes:
 - **Demo mode** (no settings): no sign-in, every screen opens directly, sample data in the browser.
 - **Backend mode**: set the two public settings below and people sign up with a 6-digit email code (or the
   sign-in link in Supabase's default email), create a workspace and invite teammates. Signed-out visitors go to
-  sign-up. Channels and messages are still sample data until phase 2.
+  sign-up. **Channels** are real: messages and thread replies are saved and arrive live for everyone in the
+  workspace, new channels can be created, and **＋ Invite people** emails a sign-in code/link — the invited
+  person joins the workspace the first time they sign in. DMs, Clients, Decisions, Agents and Apps are still sample
+  data.
 
 ```bash
 cp .env.example .env.local   # then fill in from Supabase → Project Settings → API Keys

@@ -1,7 +1,8 @@
 /* Types and starting data for the Seek app (carried over from the product prototype). */
 
-export type PersonKey = 'AH' | 'SY' | 'MO' | 'ZA' | 'CH' | 'PR' | 'AI';
-export type Person = { name: string; color: string; role: string };
+/** The sample people, plus real accounts (keyed by user id) when a backend is connected. 'AH' is always you. */
+export type PersonKey = 'AH' | 'SY' | 'MO' | 'ZA' | 'CH' | 'PR' | 'AI' | (string & {});
+export type Person = { name: string; color: string; role: string; initials?: string };
 
 export const PEOPLE: Record<PersonKey, Person> = {
   AH: { name: 'Ahsan', color: '#4b154a', role: 'Account lead' },

@@ -53,7 +53,6 @@ export async function sendCode(email: string): Promise<string | null> {
 export async function verifyCode(email: string, token: string): Promise<{ error: string | null; account: Account | null }> {
   const { error } = await sb().auth.verifyOtp({ email, token, type: 'email' });
   if (error) return { error: friendly(error.message), account: null };
-  await sb().rpc('accept_my_invites');
   return { error: null, account: await currentAccount() };
 }
 
@@ -67,6 +66,8 @@ export async function currentAccount(): Promise<Account | null> {
   const { data } = await sb().auth.getSession();
   const user = data.session?.user;
   if (!user) return null;
+  // anyone invited by email joins those workspaces the first time we see them signed in
+  await sb().rpc('accept_my_invites');
   const [{ data: profile }, { data: memberships }] = await Promise.all([
     sb().from('profiles').select('name').eq('id', user.id).maybeSingle(),
     sb()

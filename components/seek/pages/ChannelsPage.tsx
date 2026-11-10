@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { backendOn } from '@/lib/seek/backend';
 import { WORKSPACES, type PersonKey } from '@/lib/seek/data';
+import { useLiveChat } from '@/lib/seek/live';
 import { channelId } from '@/lib/seek/format';
 import { useSeek } from '@/lib/seek/store';
 import { PromptDialog } from '../Dialogs';
@@ -15,10 +17,14 @@ const TABS = ['Messages', 'Files', 'Canvas', 'Pins'];
 export function ChannelsPage() {
   const { s, ui, update, setUI, toast } = useSeek();
   const [creating, setCreating] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  // with a backend: real channels and messages, live (lib/seek/live.ts); in demo mode this is null
+  const live = useLiveChat();
+  const team: PersonKey[] = live ? live.people : TEAM;
   const wsId = s.wsId;
   const ws = s.workspaces[wsId];
-  const ch = ws.channels.find((c) => c.id === ws.ch) ? ws.ch : ws.channels[0].id;
-  const c = ws.channels.find((x) => x.id === ch)!;
+  const ch = ws.channels.find((c) => c.id === ws.ch) ? ws.ch : ws.channels[0]?.id ?? 'general';
+  const c = ws.channels.find((x) => x.id === ch) ?? { id: ch, unread: 0, desc: '' };
   const feed: FeedRef = { get: (d) => (d.workspaces[wsId].msgs[ch] ||= []), where: ch, threads: true };
   const send = useSendTo(feed);
 
@@ -34,8 +40,8 @@ export function ChannelsPage() {
 
   const side = (
     <Sidebar
-      title={WORKSPACES[wsId].name}
-      sub={WORKSPACES[wsId].sub}
+      title={backendOn ? s.ws.name : WORKSPACES[wsId].name}
+      sub={backendOn ? `Team · ${ws.channels.length} channels · ${team.length} ${team.length === 1 ? 'person' : 'people'}` : WORKSPACES[wsId].sub}
       action={
         <button type="button" className="btn sm" onClick={() => setCreating(true)} aria-label="New channel">
           ＋
@@ -55,14 +61,21 @@ export function ChannelsPage() {
       <button type="button" className="si" onClick={() => toast('Browse all ' + ws.channels.length + ' channels')}>
         ＋ Browse channels
       </button>
-      <div className="sg lbl">Starred</div>
-      <button type="button" className="si" onClick={() => open(ws.channels[0].id)}>
-        <span className="h">★</span>
-        <span className="x">
-          <b>{ws.channels[0].id}</b>
-          <small>pinned brief</small>
-        </span>
-      </button>
+      {live && (
+        <button type="button" className="si" onClick={() => setInviting(true)}>
+          ＋ Invite people
+        </button>
+      )}
+      {!live && <div className="sg lbl">Starred</div>}
+      {!live && (
+        <button type="button" className="si" onClick={() => open(ws.channels[0].id)}>
+          <span className="h">★</span>
+          <span className="x">
+            <b>{ws.channels[0].id}</b>
+            <small>pinned brief</small>
+          </span>
+        </button>
+      )}
     </Sidebar>
   );
 
@@ -97,7 +110,7 @@ export function ChannelsPage() {
             ↓ 2 new messages
           </button>
         )}
-        <Composer key={wsId + ch} placeholder={'Message #' + ch} people={TEAM} onSend={(t) => send(t)} />
+        <Composer key={wsId + ch} placeholder={'Message #' + ch} people={team} onSend={(t) => (live ? void live.send(ch, t) : send(t))} />
       </>
     );
   } else if (ui.chTab === 'Files') {
@@ -149,16 +162,16 @@ export function ChannelsPage() {
   }
 
   return (
-    <Shell active="channels" side={side} pane={ui.thread != null ? <ThreadPane feed={feed} people={TEAM} /> : undefined}>
+    <Shell active="channels" side={side} pane={ui.thread != null ? <ThreadPane feed={feed} people={team} onReply={live ? (root, t, also) => void live.reply(ch, root, t, also) : undefined} /> : undefined}>
       <MainHeader
         title={'# ' + ch}
         sub={c.desc}
         right={
           <>
             <span className="stack hide-m">
-              <Avatar k="SY" size={26} />
-              <Avatar k="MO" size={26} />
-              <Avatar k="AH" size={26} />
+              {(live ? team.slice(0, 3) : (['SY', 'MO', 'AH'] as PersonKey[])).map((k) => (
+                <Avatar key={k} k={k} size={26} />
+              ))}
             </span>
             <button
               type="button"
@@ -189,7 +202,18 @@ export function ChannelsPage() {
           initial="qa-team"
           confirm="Create channel"
           onCancel={() => setCreating(false)}
-          onSubmit={(v) => {
+          onSubmit={async (v) => {
+            if (live) {
+              const err = await live.createChannel(v);
+              if (err) {
+                toast(err);
+                return;
+              }
+              setCreating(false);
+              setUI({ thread: null, chTab: 'Messages', sideOpen: false, menu: null });
+              toast('#' + channelId(v) + ' created');
+              return;
+            }
             const id = channelId(v);
             if (!id) return;
             if (ws.channels.some((x) => x.id === id)) {
@@ -204,6 +228,24 @@ export function ChannelsPage() {
             setCreating(false);
             open(id);
             toast('#' + id + ' created');
+          }}
+        />
+      )}
+      {inviting && live && (
+        <PromptDialog
+          title="Invite people"
+          label="Their email"
+          initial=""
+          confirm="Send invite"
+          onCancel={() => setInviting(false)}
+          onSubmit={async (v) => {
+            const msg = await live.invite(v);
+            if (msg === 'Enter a valid email') {
+              toast(msg);
+              return;
+            }
+            setInviting(false);
+            toast(msg);
           }}
         />
       )}

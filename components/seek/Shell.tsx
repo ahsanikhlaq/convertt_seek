@@ -1,5 +1,6 @@
 'use client';
 
+import { backendOn } from '@/lib/seek/backend';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { WORKSPACES, type WorkspaceId } from '@/lib/seek/data';
@@ -34,8 +35,18 @@ const NAV: [RouteKey, IconName, string][] = [
   ['agents', 'ap', 'Apps'],
 ];
 
+/** The workspaces to list: the two samples in demo mode, or just your real one with a backend. */
+function useWorkspaceList() {
+  const { s } = useSeek();
+  const wsIds: WorkspaceId[] = backendOn ? ['C'] : (Object.keys(WORKSPACES) as WorkspaceId[]);
+  const wsName = (w: WorkspaceId) => (backendOn ? s.ws.name || 'Workspace' : WORKSPACES[w].name);
+  const wsLetter = (w: WorkspaceId) => (backendOn ? (s.ws.name.trim()[0] || 'S').toUpperCase() : w);
+  return { wsIds, wsName, wsLetter };
+}
+
 function Rail({ active }: { active: RouteKey }) {
   const { s, setUI, toast } = useSeek();
+  const { wsIds, wsName, wsLetter } = useWorkspaceList();
   const sw = useWorkspaceSwitch();
   const dot: Partial<Record<RouteKey, boolean>> = {
     dms: Object.values(s.dms).some((d) => d && d.unread > 0),
@@ -43,9 +54,9 @@ function Rail({ active }: { active: RouteKey }) {
   };
   return (
     <nav className="rail" aria-label="Main">
-      {(Object.keys(WORKSPACES) as WorkspaceId[]).map((w) => (
-        <button key={w} type="button" className={'wsb' + (s.wsId === w ? ' on' : '')} onClick={() => sw(w)} title={WORKSPACES[w].name} aria-label={'Workspace ' + WORKSPACES[w].name}>
-          {w}
+      {wsIds.map((w) => (
+        <button key={w} type="button" className={'wsb' + (s.wsId === w ? ' on' : '')} onClick={() => sw(w)} title={wsName(w)} aria-label={'Workspace ' + wsName(w)}>
+          {wsLetter(w)}
         </button>
       ))}
       <button type="button" className="wsb add" onClick={() => toast('Create or join another workspace')} aria-label="Add a workspace">
@@ -121,6 +132,7 @@ function TopBar() {
 /** Left list column (becomes a full-screen drawer on phones). */
 export function Sidebar({ title, sub, action, children }: { title: string; sub: string; action?: React.ReactNode; children: React.ReactNode }) {
   const { s, setUI } = useSeek();
+  const { wsIds, wsName, wsLetter } = useWorkspaceList();
   const pop = usePopovers();
   const sw = useWorkspaceSwitch();
   return (
@@ -136,12 +148,12 @@ export function Sidebar({ title, sub, action, children }: { title: string; sub: 
           <ModeSeg />
         </div>
         <div className="wsrow">
-          {(Object.keys(WORKSPACES) as WorkspaceId[]).map((w) => (
+          {wsIds.map((w) => (
             <button key={w} type="button" className={'si' + (s.wsId === w ? ' on' : '')} style={{ flex: 1, justifyContent: 'center', border: '1px solid var(--sln)' }} onClick={() => sw(w)}>
               <span className={'wsb' + (s.wsId === w ? ' on' : '')} style={{ width: 24, height: 24, fontSize: 12, borderRadius: 7 }}>
-                {w}
+                {wsLetter(w)}
               </span>
-              {WORKSPACES[w].name}
+              {wsName(w)}
             </button>
           ))}
         </div>

@@ -5,7 +5,7 @@ import { PEOPLE, type PersonKey, type Mode } from '@/lib/seek/data';
 import { useSeek } from '@/lib/seek/store';
 
 export function Avatar({ k, size = 32, className = '' }: { k: PersonKey; size?: number; className?: string }) {
-  const p = PEOPLE[k];
+  const p = PEOPLE[k] ?? { name: k, color: '#7a6179', role: '' };
   return (
     <span
       className={'av ' + className}
@@ -13,7 +13,7 @@ export function Avatar({ k, size = 32, className = '' }: { k: PersonKey; size?: 
       aria-hidden="true"
       title={p.name}
     >
-      {k === 'AI' ? '✦' : k}
+      {k === 'AI' ? '✦' : (p.initials ?? k)}
     </span>
   );
 }
