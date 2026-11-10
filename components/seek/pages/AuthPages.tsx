@@ -2,9 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
+import { backendOn, createWorkspace, googleSignIn, sendCode, verifyCode } from '@/lib/seek/backend';
 import { isEmail, slugify } from '@/lib/seek/format';
 import { ROUTES } from '@/lib/seek/routes';
-import { useSeek } from '@/lib/seek/store';
+import { applyAccount, useSeek } from '@/lib/seek/store';
 import { CodeInput, codeComplete } from '../CodeInput';
 import { Avatar, Logo } from '../ui';
 
@@ -24,7 +25,9 @@ export function SignupPage() {
   const router = useRouter();
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState(s.email);
+  const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLDivElement>(null);
+  const typedCode = () => [...(formRef.current?.querySelectorAll<HTMLInputElement>('.codes input') ?? [])].map((x) => x.value).join('');
 
   const toSetup = () => {
     update((d) => {
@@ -33,11 +36,20 @@ export function SignupPage() {
     router.push(ROUTES.setup);
   };
 
-  const cont = () => {
+  const cont = async () => {
     const v = email.trim();
     if (!isEmail(v)) {
       toast('Enter a valid work email');
       return;
+    }
+    if (backendOn) {
+      setBusy(true);
+      const err = await sendCode(v);
+      setBusy(false);
+      if (err) {
+        toast(err);
+        return;
+      }
     }
     update((d) => {
       d.email = v;
@@ -46,13 +58,46 @@ export function SignupPage() {
     setStep('code');
   };
 
-  const verify = () => {
+  const verify = async () => {
     if (!codeComplete(formRef.current)) {
       toast('Enter all 6 digits');
       return;
     }
+    if (!backendOn) {
+      toast('Email verified ✓');
+      toSetup();
+      return;
+    }
+    if (busy) return;
+    setBusy(true);
+    const { error, account } = await verifyCode(s.email, typedCode());
+    setBusy(false);
+    if (error || !account) {
+      toast(error || 'Couldn’t sign you in. Try again');
+      return;
+    }
+    update((d) => applyAccount(d, account));
     toast('Email verified ✓');
-    toSetup();
+    router.push(account.workspace ? ROUTES.channels : ROUTES.setup);
+  };
+
+  const resend = async () => {
+    if (!backendOn) {
+      toast('New code sent');
+      return;
+    }
+    const err = await sendCode(s.email);
+    toast(err || 'New code sent');
+  };
+
+  const google = async () => {
+    if (!backendOn) {
+      toast('Signed in with Google');
+      toSetup();
+      return;
+    }
+    const err = await googleSignIn();
+    if (err) toast(err);
   };
 
   return (
@@ -123,10 +168,7 @@ export function SignupPage() {
               <button
                 type="button"
                 className="btn lg"
-                onClick={() => {
-                  toast('Signed in with Google');
-                  toSetup();
-                }}
+                onClick={google}
               >
                 <b style={{ color: '#4285f4' }}>G</b> Continue with Google
               </button>
@@ -142,8 +184,8 @@ export function SignupPage() {
                   <label htmlFor="em">Work email</label>
                   <input id="em" className="inp" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                 </div>
-                <button type="submit" className="btn lg pri">
-                  Continue
+                <button type="submit" className="btn lg pri" disabled={busy}>
+                  {busy ? 'Sending code…' : 'Continue'}
                 </button>
               </form>
               <div className="note">
@@ -162,18 +204,18 @@ export function SignupPage() {
                 <h1>Check your email</h1>
               </div>
               <p className="sub">
-                Enter the 6-digit code we sent to <b>{s.email}</b>.
+                Enter the 6-digit code we sent to <b>{s.email}</b>.{backendOn && ' Or open the sign-in link in that email on this device.'}
               </p>
               <CodeInput onComplete={verify} />
-              <button type="button" className="btn lg pri" onClick={verify}>
-                Verify and continue
+              <button type="button" className="btn lg pri" onClick={verify} disabled={busy}>
+                {busy ? 'Checking…' : 'Verify and continue'}
               </button>
               <p className="fine">
                 Didn't get it?{' '}
-                <button type="button" className="linkbtn" onClick={() => toast('New code sent')}>
+                <button type="button" className="linkbtn" onClick={resend}>
                   Resend code
-                </button>{' '}
-                · Tip: any 6 digits work in this prototype
+                </button>
+                {!backendOn && ' · Tip: any 6 digits work in this prototype'}
               </p>
             </>
           )}
@@ -219,7 +261,18 @@ export function SetupPage() {
     setInvite('');
   };
 
-  const finish = () => {
+  const [saving, setSaving] = useState(false);
+  const finish = async () => {
+    if (backendOn) {
+      if (saving) return;
+      setSaving(true);
+      const err = await createWorkspace({ ...w, slug });
+      setSaving(false);
+      if (err) {
+        toast(err);
+        return;
+      }
+    }
     update((d) => {
       d.session = 'in';
       d.workspaces.C.ch = 'general';
@@ -404,8 +457,8 @@ export function SetupPage() {
               />
             </div>
           </div>
-          <button type="button" className="btn lg pri" onClick={finish}>
-            Continue to #general
+          <button type="button" className="btn lg pri" onClick={finish} disabled={saving}>
+            {saving ? 'Creating workspace…' : 'Continue to #general'}
           </button>
           <p className="fine">🔒 Secure sign-in · Your data is encrypted</p>
         </div>

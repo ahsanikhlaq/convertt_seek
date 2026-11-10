@@ -47,7 +47,39 @@ keeps everything. Profile → *Reset workspace data* starts over.
   actions, composer with @mentions and emoji, threads), `Popovers` (emoji picker, theme), `Dialogs`, `AppFrame`
   (sign-in guard, ⌘K search, profile drawer, shortcuts)
 - `lib/seek/` — `data.ts` (types and starting data), `store.tsx` (app state, saving, toasts), `theme.ts`,
-  `routes.ts`
+  `routes.ts`, `backend.ts` (Supabase sign-in and data)
+- `supabase/migrations/` — the database, as SQL files run in order
+
+## Backend (Supabase)
+
+Seek runs in two modes:
+
+- **Demo mode** (no settings): no sign-in, every screen opens directly, sample data in the browser.
+- **Backend mode**: set the two public settings below and people sign up with a 6-digit email code (or the
+  sign-in link in Supabase's default email), create a workspace and invite teammates. Signed-out visitors go to
+  sign-up. Channels and messages are still sample data until phase 2.
+
+```bash
+cp .env.example .env.local   # then fill in from Supabase → Project Settings → API Keys
+```
+
+| Setting | Where |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the **publishable** (or legacy *anon*) key — public by design |
+
+On Vercel, add the same two settings under Project → Settings → Environment Variables and redeploy. Never use the
+secret / `service_role` key in the app.
+
+Setting up a new Supabase project:
+
+1. SQL Editor → run each file in `supabase/migrations/` in order.
+2. Authentication → URL Configuration: Site URL = the app's address; add `https://<app>/**` (and
+   `http://localhost:3000/**` for development) to Redirect URLs.
+3. For branded emails with the 6-digit code, set up custom SMTP (Resend) and put `{{ .Token }}` in the
+   *Magic link or OTP* and *Confirm sign up* templates.
+
+Everything is protected by row-level security: people only see workspaces they belong to and their teammates.
 
 ## Desktop app (Electron)
 

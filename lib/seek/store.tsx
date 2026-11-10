@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { backendOn, currentAccount, sb, type Account } from './backend';
 import { initialState, STATE_VERSION, type State } from './data';
 import { applyTheme } from './theme';
 
@@ -57,6 +58,18 @@ export function useSeek() {
   return c;
 }
 
+/** Copies the signed-in account (or its absence) onto the app state. Used at start-up and after sign-in. */
+export function applyAccount(d: State, acc: Account | null) {
+  d.session = !acc ? 'out' : acc.workspace ? 'in' : 'setup';
+  if (!acc) return;
+  d.email = acc.email;
+  d.me.email = acc.email;
+  if (acc.name) d.me.name = acc.name;
+  if (acc.workspace) d.ws.name = acc.workspace.name;
+  // a real account starts setup with no sample teammates to invite
+  else d.ws.invites = [];
+}
+
 function load(): State {
   try {
     const raw = localStorage.getItem(KEY);
@@ -77,16 +90,33 @@ export function SeekProvider({ children }: { children: React.ReactNode }) {
   const uidRef = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // load saved state once, on the client
+  // load saved state once, on the client; with a backend, who is signed in comes from Supabase
   useEffect(() => {
-    const st = load();
-    uidRef.current = st.uid;
-    setS(st);
+    let alive = true;
+    (async () => {
+      const st = load();
+      if (backendOn) {
+        const acc = await currentAccount().catch(() => null);
+        applyAccount(st, acc);
+      }
+      if (!alive) return;
+      uidRef.current = st.uid;
+      setS(st);
+    })();
+    const sub = backendOn
+      ? sb().auth.onAuthStateChange((event) => {
+          if (event === 'SIGNED_OUT') setS((p) => (p ? { ...p, session: 'out' } : p));
+        }).data.subscription
+      : null;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     setSysDark(mq.matches);
     const onMq = () => setSysDark(mq.matches);
     mq.addEventListener?.('change', onMq);
-    return () => mq.removeEventListener?.('change', onMq);
+    return () => {
+      alive = false;
+      sub?.unsubscribe();
+      mq.removeEventListener?.('change', onMq);
+    };
   }, []);
 
   // save

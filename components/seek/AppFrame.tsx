@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PEOPLE, STATUSES, WORKSPACES, type PersonKey } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
+import { backendOn, saveProfile, signOut } from '@/lib/seek/backend';
 import { prototypeName, ROUTES, routeFromPrototype, routeOf, type RouteKey } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { ConfirmDialog, Modal } from './Dialogs';
@@ -11,14 +12,32 @@ import { usePopovers } from './Popovers';
 import { Avatar, ModeSeg, Switch } from './ui';
 
 /**
- * Wraps every screen and hosts the palette, profile and shortcuts. As in the product prototype, every
- * screen opens directly (no sign-in gate); only `/` picks a screen from where this person is.
+ * Wraps every screen and hosts the palette, profile and shortcuts. In demo mode, as in the product prototype,
+ * every screen opens directly; with a real backend (lib/seek/backend.ts) signed-out people go to sign-up.
  */
 export function AppFrame({ children }: { children: React.ReactNode }) {
   const { s, ui, setUI } = useSeek();
   const router = useRouter();
   const pathname = usePathname();
   const route = routeOf(pathname);
+
+  // with a real backend, screens need a signed-in account; demo mode keeps every screen open like the prototype
+  const target: string | null = !backendOn
+    ? null
+    : s.session === 'in'
+      ? route === 'signup' || route === 'setup'
+        ? ROUTES.channels
+        : null
+      : s.session === 'setup'
+        ? route === 'setup' || route === 'signup'
+          ? null
+          : ROUTES.setup
+        : route === 'signup' || route === 'invite'
+          ? null
+          : ROUTES.signup;
+  useEffect(() => {
+    if (target) router.replace(target);
+  }, [target, router]);
 
   // prototype links (`#client`, `#schedule`, …) and its review page (`seekGo`) open the matching screen
   useEffect(() => {
@@ -84,6 +103,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     window.addEventListener('seek:navigate', onNav);
     return () => window.removeEventListener('seek:navigate', onNav);
   }, [router]);
+
+  if (target) return null;
 
   return (
     <>
@@ -322,7 +343,8 @@ function ProfileDrawer() {
           <button
             type="button"
             className="btn danger"
-            onClick={() => {
+            onClick={async () => {
+              if (backendOn) await signOut();
               update((d) => {
                 d.session = 'out';
               });
@@ -337,10 +359,19 @@ function ProfileDrawer() {
           <button
             type="button"
             className="btn pri"
-            onClick={() => {
+            onClick={async () => {
+              const n = name.trim() || s.me.name;
+              const ti = title.trim() || s.me.title;
+              if (backendOn) {
+                const err = await saveProfile(n, ti);
+                if (err) {
+                  toast(err);
+                  return;
+                }
+              }
               update((d) => {
-                d.me.name = name.trim() || d.me.name;
-                d.me.title = title.trim() || d.me.title;
+                d.me.name = n;
+                d.me.title = ti;
               });
               close();
               toast('Profile saved');
@@ -357,7 +388,8 @@ function ProfileDrawer() {
           confirm="Reset"
           danger
           onCancel={() => setConfirmReset(false)}
-          onConfirm={() => {
+          onConfirm={async () => {
+            if (backendOn) await signOut();
             resetAll();
             router.push(ROUTES.signup);
           }}
