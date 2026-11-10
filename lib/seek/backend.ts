@@ -35,6 +35,8 @@ export type Account = {
 /** Plain-language messages for the errors people actually hit. */
 function friendly(message: string): string {
   const m = message.toLowerCase();
+  // Supabase's built-in sender allows only a few emails an hour; custom email (Resend) lifts this
+  if (m.includes('email rate limit')) return 'Too many sign-in emails were sent in the last hour. Please try again later';
   if (m.includes('rate limit') || m.includes('security purposes')) return 'Please wait a minute before asking for another code';
   if (m.includes('expired') || m.includes('invalid')) return 'That code is wrong or has expired. Check it, or resend a new one';
   if (m.includes('provider is not enabled')) return 'Google sign-in isn’t set up yet. Use your email instead';
