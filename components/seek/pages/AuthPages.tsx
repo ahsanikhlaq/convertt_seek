@@ -1,11 +1,23 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
-import { backendOn, createWorkspace, googleSignIn, sendCode, verifyCode } from '@/lib/seek/backend';
-import { isEmail, slugify } from '@/lib/seek/format';
+import { useEffect, useRef, useState } from 'react';
+import {
+  acceptInviteLink,
+  backendOn,
+  createWorkspace,
+  currentAccount,
+  googleSignIn,
+  myInvite,
+  saveProfile,
+  sendCode,
+  sendInvite,
+  verifyCode,
+  type Account,
+} from '@/lib/seek/backend';
+import { initialsOf, isEmail, slugify } from '@/lib/seek/format';
 import { ROUTES } from '@/lib/seek/routes';
-import { applyAccount, useSeek } from '@/lib/seek/store';
+import { applyAccount, setMe, useSeek } from '@/lib/seek/store';
 import { CodeInput, codeComplete } from '../CodeInput';
 import { Avatar, Logo } from '../ui';
 
@@ -78,7 +90,7 @@ export function SignupPage() {
     }
     update((d) => applyAccount(d, account));
     toast('Email verified ✓');
-    router.push(account.workspace ? ROUTES.channels : ROUTES.setup);
+    router.push(!account.onboarded ? ROUTES.welcome : account.workspace ? ROUTES.channels : ROUTES.setup);
   };
 
   const resend = async () => {
@@ -267,14 +279,14 @@ export function SetupPage() {
     if (backendOn) {
       if (saving) return;
       setSaving(true);
-      const err = await createWorkspace({ ...w, slug });
-      if (err) {
+      const { error: err, id } = await createWorkspace({ ...w, slug });
+      if (err || !id) {
         setSaving(false);
-        toast(err);
+        toast(err || 'Couldn’t create the workspace. Try again');
         return;
       }
-      // each invite gets a sign-in email, which brings them straight into this workspace
-      for (const email of w.invites) if (await sendCode(email)) failed++;
+      // each teammate gets an invite email whose Join button brings them straight into this workspace
+      for (const email of w.invites) if (!(await sendInvite(id, email)).ok) failed++;
       setSaving(false);
     }
     update((d) => {
@@ -339,7 +351,7 @@ export function SetupPage() {
             </span>
             <hr />
             <span className="d">
-              <i>✓</i>Verify
+              <i>✓</i>Profile
             </span>
             <hr />
             <span className="c">
@@ -469,6 +481,301 @@ export function SetupPage() {
             {saving ? 'Creating workspace…' : 'Continue to #general'}
           </button>
           <p className="fine">🔒 Secure sign-in · Your data is encrypted</p>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+/**
+ * Welcome: where invite emails land (their Join button) and where everyone sets up their profile once, after
+ * their first sign-in. Invited people then go straight into their team's #general; people who signed up on
+ * their own go on to set up a workspace.
+ */
+export function WelcomePage() {
+  const { s, update, toast } = useSeek();
+  const router = useRouter();
+  const [phase, setPhase] = useState<'loading' | 'join' | 'code' | 'profile'>('loading');
+  const [invite, setInvite] = useState<{ workspace: string; invitedBy: string } | null>(null);
+  const [hasWorkspace, setHasWorkspace] = useState(false);
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [title, setTitle] = useState('');
+  const [tz, setTz] = useState(ZONES[0]);
+  const [busy, setBusy] = useState(false);
+  const token = useRef<string | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  /** Signed in: set up the profile, or carry on if that's already done. */
+  const toProfile = async (acc: Account) => {
+    if (acc.onboarded) {
+      router.replace(acc.workspace ? ROUTES.channels : ROUTES.setup);
+      return;
+    }
+    setHasWorkspace(!!acc.workspace);
+    setInvite(acc.workspace ? await myInvite().catch(() => null) : null);
+    setEmail(acc.email);
+    setName(acc.name);
+    setTitle(acc.title);
+    setTz(ZONES.includes(acc.timeZone) ? acc.timeZone : ZONES[0]);
+    setPhase('profile');
+  };
+
+  const started = useRef(false);
+  useEffect(() => {
+    // once only: the first run takes the one-time link out of the address bar
+    if (started.current) return;
+    started.current = true;
+    (async () => {
+      if (!backendOn) {
+        setName(s.me.name);
+        setTitle(s.me.title);
+        setPhase('profile');
+        return;
+      }
+      const q = new URLSearchParams(location.search);
+      setEmail(q.get('email') ?? '');
+      const th = q.get('token_hash');
+      if (th) {
+        // keep the one-time link out of the address bar and history
+        token.current = th;
+        history.replaceState(null, '', location.pathname);
+        setPhase('join');
+        return;
+      }
+      const acc = await currentAccount().catch(() => null);
+      if (!acc) router.replace(ROUTES.signup);
+      else await toProfile(acc);
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const signedIn = async (acc: Account) => {
+    update((d) => applyAccount(d, acc));
+    await toProfile(acc);
+  };
+
+  const join = async () => {
+    if (busy || !token.current) return;
+    setBusy(true);
+    const { error, account } = await acceptInviteLink(token.current);
+    if (!error && account) {
+      setBusy(false);
+      await signedIn(account);
+      return;
+    }
+    // the link was already used or has expired: fall back to a fresh code
+    if (isEmail(email)) {
+      const err = await sendCode(email);
+      setBusy(false);
+      if (!err) {
+        setPhase('code');
+        toast('That link has expired, so we emailed you a new 6-digit code');
+        return;
+      }
+      toast(err);
+      return;
+    }
+    setBusy(false);
+    toast('That invite link has expired. Sign in with your email instead');
+    router.replace(ROUTES.signup);
+  };
+
+  const verify = async () => {
+    const code = [...(formRef.current?.querySelectorAll<HTMLInputElement>('.codes input') ?? [])].map((x) => x.value).join('');
+    if (code.length < 6) {
+      toast('Enter all 6 digits');
+      return;
+    }
+    if (busy) return;
+    setBusy(true);
+    const { error, account } = await verifyCode(email, code);
+    setBusy(false);
+    if (error || !account) {
+      toast(error || 'Couldn’t sign you in. Try again');
+      return;
+    }
+    await signedIn(account);
+  };
+
+  const finish = async () => {
+    const n = name.trim();
+    if (!n) {
+      toast('Enter your name');
+      return;
+    }
+    if (busy) return;
+    if (!backendOn) {
+      setMe(n);
+      update((d) => {
+        d.me = { ...d.me, name: n, title: title.trim(), tz };
+      });
+      toast('Profile saved');
+      router.push(ROUTES.channels);
+      return;
+    }
+    setBusy(true);
+    const err = await saveProfile({ name: n, title: title.trim(), timeZone: tz });
+    const acc = err ? null : await currentAccount();
+    setBusy(false);
+    if (err || !acc) {
+      toast(err || 'Couldn’t save your profile. Try again');
+      return;
+    }
+    update((d) => {
+      applyAccount(d, acc);
+      if (acc.workspace) d.workspaces.C.ch = 'general';
+    });
+    toast(invite ? `Welcome to ${invite.workspace} 👋` : 'Profile saved');
+    router.push(acc.workspace ? ROUTES.channels : ROUTES.setup);
+  };
+
+  const shown = name.trim() || 'Your name';
+  const ws = invite?.workspace;
+
+  return (
+    <main className="auth">
+      <div className="art">
+        <Brand />
+        <h2>
+          {ws ? (
+            <>
+              Welcome to <em>{ws}.</em>
+            </>
+          ) : (
+            <>
+              Welcome to <em>Seek.</em>
+            </>
+          )}
+        </h2>
+        <p>
+          {invite
+            ? `${invite.invitedBy} invited you. Tell the team who you are, then you're in.`
+            : phase === 'join'
+              ? 'Your team invited you to Seek: messages, decisions and client work in one tidy workspace.'
+              : 'Tell your team who you are. You can change this any time from your profile.'}
+        </p>
+        {phase === 'profile' && (
+          <div className="pc" style={{ maxWidth: 420 }}>
+            <div className="r">
+              <span className="av" style={{ width: 40, height: 40, background: 'var(--v)', fontSize: 15, borderRadius: 12 }}>
+                {initialsOf(shown)}
+              </span>
+              <div>
+                <b>{shown}</b>
+                <div style={{ color: 'var(--sb)', fontSize: 12 }}>{[title.trim() || 'Your role', tz].join(' · ')}</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="fm" ref={formRef}>
+        <div className="mbrand">
+          <Logo />
+        </div>
+        {email && phase !== 'join' && <div className="top">Signed in as {email}</div>}
+        <div className="in">
+          {phase === 'loading' && <p className="sub">Loading…</p>}
+
+          {phase === 'join' && (
+            <>
+              <div>
+                <h1>You're invited</h1>
+              </div>
+              <p className="sub">
+                Join your team on Seek{email ? (
+                  <>
+                    {' '}
+                    as <b>{email}</b>
+                  </>
+                ) : null}
+                . No password needed.
+              </p>
+              <button type="button" className="btn lg pri" onClick={join} disabled={busy}>
+                {busy ? 'Joining…' : 'Join now'}
+              </button>
+              <p className="fine">Next, you'll set up your profile.</p>
+            </>
+          )}
+
+          {phase === 'code' && (
+            <>
+              <div>
+                <h1>Check your email</h1>
+              </div>
+              <p className="sub">
+                Enter the 6-digit code we sent to <b>{email}</b>.
+              </p>
+              <CodeInput onComplete={verify} />
+              <button type="button" className="btn lg pri" onClick={verify} disabled={busy}>
+                {busy ? 'Checking…' : 'Verify and continue'}
+              </button>
+              <p className="fine">
+                Didn't get it?{' '}
+                <button type="button" className="linkbtn" onClick={async () => toast((await sendCode(email)) || 'New code sent')}>
+                  Resend code
+                </button>
+              </p>
+            </>
+          )}
+
+          {phase === 'profile' && (
+            <>
+              <div className="steps">
+                <span className="d">
+                  <i>✓</i>
+                  {invite ? 'Invite' : 'Account'}
+                </span>
+                <hr />
+                <span className="c">
+                  <i>2</i>Profile
+                </span>
+                {!hasWorkspace && (
+                  <>
+                    <hr />
+                    <span>
+                      <i>3</i>Workspace
+                    </span>
+                  </>
+                )}
+              </div>
+              <div>
+                <h1>Set up your profile</h1>
+              </div>
+              <p className="sub">{invite ? `This is how you'll appear to ${invite.invitedBy} and the rest of ${invite.workspace}.` : 'This is how you’ll appear to your team.'}</p>
+              <form
+                style={{ display: 'contents' }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void finish();
+                }}
+              >
+                <div className="fld">
+                  <label htmlFor="pn">Full name</label>
+                  <input id="pn" className="inp" autoComplete="name" placeholder="e.g. Momna Khan" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+                </div>
+                <div className="grid2">
+                  <div className="fld">
+                    <label htmlFor="pt">
+                      What you do <span style={{ color: 'var(--sb)', fontWeight: 400 }}>(optional)</span>
+                    </label>
+                    <input id="pt" className="inp" autoComplete="organization-title" placeholder="e.g. Designer" value={title} onChange={(e) => setTitle(e.target.value)} />
+                  </div>
+                  <div className="fld">
+                    <label htmlFor="ptz">Time zone</label>
+                    <select id="ptz" className="inp" value={tz} onChange={(e) => setTz(e.target.value)}>
+                      {ZONES.map((z) => (
+                        <option key={z}>{z}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <button type="submit" className="btn lg pri" disabled={busy}>
+                  {busy ? 'Saving…' : hasWorkspace ? `Continue to ${ws ?? 'your workspace'}` : 'Continue'}
+                </button>
+              </form>
+              <p className="fine">🔒 Only people in your workspace can see your profile.</p>
+            </>
+          )}
         </div>
       </div>
     </main>

@@ -82,8 +82,14 @@ Setting up a new Supabase project:
 1. Authentication → Sign In / Providers → Email: set the email OTP length to **6**.
 1. Authentication → URL Configuration: Site URL = the app's address; add `https://<app>/**` (and
    `http://localhost:3000/**` for development) to Redirect URLs.
-1. For branded emails with the 6-digit code, set up custom SMTP (Resend) and put `{{ .Token }}` in the
-   *Magic link or OTP* and *Confirm sign up* templates.
+1. For branded emails with the 6-digit code, set up custom SMTP (we use Brevo) and put `{{ .Token }}` in the
+   *Magic link or OTP* and *Confirm sign up* templates. The sender's domain must be authenticated with the SMTP
+   provider (SPF/DKIM); otherwise mail to that same domain is rejected (e.g. convertt.co has DMARC `p=reject`).
+1. Invites: Edge Functions → deploy `supabase/functions/seek-invite` and turn **off** "Verify JWT with legacy
+   secret" (the function checks the caller itself; projects on the new ES256 signing keys need this). Then set the
+   *Invite user* template's subject to `{{ .Data.invited_by }} invited you to {{ .Data.workspace }} on Seek` and
+   its Join link to `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=invite&email={{ .Email }}`. The link opens
+   `/welcome`, where the new teammate signs in, sets up their profile and lands in #general.
 
 Everything is protected by row-level security: people only see workspaces they belong to and their teammates.
 

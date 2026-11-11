@@ -76,7 +76,8 @@ export type Workspace = { ch: string; channels: Channel[]; msgs: Record<string, 
 
 export type State = {
   version: number;
-  session: 'out' | 'setup' | 'in';
+  /** signed out · signed in but no profile yet · no workspace yet · in */
+  session: 'out' | 'profile' | 'setup' | 'in';
   email: string;
   ws: { name: string; tz: string; size: string; use: string[]; invites: string[] };
   wsId: WorkspaceId;

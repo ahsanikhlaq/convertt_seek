@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { backendOn, currentAccount, DB_SCHEMA, sendCode, sb } from './backend';
+import { backendOn, currentAccount, DB_SCHEMA, sb, sendInvite } from './backend';
 import { PEOPLE, type ChatMessage, type FeedItem, type PersonKey } from './data';
-import { channelId as toChannelName, isEmail } from './format';
+import { initialsOf, channelId as toChannelName, isEmail } from './format';
 import { useSeek } from './store';
 
 /**
@@ -23,13 +23,7 @@ export const toDbId = (uiId: number) => (uiId > OFFSET ? uiId - OFFSET : null);
 
 const COLORS = ['#6d4fc2', '#b4531f', '#b0306a', '#1f6b8a', '#8a5300', '#2f7a4f', '#4b154a', '#a03a3a'];
 export const colorFor = (id: string) => COLORS[[...id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % COLORS.length];
-export const initialsOf = (name: string) =>
-  name
-    .split(/[\s._-]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]!.toUpperCase())
-    .join('') || '?';
+export { initialsOf };
 export const displayName = (name: string, email: string) => name.trim() || email.split('@')[0] || 'Someone';
 
 export function timeLabel(iso: string) {
@@ -55,17 +49,12 @@ export async function learnProfiles(ids: string[], me: string | null) {
   }
 }
 
-/** Saves an invite and emails a sign-in code/link, which doubles as the invitation. Returns a message to show. */
+/** Saves an invite and emails the person a "Join" link (see sendInvite). Returns a message to show. */
 export async function inviteByEmail(workspaceId: string | null, me: string | null, raw: string): Promise<string> {
   const email = raw.trim().toLowerCase();
   if (!isEmail(email)) return 'Enter a valid email';
   if (!workspaceId || !me) return 'Still loading your workspace. Try again in a moment';
-  const { error } = await sb().from('workspace_invites').insert({ workspace_id: workspaceId, email, invited_by: me });
-  if (error && !/duplicate|unique/i.test(error.message)) return 'Couldn’t save the invite';
-  const mailErr = await sendCode(email);
-  return mailErr
-    ? `Invite saved. ${email} joins when they sign up with that email (no email sent: ${mailErr})`
-    : `Invite sent to ${email}. They'll join as soon as they sign in`;
+  return (await sendInvite(workspaceId, email)).message;
 }
 
 export type LiveChat = {

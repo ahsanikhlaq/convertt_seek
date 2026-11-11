@@ -6,7 +6,7 @@ import { PEOPLE, STATUSES, WORKSPACES, type PersonKey } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
 import { backendOn, saveProfile, signOut } from '@/lib/seek/backend';
 import { prototypeName, ROUTES, routeFromPrototype, routeOf, type RouteKey } from '@/lib/seek/routes';
-import { useSeek } from '@/lib/seek/store';
+import { setMe, useSeek } from '@/lib/seek/store';
 import { ConfirmDialog, Modal } from './Dialogs';
 import { usePopovers } from './Popovers';
 import { Avatar, ModeSeg, Switch } from './ui';
@@ -21,20 +21,26 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const route = routeOf(pathname);
 
-  // with a real backend, screens need a signed-in account; demo mode keeps every screen open like the prototype
-  const target: string | null = !backendOn
-    ? null
-    : s.session === 'in'
-      ? route === 'signup' || route === 'setup'
-        ? ROUTES.channels
-        : null
-      : s.session === 'setup'
-        ? route === 'setup' || route === 'signup'
+  // with a real backend, screens need a signed-in account with a profile; demo mode keeps every screen open like
+  // the prototype. The welcome screen is always open: it is where invite links land, signed in or not.
+  const allowed: Record<typeof s.session, RouteKey[] | null> = {
+    in: null,
+    profile: ['welcome'],
+    setup: ['setup', 'signup', 'welcome'],
+    out: ['signup', 'invite', 'welcome'],
+  };
+  const home = { in: ROUTES.channels, profile: ROUTES.welcome, setup: ROUTES.setup, out: ROUTES.signup }[s.session];
+  const ok = allowed[s.session];
+  const target: string | null =
+    !backendOn || route === 'welcome'
+      ? null
+      : ok
+        ? route && ok.includes(route)
           ? null
-          : ROUTES.setup
-        : route === 'signup' || route === 'invite'
-          ? null
-          : ROUTES.signup;
+          : home
+        : route === 'signup' || route === 'setup'
+          ? home
+          : null;
   useEffect(() => {
     if (target) router.replace(target);
   }, [target, router]);
@@ -302,7 +308,7 @@ function ProfileDrawer() {
             </div>
             <div>
               <span>Workspace</span>
-              <b>{WORKSPACES[s.wsId].name}</b>
+              <b>{backendOn ? s.ws.name : WORKSPACES[s.wsId].name}</b>
             </div>
           </div>
           <div>
@@ -363,12 +369,13 @@ function ProfileDrawer() {
               const n = name.trim() || s.me.name;
               const ti = title.trim() || s.me.title;
               if (backendOn) {
-                const err = await saveProfile(n, ti);
+                const err = await saveProfile({ name: n, title: ti });
                 if (err) {
                   toast(err);
                   return;
                 }
               }
+              setMe(n);
               update((d) => {
                 d.me.name = n;
                 d.me.title = ti;

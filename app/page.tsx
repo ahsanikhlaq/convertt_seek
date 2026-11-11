@@ -17,7 +17,8 @@ export default function Home() {
     if (done.current) return;
     done.current = true;
     const linked = routeFromPrototype(location.hash);
-    router.replace(linked ? ROUTES[linked] : s.session === 'in' ? ROUTES.channels : s.session === 'setup' ? ROUTES.setup : ROUTES.signup);
+    const home = { in: ROUTES.channels, setup: ROUTES.setup, profile: ROUTES.welcome, out: ROUTES.signup }[s.session];
+    router.replace(linked ? ROUTES[linked] : home);
   }, [s.session, router]);
   return null;
 }

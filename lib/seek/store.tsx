@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { backendOn, currentAccount, sb, type Account } from './backend';
-import { initialState, STATE_VERSION, type State } from './data';
+import { initialState, PEOPLE, STATE_VERSION, type State } from './data';
+import { initialsOf } from './format';
 import { applyTheme } from './theme';
 
 const KEY = 'seek:state';
@@ -60,14 +61,20 @@ export function useSeek() {
 
 /** Copies the signed-in account (or its absence) onto the app state. Used at start-up and after sign-in. */
 export function applyAccount(d: State, acc: Account | null) {
-  d.session = !acc ? 'out' : acc.workspace ? 'in' : 'setup';
+  d.session = !acc ? 'out' : !acc.onboarded ? 'profile' : acc.workspace ? 'in' : 'setup';
   if (!acc) return;
   d.email = acc.email;
-  d.me.email = acc.email;
-  if (acc.name) d.me.name = acc.name;
+  // your real profile replaces the prototype's sample person
+  d.me = { ...d.me, email: acc.email, name: acc.name.trim() || acc.email.split('@')[0] || 'You', title: acc.title, tz: acc.timeZone || d.me.tz };
+  setMe(d.me.name);
   if (acc.workspace) d.ws.name = acc.workspace.name;
   // a real account starts setup with no sample teammates to invite
   else d.ws.invites = [];
+}
+
+/** Your name and initials wherever your avatar shows (you are always person 'AH'). */
+export function setMe(name: string) {
+  PEOPLE.AH = { ...PEOPLE.AH, name, role: 'You', initials: initialsOf(name) };
 }
 
 function load(): State {
