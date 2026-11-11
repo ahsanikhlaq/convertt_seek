@@ -263,21 +263,29 @@ export function SetupPage() {
 
   const [saving, setSaving] = useState(false);
   const finish = async () => {
+    let failed = 0;
     if (backendOn) {
       if (saving) return;
       setSaving(true);
       const err = await createWorkspace({ ...w, slug });
-      setSaving(false);
       if (err) {
+        setSaving(false);
         toast(err);
         return;
       }
+      // each invite gets a sign-in email, which brings them straight into this workspace
+      for (const email of w.invites) if (await sendCode(email)) failed++;
+      setSaving(false);
     }
     update((d) => {
       d.session = 'in';
       d.workspaces.C.ch = 'general';
     });
-    toast(`Workspace ${w.name || 'Convertt'} is ready · ${w.invites.length} invites sent`);
+    toast(
+      failed
+        ? `Workspace ready. ${failed} invite email${failed === 1 ? '' : 's'} couldn’t be sent; invite again from the channel list`
+        : `Workspace ${w.name || 'Convertt'} is ready · ${w.invites.length} invites sent`,
+    );
     router.push(ROUTES.channels);
   };
 

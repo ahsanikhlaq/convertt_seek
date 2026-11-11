@@ -22,20 +22,50 @@ export const toUiId = (dbId: number) => OFFSET + dbId;
 export const toDbId = (uiId: number) => (uiId > OFFSET ? uiId - OFFSET : null);
 
 const COLORS = ['#6d4fc2', '#b4531f', '#b0306a', '#1f6b8a', '#8a5300', '#2f7a4f', '#4b154a', '#a03a3a'];
-const colorFor = (id: string) => COLORS[[...id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % COLORS.length];
-const initialsOf = (name: string) =>
+export const colorFor = (id: string) => COLORS[[...id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % COLORS.length];
+export const initialsOf = (name: string) =>
   name
     .split(/[\s._-]+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0]!.toUpperCase())
     .join('') || '?';
-const displayName = (name: string, email: string) => name.trim() || email.split('@')[0] || 'Someone';
+export const displayName = (name: string, email: string) => name.trim() || email.split('@')[0] || 'Someone';
 
-function timeLabel(iso: string) {
+export function timeLabel(iso: string) {
   const d = new Date(iso);
   const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   return d.toDateString() === new Date().toDateString() ? hm : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + hm;
+}
+
+/** You are always person 'AH'; everyone else is keyed by their user id. */
+export const keyFor = (userId: string, me: string | null): PersonKey => (userId === me ? 'AH' : userId);
+
+const learned = new Set<string>();
+/** Makes sure these people have a name, colour and initials before their messages render (shared by every screen). */
+export async function learnProfiles(ids: string[], me: string | null) {
+  const missing = [...new Set(ids)].filter((id) => !learned.has(id));
+  if (!missing.length) return;
+  const { data } = await sb().from('profiles').select('id, name, email').in('id', missing);
+  for (const p of (data ?? []) as { id: string; name: string; email: string }[]) {
+    const name = displayName(p.name, p.email);
+    const key = keyFor(p.id, me);
+    PEOPLE[key] = { name, color: key === 'AH' ? PEOPLE.AH?.color ?? colorFor(p.id) : colorFor(p.id), role: key === 'AH' ? 'You' : p.email, initials: initialsOf(name) };
+    learned.add(p.id);
+  }
+}
+
+/** Saves an invite and emails a sign-in code/link, which doubles as the invitation. Returns a message to show. */
+export async function inviteByEmail(workspaceId: string | null, me: string | null, raw: string): Promise<string> {
+  const email = raw.trim().toLowerCase();
+  if (!isEmail(email)) return 'Enter a valid email';
+  if (!workspaceId || !me) return 'Still loading your workspace. Try again in a moment';
+  const { error } = await sb().from('workspace_invites').insert({ workspace_id: workspaceId, email, invited_by: me });
+  if (error && !/duplicate|unique/i.test(error.message)) return 'Couldn’t save the invite';
+  const mailErr = await sendCode(email);
+  return mailErr
+    ? `Invite saved. ${email} joins when they sign up with that email (no email sent: ${mailErr})`
+    : `Invite sent to ${email}. They'll join as soon as they sign in`;
 }
 
 export type LiveChat = {
@@ -56,25 +86,12 @@ export function useLiveChat(): LiveChat | null {
   const meRef = useRef<string | null>(null);
   const wsRef = useRef<string | null>(null);
   const chans = useRef(new Map<string, string>()); // channel name → id
-  const known = useRef(new Set<string>());
   const current = s.workspaces.C.ch;
   const currentRef = useRef(current);
   currentRef.current = current;
 
-  const keyOf = (userId: string): PersonKey => (userId === meRef.current ? 'AH' : userId);
-
-  /** Makes sure these people have a name, colour and initials before their messages render. */
-  const learnPeople = useCallback(async (ids: string[]) => {
-    const missing = [...new Set(ids)].filter((id) => !known.current.has(id));
-    if (!missing.length) return;
-    const { data } = await sb().from('profiles').select('id, name, email').in('id', missing);
-    for (const p of (data ?? []) as { id: string; name: string; email: string }[]) {
-      const name = displayName(p.name, p.email);
-      const key = keyOf(p.id);
-      PEOPLE[key] = { name, color: key === 'AH' ? PEOPLE.AH?.color ?? colorFor(p.id) : colorFor(p.id), role: key === 'AH' ? 'You' : p.email, initials: initialsOf(name) };
-      known.current.add(p.id);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const keyOf = (userId: string): PersonKey => keyFor(userId, meRef.current);
+  const learnPeople = useCallback((ids: string[]) => learnProfiles(ids, meRef.current), []);
 
   const toFeed = useCallback((rows: Row[]): FeedItem[] => {
     const roots: ChatMessage[] = [];
@@ -262,16 +279,6 @@ export function useLiveChat(): LiveChat | null {
       });
       return null;
     },
-    invite: async (raw) => {
-      const email = raw.trim().toLowerCase();
-      if (!isEmail(email)) return 'Enter a valid email';
-      const { error } = await sb().from('workspace_invites').insert({ workspace_id: wsRef.current, email, invited_by: meRef.current });
-      if (error && !/duplicate|unique/i.test(error.message)) return 'Couldn’t save the invite';
-      // the sign-in email doubles as the invitation: its code or link brings them straight into this workspace
-      const mailErr = await sendCode(email);
-      return mailErr
-        ? `Invite saved. ${email} joins when they sign up with that email (no email sent: ${mailErr})`
-        : `Invite sent to ${email}. They'll join as soon as they sign in`;
-    },
+    invite: (raw) => inviteByEmail(wsRef.current, meRef.current, raw),
   };
 }

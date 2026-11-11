@@ -146,7 +146,7 @@ function Palette() {
         ),
       })),
       ...(Object.keys(s.dms) as PersonKey[]).map((k) => ({
-        label: 'DM · ' + PEOPLE[k].name,
+        label: 'DM · ' + (PEOPLE[k]?.name ?? 'Someone'),
         kind: 'dms',
         go: to('dms', () =>
           update((d) => {

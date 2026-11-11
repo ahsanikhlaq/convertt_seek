@@ -328,9 +328,9 @@ function mentionItems(people: PersonKey[]): MentionItem[] {
     { k: null, n: 'here', d: 'Notify people who are online' },
     ...people.map((k) => ({
       k,
-      n: PEOPLE[k].name.split(' ')[0],
-      full: PEOPLE[k].name,
-      d: PEOPLE[k].role + (k === 'CH' || k === 'PR' ? ' · client' : ''),
+      n: (PEOPLE[k]?.name ?? 'Someone').split(' ')[0],
+      full: PEOPLE[k]?.name ?? 'Someone',
+      d: (PEOPLE[k]?.role ?? '') + (k === 'CH' || k === 'PR' ? ' · client' : ''),
     })),
   ];
 }
