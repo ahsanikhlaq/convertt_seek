@@ -630,3 +630,4 @@ button,a,[role=button]{-webkit-tap-highlight-color:transparent}
 .joinorg small{display:block;color:var(--sb);font-size:13px}
 @media (min-width:761px){.auth .fm .in>.joinorg{display:none}}
 @media (max-width:480px){.auth .steps{gap:4px}.auth .steps hr{width:auto;flex:1;min-width:6px}.auth .steps span:not(.c){font-size:0;gap:0}.auth .steps span:not(.c) i{font-size:10px}.auth .fm .top{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.steps.compact{gap:6px;flex-wrap:nowrap;min-width:0}.steps.compact hr{flex:1;width:auto;min-width:10px}.steps.compact>span{font-size:12px!important;gap:6px}.steps.compact>span>span:not(.c){font-size:0!important;gap:0}.steps.compact>span>span:not(.c) i{font-size:10px}.steps.compact .c{white-space:nowrap;flex:none}

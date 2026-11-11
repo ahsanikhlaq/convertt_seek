@@ -528,8 +528,9 @@ export function SetupPage() {
   };
 
   const n = phase === 'org' ? 3 : phase === 'team' ? 4 : 5;
+  // five steps don't fit the card: only the current one shows its name (the others on hover)
   const steps = (
-    <div className="steps">
+    <div className="steps compact" aria-label={'Step ' + n + ' of 5'}>
       {(
         [
           ['Account', 1],
@@ -541,7 +542,7 @@ export function SetupPage() {
       ).map(([t, i], k) => (
         <span key={t} style={{ display: 'contents' }}>
           {k > 0 && <hr />}
-          <span className={i < n ? 'd' : i === n ? 'c' : ''}>
+          <span className={i < n ? 'd' : i === n ? 'c' : ''} title={t} aria-current={i === n ? 'step' : undefined}>
             <i>{i < n ? '✓' : i}</i>
             {t}
           </span>
