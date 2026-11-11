@@ -1,7 +1,8 @@
-// Seek · invite a teammate by email.
-// Called from the app by a signed-in person: { workspace_id, email, redirect_to }. It saves the invite as that
-// person (so row-level security decides whether they may invite to the workspace), then emails an invitation
-// with Supabase's "Invite user" template. Its Join link opens the app's welcome screen, where the new teammate
+// Seek · invite a teammate, or a client to their client space, by email.
+// Called from the app by a signed-in person: { workspace_id | space_id, email, redirect_to }. A client invite
+// (space_id) needs the person to be listed in that space already; the email then reads "X invited you to
+// <client>'s project space". A teammate invite (workspace_id) saves the invite as the caller (so row-level
+// security decides whether they may invite to the workspace). Both are emailed with Supabase's "Invite user" template. Its Join link opens the app's welcome screen, where the new teammate
 // signs in, sets up their profile and lands in #general. People who already have a Seek account get a sign-in
 // email instead and join the workspace the next time they sign in.
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -28,7 +29,7 @@ Deno.serve(async (req) => {
   const user = who?.user;
   if (!user) return json({ error: 'Please sign in again' }, 401);
 
-  let body: { workspace_id?: string; email?: string; redirect_to?: string };
+  let body: { workspace_id?: string; space_id?: string; email?: string; redirect_to?: string };
   try {
     body = await req.json();
   } catch {
@@ -36,23 +37,41 @@ Deno.serve(async (req) => {
   }
   const email = String(body.email ?? '').trim().toLowerCase();
   const workspaceId = String(body.workspace_id ?? '');
+  const spaceId = String(body.space_id ?? '');
   const redirectTo = String(body.redirect_to ?? '') || undefined;
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || !workspaceId) return json({ error: 'Enter a valid email' }, 400);
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || (!workspaceId && !spaceId)) return json({ error: 'Enter a valid email' }, 400);
   if (email === (user.email ?? '').toLowerCase()) return json({ error: 'That’s your own email' }, 400);
 
-  // saved as the caller, so only people on the workspace's team can invite to it
+  // checked as the caller, so row-level security decides who may invite
   const asCaller = createClient(url, anon, { ...opts, global: { headers: { Authorization: 'Bearer ' + token } } });
-  const { error: saveErr } = await asCaller.from('workspace_invites').insert({ workspace_id: workspaceId, email, invited_by: user.id });
-  if (saveErr && saveErr.code !== '23505') return json({ error: 'You can’t invite people to this workspace' }, 403);
-
-  const [{ data: ws }, { data: me }] = await Promise.all([
-    admin.from('workspaces').select('name').eq('id', workspaceId).single(),
-    admin.from('profiles').select('name, email').eq('id', user.id).single(),
-  ]);
+  const { data: me } = await admin.from('profiles').select('name, email').eq('id', user.id).single();
   const inviter = (me?.name ?? '').trim() || (me?.email ?? user.email ?? '').split('@')[0] || 'A teammate';
-  const workspace = ws?.name ?? 'their workspace';
+  let data: Record<string, string>;
 
-  const { error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo, data: { invited_by: inviter, workspace } });
+  if (spaceId) {
+    // a client: the person must already be listed in the space (the New client wizard or the People tab adds them)
+    const { data: person } = await asCaller.from('client_people').select('id, name').eq('space_id', spaceId).eq('email', email).maybeSingle();
+    if (!person) return json({ error: 'Add this person to the client space first' }, 403);
+    const { data: sp } = await admin.from('client_spaces').select('name, project, reply_target, workspaces ( name )').eq('id', spaceId).single();
+    const agency = (sp?.workspaces as { name?: string } | null)?.name ?? 'your agency';
+    data = {
+      invited_by: inviter,
+      workspace: `${sp?.name ?? 'your'}’s project space`,
+      space: sp?.name ?? '',
+      project: sp?.project ?? '',
+      agency,
+      reply_target: sp?.reply_target ?? '',
+      name: person.name ?? '',
+    };
+  } else {
+    // a teammate: saved as an invite to the workspace (only its team may add one)
+    const { error: saveErr } = await asCaller.from('workspace_invites').insert({ workspace_id: workspaceId, email, invited_by: user.id });
+    if (saveErr && saveErr.code !== '23505') return json({ error: 'You can’t invite people to this workspace' }, 403);
+    const { data: ws } = await admin.from('workspaces').select('name').eq('id', workspaceId).single();
+    data = { invited_by: inviter, workspace: ws?.name ?? 'their workspace' };
+  }
+
+  const { error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo, data });
   if (!error) return json({ status: 'invited' });
 
   if ((error as { code?: string }).code === 'email_exists' || /already (been )?registered|already exists/i.test(error.message)) {

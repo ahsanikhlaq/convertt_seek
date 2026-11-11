@@ -40,6 +40,9 @@ function Brand({ children }: { children?: React.ReactNode }) {
 /** Supabase: Authentication → Rate Limits → "Minimum interval per user" (seconds between emails to one person). */
 const RESEND_AFTER = 15;
 
+/** Where a signed-in person with a profile belongs: their team, their client space, or organization setup. */
+const homeOf = (a: Account) => (a.workspace ? ROUTES.channels : a.clientSpaces.length ? ROUTES.clients : ROUTES.setup);
+
 /** Seconds until another code may be sent; counts down by itself. */
 function useCountdown(): [number, (n: number) => void] {
   const [left, setLeft] = useState(0);
@@ -152,7 +155,7 @@ export function SignupPage() {
     }
     update((d) => applyAccount(d, account));
     toast('Email verified ✓');
-    router.push(!account.onboarded ? ROUTES.welcome : account.workspace ? ROUTES.channels : ROUTES.setup);
+    router.push(!account.onboarded ? ROUTES.welcome : homeOf(account));
   };
 
   const google = async () => {
@@ -687,7 +690,7 @@ export function WelcomePage() {
   const { s, update, toast } = useSeek();
   const router = useRouter();
   const [phase, setPhase] = useState<'loading' | 'join' | 'code' | 'profile'>('loading');
-  const [invite, setInvite] = useState<{ workspace: string; invitedBy: string; logo: string | null } | null>(null);
+  const [invite, setInvite] = useState<{ workspace: string; invitedBy: string; logo: string | null; client?: boolean } | null>(null);
   const [hasWorkspace, setHasWorkspace] = useState(false);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -701,11 +704,15 @@ export function WelcomePage() {
   /** Signed in: set up the profile, or carry on if that's already done. */
   const toProfile = async (acc: Account) => {
     if (acc.onboarded) {
-      router.replace(acc.workspace ? ROUTES.channels : ROUTES.setup);
+      router.replace(homeOf(acc));
       return;
     }
-    setHasWorkspace(!!acc.workspace);
-    if (acc.workspace) {
+    const client = !acc.workspace ? acc.clientSpaces[0] : undefined;
+    setHasWorkspace(!!acc.workspace || !!client);
+    if (client) {
+      // a client invited to their project space by an agency
+      setInvite({ workspace: client.name, invitedBy: client.invitedBy + " at " + client.agency, logo: client.agencyLogo, client: true });
+    } else if (acc.workspace) {
       const inv = await myInvite().catch(() => null);
       // joined with an invite link (no email invite): just the organization
       setInvite({ workspace: inv?.workspace ?? acc.workspace.name, invitedBy: inv?.invitedBy ?? '', logo: acc.workspace.logo });
@@ -819,7 +826,7 @@ export function WelcomePage() {
       if (acc.workspace) d.workspaces.C.ch = 'general';
     });
     toast(invite ? `Welcome to ${invite.workspace} 👋` : 'Profile saved');
-    router.push(acc.workspace ? ROUTES.channels : ROUTES.setup);
+    router.push(homeOf(acc));
   };
 
   const shown = name.trim() || 'Your name';
@@ -947,7 +954,7 @@ export function WelcomePage() {
               <div>
                 <h1>Set up your profile</h1>
               </div>
-              <p className="sub">{invite ? `This is how you'll appear to ${invite.invitedBy || 'your teammates'} and the rest of ${invite.workspace}.` : 'This is how you’ll appear to your team.'}</p>
+              <p className="sub">{invite?.client ? `This is how you'll appear to the team in ${invite.workspace}.` : invite ? `This is how you'll appear to ${invite.invitedBy || 'your teammates'} and the rest of ${invite.workspace}.` : 'This is how you’ll appear to your team.'}</p>
               <form
                 style={{ display: 'contents' }}
                 onSubmit={(e) => {

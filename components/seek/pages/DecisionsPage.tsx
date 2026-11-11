@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { backendOn } from '@/lib/seek/backend';
 import type { Decision } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
 import { ROUTES } from '@/lib/seek/routes';
@@ -16,15 +17,18 @@ export function DecisionsPage() {
   const router = useRouter();
   const [editing, setEditing] = useState<Decision | null>(null);
 
+  // with a backend, decisions aren't saved yet, so the prototype's sample log never shows
+  const decs = backendOn ? [] : s.decs;
+  const none = backendOn && !decs.length;
   // same order as the prototype (launch-squad, design, Hollow & Bright), then any other place in log order
-  const places = Array.from(new Set(['launch-squad', 'design', 'HB', ...s.decs.map((d) => d.where)])).filter((p) => s.decs.some((d) => d.where === p));
-  const W: [string, string, number][] = [['All', 'All channels', s.decs.length], ...places.map((p): [string, string, number] => [p, p === 'HB' ? 'Hollow & Bright' : p.startsWith('DM ') ? p : '# ' + p, s.decs.filter((d) => d.where === p).length])];
+  const places = Array.from(new Set(['launch-squad', 'design', 'HB', ...decs.map((d) => d.where)])).filter((p) => decs.some((d) => d.where === p));
+  const W: [string, string, number][] = [['All', 'All channels', decs.length], ...places.map((p): [string, string, number] => [p, p === 'HB' ? 'Hollow & Bright' : p.startsWith('DM ') ? p : '# ' + p, decs.filter((d) => d.where === p).length])];
   const T: [string, string][] = [
     ['All', 'All types'],
     ['dec', 'Decisions'],
     ['appr', 'Approvals from clients'],
   ];
-  const list = s.decs.filter((d) => (ui.dWhere === 'All' || d.where === ui.dWhere) && (ui.dType === 'All' || d.type === ui.dType));
+  const list = decs.filter((d) => (ui.dWhere === 'All' || d.where === ui.dWhere) && (ui.dType === 'All' || d.type === ui.dType));
 
   const openSource = (d: Decision) => {
     if (d.where === 'HB') {
@@ -57,8 +61,8 @@ export function DecisionsPage() {
           <span className="tag">{n}</span>
         </button>
       ))}
-      <div className="sg lbl">Type</div>
-      {T.map(([k, l]) => (
+      {!none && <div className="sg lbl">Type</div>}
+      {!none && T.map(([k, l]) => (
         <button key={k} type="button" className={'si' + (ui.dType === k ? ' on' : '')} aria-pressed={ui.dType === k} onClick={() => setUI({ dType: k, sideOpen: false })}>
           <span className="x">
             <b>{l}</b>
@@ -69,7 +73,7 @@ export function DecisionsPage() {
   );
 
   const exportCsv = () => {
-    const rows = [['Decision', 'By', 'Where', 'When', 'Type', 'Status'], ...s.decs.map((d) => [d.t, d.by, whereLabel(d.where), d.time, d.type === 'appr' ? 'Approval' : 'Decision', d.old ? 'Replaced' : 'Current'])];
+    const rows = [['Decision', 'By', 'Where', 'When', 'Type', 'Status'], ...decs.map((d) => [d.t, d.by, whereLabel(d.where), d.time, d.type === 'appr' ? 'Approval' : 'Decision', d.old ? 'Replaced' : 'Current'])];
     const csv = rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -85,20 +89,31 @@ export function DecisionsPage() {
         title="Decisions"
         sub="What the team agreed, who agreed it, and the message it came from."
         right={
-          <button type="button" className="btn sm" onClick={exportCsv}>
-            <span aria-hidden="true" style={{ marginRight: 4 }}>
-              ⇩
-            </span>
-            Export
-          </button>
+          none ? undefined : (
+            <button type="button" className="btn sm" onClick={exportCsv}>
+              <span aria-hidden="true" style={{ marginRight: 4 }}>
+                ⇩
+              </span>
+              Export
+            </button>
+          )
         }
       />
       <div className="dl">
-        <div className="intro">
-          <p>Edit or undo a decision from its menu. Edited decisions keep their history.</p>
-          <span className="tag v">This week · {list.length}</span>
-        </div>
-        {list.length ? (
+        {none ? (
+          <div className="intro">
+            <p>Logging decisions from messages arrives in the next update.</p>
+            <span className="tag">Coming soon</span>
+          </div>
+        ) : (
+          <div className="intro">
+            <p>Edit or undo a decision from its menu. Edited decisions keep their history.</p>
+            <span className="tag v">This week · {list.length}</span>
+          </div>
+        )}
+        {none ? (
+          <div className="empty">No decisions logged. When the team agrees something, log it from the message so it&apos;s easy to find later.</div>
+        ) : list.length ? (
           list.map((d) => (
             <div key={d.id} className={'dec' + (d.client ? ' gold' : '') + (d.old ? ' old' : '')}>
               <div className="k">
@@ -133,7 +148,7 @@ export function DecisionsPage() {
         ) : (
           <div className="empty">No decisions match these filters.</div>
         )}
-        <div className="how">
+        {!none && <div className="how">
           {[
             'Log one from any message: More, then Log decision, or press D.',
             'Undo appears for a few seconds after logging.',
@@ -145,7 +160,7 @@ export function DecisionsPage() {
               {t}
             </div>
           ))}
-        </div>
+        </div>}
       </div>
       {editing && (
         <PromptDialog

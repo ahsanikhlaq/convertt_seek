@@ -51,7 +51,7 @@ function Rail({ active }: { active: RouteKey }) {
   const sw = useWorkspaceSwitch();
   const dot: Partial<Record<RouteKey, boolean>> = {
     dms: Object.values(s.dms).some((d) => d && d.unread > 0),
-    clients: !s.replied,
+    clients: !backendOn && !s.replied,
   };
   return (
     <nav className="rail" aria-label="Main">
@@ -118,8 +118,8 @@ function TopBar() {
         <button type="button" className="btn sm ghost" onClick={() => toast('Help centre opens in a new tab')}>
           ? Help
         </button>
-        <button type="button" className="btn sm ghost" onClick={() => toast('3 new notifications')} aria-label="Notifications, 3 new">
-          🔔<span className="badge" style={{ marginLeft: 2 }}>3</span>
+        <button type="button" className="btn sm ghost" onClick={() => toast(backendOn ? 'No new notifications' : '3 new notifications')} aria-label={backendOn ? 'Notifications, none new' : 'Notifications, 3 new'}>
+          🔔{!backendOn && <span className="badge" style={{ marginLeft: 2 }}>3</span>}
         </button>
         <button type="button" className="tme" onClick={() => setUI((u) => ({ profile: !u.profile }))} aria-label="Your profile">
           <Avatar k="AH" size={30} />
@@ -223,11 +223,32 @@ export function Pane({ title, sub, icon, onClose, children }: { title: React.Rea
   );
 }
 
-export function Shell({ active, side, pane, children }: { active: RouteKey; side: React.ReactNode; pane?: React.ReactNode; children: React.ReactNode }) {
+/** The left rail for a client: their agency's mark and their profile, nothing of the agency's team. */
+export function ClientRail() {
+  const { s, setUI } = useSeek();
+  return (
+    <nav className="rail" aria-label="Main">
+      <span className="wsb on" title={s.ws.name} aria-label={s.ws.name}>
+        <OrgMark name={s.ws.name} logo={s.ws.logo} />
+      </span>
+      <span className="sep"></span>
+      <span className="ri on" aria-current="page">
+        <Icon name="cl" />
+        Project
+      </span>
+      <button type="button" className="me" onClick={() => setUI((u) => ({ profile: !u.profile }))} aria-label="Your profile">
+        <Avatar k="AH" size={34} />
+        <StatusDot />
+      </button>
+    </nav>
+  );
+}
+
+export function Shell({ active, side, pane, rail, children }: { active: RouteKey; side: React.ReactNode; pane?: React.ReactNode; rail?: React.ReactNode; children: React.ReactNode }) {
   const { ui } = useSeek();
   return (
     <div className={'app' + (ui.sideOpen ? ' side-open' : '') + (pane ? ' has-pane' : '')}>
-      <Rail active={active} />
+      {rail ?? <Rail active={active} />}
       <TopBar />
       {side}
       <main className="main">{children}</main>

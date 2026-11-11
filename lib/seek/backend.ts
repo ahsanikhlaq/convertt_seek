@@ -40,7 +40,12 @@ export type Account = {
   onboarded: boolean;
   /** null until the person has set up (or been invited to) a workspace */
   workspace: Org | null;
+  /** client spaces this person was invited to as a client (empty for the agency's team) */
+  clientSpaces: ClientSpaceRef[];
 };
+
+/** A client space you belong to as a client. */
+export type ClientSpaceRef = { id: string; name: string; project: string; code: string; color: string; agency: string; agencyLogo: string | null; role: string; invitedBy: string };
 
 /** A workspace (organization) you belong to. */
 export type Org = { id: string; name: string; slug: string; role: string; logo: string | null; joinCode: string };
@@ -128,7 +133,7 @@ type OrgRow = { id: string; name: string; slug: string; logo_url: string | null;
 async function loadAccount(id: string, email: string): Promise<Account> {
   // anyone invited by email joins those workspaces the first time we see them signed in
   await sb().rpc('accept_my_invites');
-  const [{ data: profile }, { data: memberships }] = await Promise.all([
+  const [{ data: profile }, { data: memberships }, { data: spaces }] = await Promise.all([
     sb().from('profiles').select('name, title, time_zone, onboarded_at').eq('id', id).maybeSingle(),
     sb()
       .from('workspace_members')
@@ -136,7 +141,20 @@ async function loadAccount(id: string, email: string): Promise<Account> {
       .eq('user_id', id)
       .order('joined_at', { ascending: true })
       .limit(20),
+    sb().rpc('my_client_spaces'),
   ]);
+  type SpaceRow = { space_id: string; name: string; project: string; code: string; color: string; agency: string; agency_logo: string | null; role: string; invited_by: string };
+  const clientSpaces = ((spaces ?? []) as SpaceRow[]).map((r) => ({
+    id: r.space_id,
+    name: r.name,
+    project: r.project,
+    code: r.code,
+    color: r.color,
+    agency: r.agency,
+    agencyLogo: r.agency_logo,
+    role: r.role,
+    invitedBy: r.invited_by,
+  }));
   const rows = (memberships ?? []) as unknown as { role: string; workspaces: OrgRow | null }[];
   let pref: string | null = null;
   try {
@@ -153,6 +171,7 @@ async function loadAccount(id: string, email: string): Promise<Account> {
     timeZone: p.time_zone ?? '',
     onboarded: Boolean(p.onboarded_at),
     workspace: w ? { id: w.id, name: w.name, slug: w.slug, role: m!.role, logo: w.logo_url, joinCode: w.join_code } : null,
+    clientSpaces,
   };
 }
 
@@ -249,8 +268,18 @@ export async function acceptInviteLink(tokenHash: string): Promise<{ error: stri
  * Returns a message to show.
  */
 export async function sendInvite(workspaceId: string, email: string): Promise<{ ok: boolean; message: string }> {
+  return invite({ workspace_id: workspaceId, email });
+}
+
+/** Emails a client their invite to a client space (they must already be listed in its people). */
+export async function inviteClient(spaceId: string, email: string): Promise<{ ok: boolean; message: string }> {
+  return invite({ space_id: spaceId, email });
+}
+
+async function invite(body: { workspace_id?: string; space_id?: string; email: string }): Promise<{ ok: boolean; message: string }> {
+  const email = body.email;
   const { data, error } = await sb().functions.invoke('seek-invite', {
-    body: { workspace_id: workspaceId, email, redirect_to: `${location.origin}/welcome` },
+    body: { ...body, redirect_to: `${location.origin}/welcome` },
   });
   if (error) {
     // the function's own message, when it sent one
@@ -293,6 +322,49 @@ export async function saveProfile(p: { name: string; title: string; timeZone?: s
   await sb().from('profiles').update({ onboarded_at: now }).eq('id', data.user.id).is('onboarded_at', null);
   forgetAccount();
   return null;
+}
+
+// ---------------------------------------------------------------- client spaces
+
+export type ClientRole = 'approver' | 'contributor' | 'viewer';
+export type NewClientSpace = {
+  orgId: string;
+  name: string;
+  project: string;
+  code: string;
+  color: string;
+  replyTarget: string;
+  tone: string;
+  neverMention: string[];
+  people: { email: string; name: string; role: ClientRole }[];
+  team: string[];
+  steps: { kind: string; title: string; detail: string; side: 'client' | 'team' }[];
+  welcome: string;
+};
+
+/** Creates a client space with its people, team, checklist and welcome message. Invites are sent separately. */
+export async function createClientSpace(c: NewClientSpace): Promise<{ error: string | null; id: string | null }> {
+  const { data, error } = await sb().rpc('create_client_space', {
+    p_ws: c.orgId,
+    p_name: c.name,
+    p_project: c.project,
+    p_code: c.code,
+    p_color: c.color,
+    p_reply: c.replyTarget,
+    p_tone: c.tone,
+    p_never: c.neverMention,
+    p_people: c.people,
+    p_team: c.team,
+    p_steps: c.steps,
+    p_welcome: c.welcome,
+  });
+  return error ? { error: friendly(error.message), id: null } : { error: null, id: data as string };
+}
+
+/** Ticks (or unticks) an onboarding step. */
+export async function completeStep(stepId: string, done = true): Promise<string | null> {
+  const { error } = await sb().rpc('complete_step', { p_step: stepId, p_done: done });
+  return error ? friendly(error.message) : null;
 }
 
 export async function signOut(): Promise<void> {

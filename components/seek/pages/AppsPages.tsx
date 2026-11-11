@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { backendOn } from '@/lib/seek/backend';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
@@ -56,12 +57,27 @@ export function AgentsPage() {
         title="AI agents"
         sub="Each agent follows the same hard rules, keeps a log, and can be switched off."
         right={
-          <button type="button" className="btn sm" onClick={() => setUI({ logOf: 'All agents' })}>
-            Agent log
-          </button>
+          backendOn ? undefined : (
+            <button type="button" className="btn sm" onClick={() => setUI({ logOf: 'All agents' })}>
+              Agent log
+            </button>
+          )
         }
       />
       <div className="pg">
+        {backendOn ? (
+          <>
+            <div className="intro">
+              <div>
+                <h2>Your agents</h2>
+                <p>Adding AI agents arrives in a later update.</p>
+              </div>
+              <span className="tag">Coming soon</span>
+            </div>
+            <div className="empty">No AI agents yet. Agents you add will show here, each with its own log and an off switch.</div>
+          </>
+        ) : (
+        <>
         <div className="intro">
           <div>
             <h2>Your agents</h2>
@@ -137,6 +153,8 @@ export function AgentsPage() {
             <small>Type, instructions, data, permissions, dry test.</small>
           </div>
         </div>
+        </>
+        )}
         <div className="rulebox">
           <div className="card">
             <div className="ct">
@@ -167,7 +185,7 @@ export function AgentsPage() {
           </div>
         </div>
       </div>
-      {ui.logOf && (
+      {ui.logOf && !backendOn && (
         <>
           <div className="scrim" style={{ background: 'rgba(28,14,28,.3)' }} onClick={() => setUI({ logOf: null })}></div>
           <aside className="drawer" role="dialog" aria-label={ui.logOf + ' log'}>
@@ -200,7 +218,10 @@ export function AgentsPage() {
 
 export function AppsPage() {
   const { s, ui, update, setUI, toast } = useSeek();
-  const a = s.apps.find((x) => x.id === s.app);
+  // with a backend, no apps can be connected yet, so the prototype's sample apps and requests never show
+  const apps = backendOn ? [] : s.apps;
+  const reqs = backendOn ? [] : s.reqs;
+  const a = apps.find((x) => x.id === s.app);
 
   const pane =
     a && ui.paneOpen ? (
@@ -288,13 +309,25 @@ export function AppsPage() {
         title="All apps"
         sub="Every connected tool, where it posts and on which tier. Apps never post to clients."
         right={
-          <button type="button" className="btn sm pri" onClick={() => toast('Opening the app directory')}>
+          <button type="button" className="btn sm pri" onClick={() => toast(backendOn ? 'Connecting apps arrives in a later update' : 'Opening the app directory')}>
             Browse directory
           </button>
         }
       />
       <div className="pg">
-        <div className="stats">
+        {backendOn && (
+          <>
+            <div className="intro">
+              <div>
+                <h2>Connected apps</h2>
+                <p>Connecting apps arrives in a later update.</p>
+              </div>
+              <span className="tag">Coming soon</span>
+            </div>
+            <div className="empty">No apps connected. Connect GitHub, Figma or your calendar. Their updates wait for the digest by default.</div>
+          </>
+        )}
+        {!backendOn && <div className="stats">
           <div className="stat">
             <b>{s.apps.filter((x) => x.on).length}</b>
             <span>apps installed</span>
@@ -311,9 +344,9 @@ export function AppsPage() {
             <b>{s.reqs.length}</b>
             <span>requests to review</span>
           </div>
-        </div>
-        <div className="al">
-          {s.apps.map((x) => (
+        </div>}
+        {!backendOn && <div className="al">
+          {apps.map((x) => (
             <button
               key={x.id}
               type="button"
@@ -337,7 +370,7 @@ export function AppsPage() {
               <span className={'tag' + (x.tier === 'Urgent' ? ' red' : x.tier === 'Normal' ? ' v' : '')}>{x.on ? x.tier : 'Off'}</span>
             </button>
           ))}
-        </div>
+        </div>}
         <div className="banner v" style={{ margin: 0 }}>
           🛡{' '}
           <span>
@@ -349,8 +382,8 @@ export function AppsPage() {
             Requests
           </div>
           <div className="al">
-            {s.reqs.length ? (
-              s.reqs.map((r) => (
+            {reqs.length ? (
+              reqs.map((r) => (
                 <div key={r.id} className="ar">
                   <span className="lg" style={{ background: r.c }}>
                     {r.id}

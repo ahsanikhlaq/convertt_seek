@@ -104,6 +104,14 @@ Each organization has a logo (stored in the public `seek-logos` bucket; only its
 invite link (`/join?c=<code>`, shown under ＋ Invite people; admins can reset it). Invite emails carry both a Join
 button and a 6-digit code, so if the button fails the person types the code instead of waiting for a new email.
 
+**Client spaces** (Clients → ＋ New): a four-step wizard (who the client is, their onboarding checklist, reply target
+and tone, review and invite) creates the space and emails each client person a Join link. Clients sign in with a
+code and see only their own project: a getting-started checklist, the Client chat and their team. The agency's team
+sees Client chat, Team notes (never shown to the client), Status (both sides' checklist), Approvals and People
+(roles, resend invite, remove). The database enforces the split: a client session never receives Team notes, team
+channels or other clients. Decisions, meetings, agents, apps, files and approvals show empty states until those
+features are built.
+
 In backend mode the prototype's sample chats never show: the app starts empty and keeps only your own recent
 chats in the browser, so a reload shows them at once while fresh ones load.
 

@@ -65,13 +65,22 @@ export function useSeek() {
  * this same account and organization (so a reload shows them at once while fresh ones load).
  */
 export function applyAccount(d: State, acc: Account | null) {
-  d.session = !acc ? 'out' : !acc.onboarded ? 'profile' : acc.workspace ? 'in' : 'setup';
+  // people who are only a client of an agency (no team of their own) get just their client space
+  d.session = !acc ? 'out' : !acc.onboarded ? 'profile' : acc.workspace ? 'in' : acc.clientSpaces.length ? 'client' : 'setup';
   const owner = acc ? acc.id + ':' + (acc.workspace?.id ?? '') : '';
   if (backendOn && d.owner !== owner) {
     d.owner = owner;
     d.workspaces.C = { ch: 'general', channels: [], msgs: {} };
     d.dms = {};
     d.dm = '';
+    d.lc = {};
+    d.cs = '';
+  }
+  if (acc && !acc.workspace && acc.clientSpaces[0]) {
+    const c = acc.clientSpaces.find((x) => x.id === d.cs) ?? acc.clientSpaces[0];
+    d.cs = c.id;
+    d.ws.name = c.agency;
+    d.ws.logo = c.agencyLogo ?? undefined;
   }
   if (!acc) return;
   d.email = acc.email;

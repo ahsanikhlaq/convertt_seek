@@ -28,9 +28,11 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     in: null,
     profile: ['welcome'],
     setup: ['setup', 'signup', 'welcome'],
-    out: ['signup', 'invite', 'welcome'],
+    out: ['signup', 'welcome'],
+    // a client only ever sees their own client space
+    client: ['clients'],
   };
-  const home = { in: ROUTES.channels, profile: ROUTES.welcome, setup: ROUTES.setup, out: ROUTES.signup }[s.session];
+  const home = { in: ROUTES.channels, profile: ROUTES.welcome, setup: ROUTES.setup, out: ROUTES.signup, client: ROUTES.clients }[s.session];
   const ok = allowed[s.session];
   const target: string | null =
     !backendOn || route === 'welcome' || route === 'join'
@@ -134,7 +136,8 @@ function Palette() {
   const listRef = useRef<HTMLDivElement>(null);
 
   const hits = useMemo<Hit[]>(() => {
-    const ws = s.workspaces[s.wsId];
+    // with a backend only your real team's channels are listed (the sample workspace and client spaces are not)
+    const ws = backendOn ? s.workspaces.C : s.workspaces[s.wsId];
     const to = (r: RouteKey, fn?: () => void) => () => {
       if (fn) fn();
       setUI({ palette: false, thread: null, chTab: 'Messages' });
@@ -146,6 +149,7 @@ function Palette() {
         kind: 'channels',
         go: to('channels', () =>
           update((d) => {
+            if (backendOn) d.wsId = 'C';
             d.workspaces[d.wsId].ch = c.id;
             const x = d.workspaces[d.wsId].channels.find((y) => y.id === c.id);
             if (x) x.unread = 0;
@@ -162,7 +166,7 @@ function Palette() {
           }),
         ),
       })),
-      ...s.spaces.map((sp) => ({
+      ...(backendOn ? [] : s.spaces).map((sp) => ({
         label: sp.name + ' · Client chat',
         kind: 'client',
         go: to('clients', () =>

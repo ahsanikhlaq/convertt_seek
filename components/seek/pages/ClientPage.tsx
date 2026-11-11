@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { backendOn } from '@/lib/seek/backend';
+import { LiveClientsPage } from './LiveClientPages';
 import { PEOPLE, SLOT_LABELS, SLOTS, type ClientTab, type PersonKey } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
 import { ROUTES } from '@/lib/seek/routes';
@@ -16,6 +18,11 @@ const TABS: ClientTab[] = ['Client chat', 'Team notes', 'Status', 'Approvals', '
 const CLIENT_PEOPLE: PersonKey[] = ['CH', 'PR', 'AH', 'MO'];
 
 export function ClientPage({ scheduling }: { scheduling?: boolean }) {
+  // with a backend, client spaces are real (LiveClientPages); the demo below stays exactly like the prototype
+  return backendOn ? <LiveClientsPage scheduling={scheduling} /> : <DemoClientPage scheduling={scheduling} />;
+}
+
+function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
   const { s, ui, update, setUI, toast, nextId } = useSeek();
   const router = useRouter();
   const sp = s.spaces.find((x) => x.id === s.cs) || s.spaces[0];

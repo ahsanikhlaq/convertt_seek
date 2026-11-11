@@ -92,7 +92,7 @@ export function ChannelsPage() {
 
   let body: React.ReactNode;
   if (ui.chTab === 'Messages') {
-    const showJump = wsId === 'C' && ch === 'launch-squad' && !s.seenNew;
+    const showJump = !live && wsId === 'C' && ch === 'launch-squad' && !s.seenNew;
     body = (
       <>
         <Feed feed={feed} banner={<div className="daysep">Today</div>} />
@@ -113,6 +113,19 @@ export function ChannelsPage() {
         )}
         <Composer key={wsId + ch} placeholder={'Message #' + ch} people={team} onSend={(t) => (live ? void live.send(ch, t) : send(t))} />
       </>
+    );
+  } else if (live) {
+    // with a backend, files, canvases and pins aren't saved yet, so a real channel shows empty tabs, not samples
+    body = (
+      <div className="pg">
+        <div className="empty">
+          {ui.chTab === 'Files'
+            ? 'No files yet. Files shared in this channel land here, with every version kept. Sharing files arrives in a later update.'
+            : ui.chTab === 'Canvas'
+              ? "No canvas yet. A canvas keeps the channel's brief, owners and key dates in one place. Canvases arrive in a later update."
+              : 'Nothing pinned yet. Pinned messages stay here so everyone in #' + ch + ' can find them. Pinning arrives in a later update.'}
+        </div>
+      </div>
     );
   } else if (ui.chTab === 'Files') {
     const files: [string, string][] = [

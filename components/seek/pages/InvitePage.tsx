@@ -7,8 +7,15 @@ import { isEmail } from '@/lib/seek/format';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { CodeInput } from '../CodeInput';
+import { backendOn } from '@/lib/seek/backend';
+import { NewClientPage } from './NewClientPage';
 
 export function InvitePage() {
+  // with a backend this is the real New client wizard; the demo keeps the prototype's walkthrough
+  return backendOn ? <NewClientPage /> : <DemoInvitePage />;
+}
+
+function DemoInvitePage() {
   const { s, update, toast } = useSeek();
   const router = useRouter();
   const i = s.inv;

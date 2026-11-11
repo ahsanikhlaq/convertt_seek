@@ -76,8 +76,10 @@ export type Workspace = { ch: string; channels: Channel[]; msgs: Record<string, 
 
 export type State = {
   version: number;
-  /** signed out · signed in but no profile yet · no workspace yet · in */
-  session: 'out' | 'profile' | 'setup' | 'in';
+  /** signed out · signed in but no profile yet · no workspace yet · in · a client (only their client space) */
+  session: 'out' | 'profile' | 'setup' | 'in' | 'client';
+  /** backend mode: live client-space messages, keyed "<space id>:<client|team>" */
+  lc?: Record<string, FeedItem[]>;
   email: string;
   /** organization: name, logo (a URL, backend mode), setup answers and teammates to invite */
   ws: { name: string; logo?: string; tz: string; size: string; use: string[]; invites: string[] };
