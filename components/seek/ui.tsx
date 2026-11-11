@@ -131,6 +131,17 @@ export function Logo({ small = true }: { small?: boolean }) {
   );
 }
 
+/** An organization's logo, or its first letter on a purple square when it has none. */
+export function OrgMark({ name, logo, size = 36, radius }: { name: string; logo?: string | null; size?: number; radius?: number }) {
+  const r = radius ?? Math.round(size * 0.28);
+  return (
+    <span className="orgmark" style={{ width: size, height: size, borderRadius: r, fontSize: Math.round(size * 0.42) }} aria-hidden="true">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {logo ? <img src={logo} alt="" /> : (name.trim()[0] || 'S').toUpperCase()}
+    </span>
+  );
+}
+
 export function StatusDot() {
   const { s } = useSeek();
   return <span className={'st ' + s.status.k}></span>;

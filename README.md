@@ -18,7 +18,9 @@ tab bar on phones, links and buttons on each screen, and the ⌘K / Ctrl+K searc
 | URL | Screen |
 | --- | --- |
 | `/signup` | Create an account (Google, or work email + 6-digit code) |
-| `/setup` | Workspace setup: name, time zone, team size, use, teammate invites |
+| `/setup` | Organization setup: name, logo, time zone, team size, use; then invite the team by link or email |
+| `/welcome` | Profile setup after first sign-in; where invite emails' Join button lands |
+| `/join?c=…` | Join an organization with its invite link: email → 6-digit code → profile |
 | `/channels` | Team channels, threads, reactions, mentions, tasks and decisions from messages |
 | `/dms` | Direct messages with a profile panel |
 | `/clients` | Client spaces: Client chat, Team notes, Status, Approvals, People |
@@ -93,6 +95,13 @@ Setting up a new Supabase project:
    (its Join link, already in `invite-user.html`, is
    `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=invite&email={{ .Email }}`). The link opens
    `/welcome`, where the new teammate signs in, sets up their profile and lands in #general.
+
+Each organization has a logo (stored in the public `seek-logos` bucket; only its admins can upload) and a secret
+invite link (`/join?c=<code>`, shown under ＋ Invite people; admins can reset it). Invite emails carry both a Join
+button and a 6-digit code, so if the button fails the person types the code instead of waiting for a new email.
+
+In backend mode the prototype's sample chats never show: the app starts empty and keeps only your own recent
+chats in the browser, so a reload shows them at once while fresh ones load.
 
 Everything is protected by row-level security: people only see workspaces they belong to and their teammates.
 

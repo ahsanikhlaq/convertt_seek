@@ -3,6 +3,7 @@ export const ROUTES = {
   signup: '/signup',
   setup: '/setup',
   welcome: '/welcome',
+  join: '/join',
   channels: '/channels',
   dms: '/dms',
   clients: '/clients',

@@ -7,6 +7,7 @@ import { now } from '@/lib/seek/format';
 import { useLiveDms } from '@/lib/seek/liveDms';
 import { useSeek } from '@/lib/seek/store';
 import { Modal } from '../Dialogs';
+import { InviteDialog } from '../InviteDialog';
 import { Composer, Feed, type FeedRef } from '../Messages';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
@@ -22,6 +23,7 @@ function LiveDmsPage() {
   const { s, ui, setUI, toast } = useSeek();
   const live = useLiveDms();
   const [picking, setPicking] = useState(false);
+  const [inviting, setInviting] = useState(false);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const threads = Object.entries(s.dms) as [PersonKey, DmThread][];
@@ -79,7 +81,7 @@ function LiveDmsPage() {
       )}
       {others.length > 0 && <div className="sg lbl">Teammates</div>}
       {others.map((k) => person(k, 'Start a conversation', () => void open(k)))}
-      <button type="button" className="si" onClick={() => setPicking(true)}>
+      <button type="button" className="si" onClick={() => setInviting(true)}>
         ＋ Invite people
       </button>
     </Sidebar>
@@ -161,6 +163,7 @@ function LiveDmsPage() {
         </div>
       )}
       {picker}
+      {inviting && live && <InviteDialog onClose={() => setInviting(false)} invite={live.invite} />}
     </Shell>
   );
 }

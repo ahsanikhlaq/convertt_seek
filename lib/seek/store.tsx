@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { backendOn, currentAccount, sb, type Account } from './backend';
+import { backendOn, currentAccount, forgetAccount, sb, type Account } from './backend';
 import { initialState, PEOPLE, STATE_VERSION, type State } from './data';
 import { initialsOf } from './format';
 import { applyTheme } from './theme';
@@ -59,15 +59,29 @@ export function useSeek() {
   return c;
 }
 
-/** Copies the signed-in account (or its absence) onto the app state. Used at start-up and after sign-in. */
+/**
+ * Copies the signed-in account (or its absence) onto the app state. Used at start-up and after sign-in.
+ * With a backend, the prototype's sample chats never show: the saved chats are kept only when they belong to
+ * this same account and organization (so a reload shows them at once while fresh ones load).
+ */
 export function applyAccount(d: State, acc: Account | null) {
   d.session = !acc ? 'out' : !acc.onboarded ? 'profile' : acc.workspace ? 'in' : 'setup';
+  const owner = acc ? acc.id + ':' + (acc.workspace?.id ?? '') : '';
+  if (backendOn && d.owner !== owner) {
+    d.owner = owner;
+    d.workspaces.C = { ch: 'general', channels: [], msgs: {} };
+    d.dms = {};
+    d.dm = '';
+  }
   if (!acc) return;
   d.email = acc.email;
   // your real profile replaces the prototype's sample person
   d.me = { ...d.me, email: acc.email, name: acc.name.trim() || acc.email.split('@')[0] || 'You', title: acc.title, tz: acc.timeZone || d.me.tz };
   setMe(d.me.name);
-  if (acc.workspace) d.ws.name = acc.workspace.name;
+  if (acc.workspace) {
+    d.ws.name = acc.workspace.name;
+    d.ws.logo = acc.workspace.logo ?? undefined;
+  }
   // a real account starts setup with no sample teammates to invite
   else d.ws.invites = [];
 }
@@ -112,7 +126,10 @@ export function SeekProvider({ children }: { children: React.ReactNode }) {
     })();
     const sub = backendOn
       ? sb().auth.onAuthStateChange((event) => {
-          if (event === 'SIGNED_OUT') setS((p) => (p ? { ...p, session: 'out' } : p));
+          if (event === 'SIGNED_OUT') {
+            forgetAccount();
+            setS((p) => (p ? { ...p, session: 'out' } : p));
+          }
         }).data.subscription
       : null;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');

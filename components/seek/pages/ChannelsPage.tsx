@@ -7,6 +7,7 @@ import { useLiveChat } from '@/lib/seek/live';
 import { channelId } from '@/lib/seek/format';
 import { useSeek } from '@/lib/seek/store';
 import { PromptDialog } from '../Dialogs';
+import { InviteDialog } from '../InviteDialog';
 import { Composer, Feed, ThreadPane, useSendTo, type FeedRef } from '../Messages';
 import { MainHeader, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
@@ -231,24 +232,7 @@ export function ChannelsPage() {
           }}
         />
       )}
-      {inviting && live && (
-        <PromptDialog
-          title="Invite people"
-          label="Their email"
-          initial=""
-          confirm="Send invite"
-          onCancel={() => setInviting(false)}
-          onSubmit={async (v) => {
-            const msg = await live.invite(v);
-            if (msg === 'Enter a valid email') {
-              toast(msg);
-              return;
-            }
-            setInviting(false);
-            toast(msg);
-          }}
-        />
-      )}
+      {inviting && live && <InviteDialog onClose={() => setInviting(false)} invite={live.invite} />}
     </Shell>
   );
 }

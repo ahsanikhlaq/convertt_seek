@@ -615,3 +615,18 @@ html.dark .auth .fine a{color:var(--vd)}
 @media (max-width:760px){input:not([type=checkbox]):not([type=radio]):not(.codes input),textarea,select{font-size:16px!important}}
 /* iPhone: no grey flash on tap */
 button,a,[role=button]{-webkit-tap-highlight-color:transparent}
+/* organization logo / letter mark, logo picker, invite link row */
+.orgmark{display:inline-grid;place-items:center;flex:none;overflow:hidden;background:var(--v);color:#fff;font-weight:700;line-height:1}
+.orgmark img{width:100%;height:100%;object-fit:cover;display:block;background:#fff}
+.wsb .orgmark{width:100%!important;height:100%!important;border-radius:inherit!important;font-size:inherit!important;background:transparent;color:inherit}
+.wsb .orgmark img{border-radius:inherit}
+.logopick{display:flex;align-items:center;gap:14px}
+.logopick .orgmark{box-shadow:0 0 0 1px var(--ln)}
+.logopick .acts{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.logopick .acts small{color:var(--sb);font-size:12px}
+.copyrow{display:flex;gap:8px;align-items:center}
+.copyrow .inp{flex:1;min-width:0;font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:var(--mu)}
+.joinorg{display:flex;align-items:center;gap:12px}
+.joinorg small{display:block;color:var(--sb);font-size:13px}
+@media (min-width:761px){.auth .fm .in>.joinorg{display:none}}
+@media (max-width:480px){.auth .steps{gap:4px}.auth .steps hr{width:auto;flex:1;min-width:6px}.auth .steps span:not(.c){font-size:0;gap:0}.auth .steps span:not(.c) i{font-size:10px}.auth .fm .top{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}

@@ -85,16 +85,17 @@ export function useLiveDms(): LiveDms | null {
     let live: RealtimeChannel | null = null;
     let alive = true;
     (async () => {
-      const [{ data: u }, acc] = await Promise.all([sb().auth.getUser(), currentAccount()]);
-      if (!alive || !u.user || !acc?.workspace) return;
-      me.current = u.user.id;
+      // the account is loaded once at start-up and shared, so this is usually instant
+      const acc = await currentAccount();
+      if (!alive || !acc?.workspace) return;
+      me.current = acc.id;
       ws.current = acc.workspace.id;
 
-      const { data: members } = await sb().from('workspace_members').select('user_id, role').eq('workspace_id', ws.current);
+      const [{ data: members }, { data: mine }] = await Promise.all([
+        sb().from('workspace_members').select('user_id, role').eq('workspace_id', ws.current),
+        sb().from('dm_members').select('thread_id').eq('user_id', me.current),
+      ]);
       const team = ((members ?? []) as { user_id: string; role: string }[]).filter((m) => m.role !== 'guest').map((m) => m.user_id);
-      await learnProfiles(team, me.current);
-
-      const { data: mine } = await sb().from('dm_members').select('thread_id').eq('user_id', me.current);
       const threadIds = ((mine ?? []) as { thread_id: string }[]).map((m) => m.thread_id);
       let pairs: { thread_id: string; user_id: string }[] = [];
       let lasts: Row[] = [];
@@ -106,7 +107,7 @@ export function useLiveDms(): LiveDms | null {
         pairs = ((all ?? []) as { thread_id: string; user_id: string }[]).filter((p) => p.user_id !== me.current);
         lasts = (recent ?? []) as Row[];
       }
-      await learnProfiles(pairs.map((p) => p.user_id), me.current);
+      await learnProfiles([...team, ...pairs.map((p) => p.user_id)], me.current);
       if (!alive) return;
 
       threadOf.current = new Map(pairs.map((p) => [p.user_id, p.thread_id]));

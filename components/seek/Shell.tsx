@@ -7,14 +7,14 @@ import { WORKSPACES, type WorkspaceId } from '@/lib/seek/data';
 import { ROUTES, type RouteKey } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { usePopovers } from './Popovers';
-import { Avatar, Icon, Logo, ModeSeg, StatusDot, type IconName } from './ui';
+import { Avatar, Icon, Logo, ModeSeg, OrgMark, StatusDot, type IconName } from './ui';
 
 export function useWorkspaceSwitch() {
   const { s, update, setUI, toast } = useSeek();
   const router = useRouter();
   return (w: WorkspaceId) => {
     if (w === s.wsId) {
-      toast('You are in ' + WORKSPACES[w].name);
+      toast('You are in ' + (backendOn ? s.ws.name : WORKSPACES[w].name));
       return;
     }
     update((d) => {
@@ -40,7 +40,8 @@ function useWorkspaceList() {
   const { s } = useSeek();
   const wsIds: WorkspaceId[] = backendOn ? ['C'] : (Object.keys(WORKSPACES) as WorkspaceId[]);
   const wsName = (w: WorkspaceId) => (backendOn ? s.ws.name || 'Workspace' : WORKSPACES[w].name);
-  const wsLetter = (w: WorkspaceId) => (backendOn ? (s.ws.name.trim()[0] || 'S').toUpperCase() : w);
+  // your organization's logo (or first letter) with a backend; the sample workspaces' letters in demo mode
+  const wsLetter = (w: WorkspaceId): React.ReactNode => (backendOn ? <OrgMark name={s.ws.name} logo={s.ws.logo} /> : w);
   return { wsIds, wsName, wsLetter };
 }
 
@@ -96,7 +97,7 @@ function TopBar() {
         Theme
       </button>
       <button type="button" className="tsearch" onClick={() => setUI({ palette: true })}>
-        ⌕ <span>Search {WORKSPACES[s.wsId].name}</span>
+        ⌕ <span>Search {backendOn ? s.ws.name || 'Seek' : WORKSPACES[s.wsId].name}</span>
         <kbd>⌘K</kbd>
       </button>
       <div className="tr">
@@ -168,7 +169,7 @@ export function Sidebar({ title, sub, action, children }: { title: string; sub: 
         </div>
         <small>{sub}</small>
         <button type="button" className="search" onClick={() => setUI({ palette: true, sideOpen: false })} style={{ width: '100%', textAlign: 'left' }}>
-          ⌕ Search {WORKSPACES[s.wsId].name} <kbd>⌘K</kbd>
+          ⌕ Search {backendOn ? s.ws.name || 'Seek' : WORKSPACES[s.wsId].name} <kbd>⌘K</kbd>
         </button>
       </div>
       <div className="sl">{children}</div>

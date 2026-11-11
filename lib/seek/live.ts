@@ -137,9 +137,10 @@ export function useLiveChat(): LiveChat | null {
     let live: RealtimeChannel | null = null;
     let alive = true;
     (async () => {
-      const [{ data: u }, acc] = await Promise.all([sb().auth.getUser(), currentAccount()]);
-      if (!alive || !u.user || !acc?.workspace) return;
-      meRef.current = u.user.id;
+      // the account is loaded once at start-up and shared, so this is usually instant
+      const acc = await currentAccount();
+      if (!alive || !acc?.workspace) return;
+      meRef.current = acc.id;
       wsRef.current = acc.workspace.id;
       const ws = acc.workspace.id;
 
@@ -147,22 +148,21 @@ export function useLiveChat(): LiveChat | null {
         sb().from('workspace_members').select('user_id').eq('workspace_id', ws),
         sb().from('channels').select('id, name, description').eq('workspace_id', ws).order('created_at'),
       ]);
-      const ids = ((members ?? []) as { user_id: string }[]).map((m) => m.user_id);
-      await learnPeople(ids);
       if (!alive) return;
-      setPeople(ids.map(keyOf));
 
+      // show the channel list straight away; names and faces fill in as they load
       const list = (channels ?? []) as ChannelRow[];
       chans.current = new Map(list.map((c) => [c.name, c.id]));
       update((d) => {
         d.wsId = 'C';
         d.ws.name = acc.workspace!.name;
+        d.ws.logo = acc.workspace!.logo ?? undefined;
         const w = d.workspaces.C;
         w.channels = list.map((c) => ({ id: c.name, unread: w.channels.find((x) => x.id === c.name)?.unread ?? 0, desc: c.description }));
-        // the demo's sample conversations don't belong in a real workspace
         for (const k of Object.keys(w.msgs)) if (!chans.current.has(k)) delete w.msgs[k];
         if (!chans.current.has(w.ch)) w.ch = chans.current.has('general') ? 'general' : list[0]?.name ?? 'general';
       });
+      setReady(true);
 
       live = sb()
         .channel('seek:' + ws)
@@ -185,7 +185,11 @@ export function useLiveChat(): LiveChat | null {
           setPeople((xs) => (xs.includes(keyOf(id)) ? xs : [...xs, keyOf(id)]));
         })
         .subscribe();
-      setReady(true);
+
+      const ids = ((members ?? []) as { user_id: string }[]).map((m) => m.user_id);
+      await learnPeople(ids);
+      if (!alive) return;
+      setPeople((xs) => [...new Set([...ids.map(keyOf), ...xs])]);
     })();
     return () => {
       alive = false;

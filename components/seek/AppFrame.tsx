@@ -4,12 +4,12 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PEOPLE, STATUSES, WORKSPACES, type PersonKey } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
-import { backendOn, saveProfile, signOut } from '@/lib/seek/backend';
+import { backendOn, currentAccount, saveProfile, signOut, uploadLogo } from '@/lib/seek/backend';
 import { prototypeName, ROUTES, routeFromPrototype, routeOf, type RouteKey } from '@/lib/seek/routes';
 import { setMe, useSeek } from '@/lib/seek/store';
 import { ConfirmDialog, Modal } from './Dialogs';
 import { usePopovers } from './Popovers';
-import { Avatar, ModeSeg, Switch } from './ui';
+import { Avatar, ModeSeg, OrgMark, Switch } from './ui';
 
 /**
  * Wraps every screen and hosts the palette, profile and shortcuts. In demo mode, as in the product prototype,
@@ -22,7 +22,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const route = routeOf(pathname);
 
   // with a real backend, screens need a signed-in account with a profile; demo mode keeps every screen open like
-  // the prototype. The welcome screen is always open: it is where invite links land, signed in or not.
+  // the prototype. The welcome and join screens are always open: invite emails and invite links land there,
+  // signed in or not.
   const allowed: Record<typeof s.session, RouteKey[] | null> = {
     in: null,
     profile: ['welcome'],
@@ -32,7 +33,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const home = { in: ROUTES.channels, profile: ROUTES.welcome, setup: ROUTES.setup, out: ROUTES.signup }[s.session];
   const ok = allowed[s.session];
   const target: string | null =
-    !backendOn || route === 'welcome'
+    !backendOn || route === 'welcome' || route === 'join'
       ? null
       : ok
         ? route && ok.includes(route)
@@ -239,6 +240,32 @@ function ProfileDrawer() {
   const [confirmReset, setConfirmReset] = useState(false);
   const close = () => setUI({ profile: false });
   const st = STATUSES.find((x) => x[0] === s.status.k)!;
+  // admins can change the organization's logo from here
+  const [org, setOrg] = useState<{ id: string; admin: boolean } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const logoIn = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!backendOn) return;
+    void currentAccount().then((a) => a?.workspace && setOrg({ id: a.workspace.id, admin: ['owner', 'admin'].includes(a.workspace.role) }));
+  }, []);
+  const changeLogo = async (f: File | undefined) => {
+    if (!f || !org) return;
+    if (!/^image\/(png|jpe?g|webp|gif)$/.test(f.type)) {
+      toast('Choose a PNG, JPG or WebP image');
+      return;
+    }
+    setUploading(true);
+    const r = await uploadLogo(org.id, f);
+    setUploading(false);
+    if (r.error || !r.url) {
+      toast(r.error ?? 'Couldn’t upload the logo');
+      return;
+    }
+    update((d) => {
+      d.ws.logo = r.url!;
+    });
+    toast('Logo updated');
+  };
 
   return (
     <>
@@ -307,10 +334,34 @@ function ProfileDrawer() {
               </b>
             </div>
             <div>
-              <span>Workspace</span>
-              <b>{backendOn ? s.ws.name : WORKSPACES[s.wsId].name}</b>
+              <span>Organization</span>
+              <b style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                {backendOn && <OrgMark name={s.ws.name} logo={s.ws.logo} size={22} />}
+                {backendOn ? s.ws.name : WORKSPACES[s.wsId].name}
+              </b>
             </div>
           </div>
+          {org?.admin && (
+            <div className="logopick">
+              <OrgMark name={s.ws.name} logo={s.ws.logo} size={44} />
+              <div className="acts">
+                <button type="button" className="btn sm" disabled={uploading} onClick={() => logoIn.current?.click()}>
+                  {uploading ? 'Uploading…' : s.ws.logo ? 'Change organization logo' : 'Add organization logo'}
+                </button>
+                <small>Shown to everyone in {s.ws.name}.</small>
+              </div>
+              <input
+                ref={logoIn}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                hidden
+                onChange={(e) => {
+                  void changeLogo(e.target.files?.[0]);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+          )}
           <div>
             <div className="lbl" style={{ marginBottom: 8 }}>
               Appearance

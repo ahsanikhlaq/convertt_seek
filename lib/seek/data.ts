@@ -79,7 +79,10 @@ export type State = {
   /** signed out · signed in but no profile yet · no workspace yet · in */
   session: 'out' | 'profile' | 'setup' | 'in';
   email: string;
-  ws: { name: string; tz: string; size: string; use: string[]; invites: string[] };
+  /** organization: name, logo (a URL, backend mode), setup answers and teammates to invite */
+  ws: { name: string; logo?: string; tz: string; size: string; use: string[]; invites: string[] };
+  /** backend mode: whose data (account and organization) the saved chats belong to */
+  owner?: string;
   wsId: WorkspaceId;
   workspaces: Record<WorkspaceId, Workspace>;
   dm: PersonKey;

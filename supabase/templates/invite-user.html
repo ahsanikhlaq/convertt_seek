@@ -26,6 +26,10 @@
           <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=invite&email={{ .Email }}" style="display:inline-block;padding:13px 26px;font-family:'Outfit','Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">Join {{ .Data.workspace }}</a>
         </td>
       </tr></table>
+      <p style="margin:22px 0 8px;font-size:13px;line-height:1.55;color:#5f4a5e;">Button not working? Open Seek and enter this code:</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td align="center" style="background:#f2e6f2;border-radius:10px;padding:10px 18px;font-family:'Geist Mono',SFMono-Regular,Menlo,Consolas,monospace;font-size:22px;font-weight:700;letter-spacing:6px;color:#4b154a;">{{ .Token }}</td>
+      </tr></table>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:26px;border-top:1px solid #e9e1e9;"><tr>
         <td style="padding-top:18px;font-size:14px;line-height:1.7;color:#5f4a5e;">
           <b style="color:#261325;">1</b>&nbsp; Click Join, no password needed<br>
