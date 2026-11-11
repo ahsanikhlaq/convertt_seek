@@ -104,6 +104,20 @@ Each organization has a logo (stored in the public `seek-logos` bucket; only its
 invite link (`/join?c=<code>`, shown under ＋ Invite people; admins can reset it). Invite emails carry both a Join
 button and a 6-digit code, so if the button fails the person types the code instead of waiting for a new email.
 
+**Organisation setup** (build spec 5.4): after sign-up and profile, three steps: organisation (logo cropped to a
+square, name, workspace address checked on the server, brand colour, time zone, website), how the team works, then
+invites (emails with Member/Admin each, the invite link, and "anyone with an @company email can join", never offered
+for personal email providers). The brand colour becomes everyone's accent. If the person's company domain already
+has a workspace that allows it, setup offers to join that one instead.
+
+**Channel access:** a channel is open (everyone on the team) or private (only the people added, plus owners and
+admins). New channels default to private. Invites can include private channels; people who join with the invite
+link see open channels only until someone adds them. The database enforces it for channels, messages and search.
+
+**Chat:** reactions are saved and live (several per person), you can delete your own messages (removed for everyone,
+live), and read positions are saved, so unread badges are right after a reload or on another device. Tasks,
+decisions, reminders and saving messages come with the Decisions milestone.
+
 **Client spaces** (Clients → ＋ New): a four-step wizard (who the client is, their onboarding checklist, reply target
 and tone, review and invite) creates the space and emails each client person a Join link. Clients sign in with a
 code and see only their own project: a getting-started checklist, the Client chat and their team. The agency's team

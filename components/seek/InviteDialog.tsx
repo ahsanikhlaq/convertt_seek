@@ -73,7 +73,21 @@ export function InviteLink({ code, onCode }: { code: string | null; onCode?: (c:
 }
 
 /** Invite people: share the organization's link, or email someone an invite. */
-export function InviteDialog({ onClose, invite }: { onClose: () => void; invite: (email: string) => Promise<string> }) {
+export function InviteDialog({
+  onClose,
+  invite,
+  channels = [],
+  admin = false,
+}: {
+  onClose: () => void;
+  invite: (email: string, opts?: { role?: 'member' | 'admin'; channels?: string[] }) => Promise<string>;
+  /** private channels you can give the new person (open channels everyone sees anyway) */
+  channels?: { id: string; name: string }[];
+  /** admins can invite admins */
+  admin?: boolean;
+}) {
+  const [role, setRole] = useState<'member' | 'admin'>('member');
+  const [picked, setPicked] = useState<string[]>([]);
   const { s, toast } = useSeek();
   const [code, setCode] = useState<string | null>(null);
   const [email, setEmail] = useState('');
@@ -91,7 +105,7 @@ export function InviteDialog({ onClose, invite }: { onClose: () => void; invite:
   const send = async () => {
     if (busy || !email.trim()) return;
     setBusy(true);
-    const msg = await invite(email);
+    const msg = await invite(email, { role, channels: picked });
     setBusy(false);
     toast(msg);
     if (msg !== 'Enter a valid email') setEmail('');
@@ -130,6 +144,32 @@ export function InviteDialog({ onClose, invite }: { onClose: () => void; invite:
             </button>
           </div>
           <em>They get an email with a Join button and a 6-digit code.</em>
+          {admin && (
+            <div className="chips" style={{ marginTop: 6 }}>
+              {(['member', 'admin'] as const).map((r) => (
+                <button key={r} type="button" className={'chip' + (role === r ? ' on' : '')} aria-pressed={role === r} onClick={() => setRole(r)}>
+                  {r === 'member' ? 'Member' : 'Admin'}
+                </button>
+              ))}
+            </div>
+          )}
+          {channels.length > 0 && (
+            <div className="fld" style={{ marginTop: 6 }}>
+              <label>Private channels they can see</label>
+              <div className="chips">
+                {channels.map((c) => {
+                  const on = picked.includes(c.id);
+                  return (
+                    <button key={c.id} type="button" className={'chip' + (on ? ' on' : '')} aria-pressed={on} onClick={() => setPicked((xs) => (on ? xs.filter((x) => x !== c.id) : [...xs, c.id]))}>
+                      {on ? '✓ ' : '🔒 '}
+                      {c.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <em>Open (#) channels are visible to everyone on the team. Pick the private ones this person should see.</em>
+            </div>
+          )}
         </form>
       </div>
     </Modal>

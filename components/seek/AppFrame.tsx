@@ -7,6 +7,7 @@ import { now } from '@/lib/seek/format';
 import { backendOn, currentAccount, saveProfile, signOut, uploadLogo } from '@/lib/seek/backend';
 import { prototypeName, ROUTES, routeFromPrototype, routeOf, type RouteKey } from '@/lib/seek/routes';
 import { setMe, useSeek } from '@/lib/seek/store';
+import { useLiveSync } from '@/lib/seek/liveSync';
 import { ConfirmDialog, Modal } from './Dialogs';
 import { usePopovers } from './Popovers';
 import { Avatar, ModeSeg, OrgMark, Switch } from './ui';
@@ -20,6 +21,13 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const route = routeOf(pathname);
+
+  // live reactions and deletions, wherever they happen
+  const [meId, setMeId] = useState<string | null>(null);
+  useEffect(() => {
+    if (backendOn && (s.session === 'in' || s.session === 'client')) void currentAccount().then((a) => setMeId(a?.id ?? null));
+  }, [s.session]);
+  useLiveSync(meId);
 
   // with a real backend, screens need a signed-in account with a profile; demo mode keeps every screen open like
   // the prototype. The welcome and join screens are always open: invite emails and invite links land there,

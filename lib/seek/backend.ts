@@ -48,7 +48,7 @@ export type Account = {
 export type ClientSpaceRef = { id: string; name: string; project: string; code: string; color: string; agency: string; agencyLogo: string | null; role: string; invitedBy: string };
 
 /** A workspace (organization) you belong to. */
-export type Org = { id: string; name: string; slug: string; role: string; logo: string | null; joinCode: string };
+export type Org = { id: string; name: string; slug: string; role: string; logo: string | null; joinCode: string; accent: string | null };
 
 /** Plain-language messages for the errors people actually hit. */
 function friendly(message: string): string {
@@ -128,7 +128,7 @@ export async function currentAccount(fresh = false): Promise<Account | null> {
   return p;
 }
 
-type OrgRow = { id: string; name: string; slug: string; logo_url: string | null; join_code: string };
+type OrgRow = { id: string; name: string; slug: string; logo_url: string | null; join_code: string; brand_accent: string | null };
 
 async function loadAccount(id: string, email: string): Promise<Account> {
   // anyone invited by email joins those workspaces the first time we see them signed in
@@ -137,7 +137,7 @@ async function loadAccount(id: string, email: string): Promise<Account> {
     sb().from('profiles').select('name, title, time_zone, onboarded_at').eq('id', id).maybeSingle(),
     sb()
       .from('workspace_members')
-      .select('role, joined_at, workspaces ( id, name, slug, logo_url, join_code )')
+      .select('role, joined_at, workspaces ( id, name, slug, logo_url, join_code, brand_accent )')
       .eq('user_id', id)
       .order('joined_at', { ascending: true })
       .limit(20),
@@ -170,7 +170,7 @@ async function loadAccount(id: string, email: string): Promise<Account> {
     title: p.title ?? '',
     timeZone: p.time_zone ?? '',
     onboarded: Boolean(p.onboarded_at),
-    workspace: w ? { id: w.id, name: w.name, slug: w.slug, role: m!.role, logo: w.logo_url, joinCode: w.join_code } : null,
+    workspace: w ? { id: w.id, name: w.name, slug: w.slug, role: m!.role, logo: w.logo_url, joinCode: w.join_code, accent: w.brand_accent } : null,
     clientSpaces,
   };
 }
@@ -200,7 +200,7 @@ export async function resetJoinCode(orgId: string): Promise<{ error: string | nu
   return error ? { error: friendly(error.message), code: null } : { error: null, code: data as string };
 }
 
-/** Shrinks an image to a square-ish logo (max 256px) as PNG, so uploads stay small and load fast. */
+/** Crops an image to a centred square and shrinks it to 256px PNG (logos show in square tiles). */
 async function toLogoPng(file: File): Promise<Blob> {
   const url = URL.createObjectURL(file);
   try {
@@ -210,11 +210,12 @@ async function toLogoPng(file: File): Promise<Blob> {
       i.onerror = () => bad(new Error('That file isn’t an image we can read'));
       i.src = url;
     });
-    const scale = Math.min(1, 256 / Math.max(img.naturalWidth, img.naturalHeight));
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const out = Math.max(1, Math.min(256, side));
     const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(img.naturalWidth * scale));
-    c.height = Math.max(1, Math.round(img.naturalHeight * scale));
-    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+    c.width = out;
+    c.height = out;
+    c.getContext('2d')!.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, out, out);
     return await new Promise<Blob>((ok, bad) => c.toBlob((b) => (b ? ok(b) : bad(new Error('Couldn’t read that image'))), 'image/png'));
   } finally {
     URL.revokeObjectURL(url);
@@ -267,8 +268,8 @@ export async function acceptInviteLink(tokenHash: string): Promise<{ error: stri
  * Invites someone to your workspace: saves the invite and emails them a "Join" link (supabase/functions/seek-invite).
  * Returns a message to show.
  */
-export async function sendInvite(workspaceId: string, email: string): Promise<{ ok: boolean; message: string }> {
-  return invite({ workspace_id: workspaceId, email });
+export async function sendInvite(workspaceId: string, email: string, opts: { role?: 'member' | 'admin'; channels?: string[] } = {}): Promise<{ ok: boolean; message: string }> {
+  return invite({ workspace_id: workspaceId, email, role: opts.role ?? 'member', channels: opts.channels ?? [] });
 }
 
 /** Emails a client their invite to a client space (they must already be listed in its people). */
@@ -276,7 +277,7 @@ export async function inviteClient(spaceId: string, email: string): Promise<{ ok
   return invite({ space_id: spaceId, email });
 }
 
-async function invite(body: { workspace_id?: string; space_id?: string; email: string }): Promise<{ ok: boolean; message: string }> {
+async function invite(body: { workspace_id?: string; space_id?: string; email: string; role?: string; channels?: string[] }): Promise<{ ok: boolean; message: string }> {
   const email = body.email;
   const { data, error } = await sb().functions.invoke('seek-invite', {
     body: { ...body, redirect_to: `${location.origin}/welcome` },
@@ -295,7 +296,57 @@ async function invite(body: { workspace_id?: string; space_id?: string; email: s
   return { ok: false, message: `Invite saved, but the email to ${email} couldn’t be sent (${friendly(r.error ?? 'unknown error')})` };
 }
 
-export async function createWorkspace(w: { name: string; slug: string; tz: string; size: string; use: string[]; invites: string[] }): Promise<{ error: string | null; id: string | null }> {
+/** Personal email providers: "anyone at @domain can join" is never offered for these. */
+const FREE_MAIL = ['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'ymail.com', 'icloud.com', 'me.com', 'mac.com', 'aol.com', 'proton.me', 'protonmail.com', 'gmx.com', 'mail.com', 'zoho.com', 'yandex.com'];
+export const companyDomain = (email: string) => {
+  const d = email.split('@')[1]?.toLowerCase() ?? '';
+  return d && !FREE_MAIL.includes(d) ? d : null;
+};
+
+/** Is this workspace address free? (checked on the server; reserved words are never free) */
+export async function slugAvailable(slug: string): Promise<boolean> {
+  const { data } = await sb().rpc('slug_available', { p_slug: slug });
+  return data === true;
+}
+
+/** Creates the organisation with the exact address chosen. Fails with a clear message if it was taken meanwhile. */
+export async function createOrganisation(o: { name: string; slug: string; tz: string; size: string; use: string[]; accent: string; website: string; allowDomain: boolean }): Promise<{ error: string | null; id: string | null }> {
+  const { data, error } = await sb().rpc('create_organisation', {
+    p_name: o.name.trim(),
+    p_slug: o.slug,
+    p_time_zone: o.tz,
+    p_team_size: o.size,
+    p_uses: o.use,
+    p_accent: o.accent,
+    p_website: o.website.trim(),
+    p_allow_domain: o.allowDomain,
+  });
+  forgetAccount();
+  if (error) return { error: /address taken/i.test(error.message) ? 'That address was just taken. Try another one' : friendly(error.message), id: null };
+  preferOrg(data as string);
+  return { error: null, id: data as string };
+}
+
+/** Organisations that let anyone with your email's company domain join. */
+export async function joinableOrgs(): Promise<{ id: string; name: string; slug: string; logo: string | null; members: number }[]> {
+  const { data } = await sb().rpc('joinable_orgs');
+  return ((data ?? []) as { id: string; name: string; slug: string; logo_url: string | null; members: number }[]).map((r) => ({ id: r.id, name: r.name, slug: r.slug, logo: r.logo_url, members: r.members }));
+}
+
+/** Admins: let anyone with your company email domain join (never personal email providers). */
+export async function setDomainJoin(orgId: string, on: boolean): Promise<string | null> {
+  const { error } = await sb().rpc('set_domain_join', { p_ws: orgId, p_on: on });
+  return error ? friendly(error.message) : null;
+}
+
+export async function joinByDomain(orgId: string): Promise<{ error: string | null; account: Account | null }> {
+  const { error } = await sb().rpc('join_by_domain', { p_ws: orgId });
+  if (error) return { error: friendly(error.message), account: null };
+  preferOrg(orgId);
+  return { error: null, account: await currentAccount(true) };
+}
+
+export async function createWorkspace(w:{ name: string; slug: string; tz: string; size: string; use: string[]; invites: string[] }): Promise<{ error: string | null; id: string | null }> {
   const { data, error } = await sb().rpc('create_workspace', {
     p_name: w.name.trim() || 'My workspace',
     p_slug: w.slug,

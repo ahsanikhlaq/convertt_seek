@@ -5,15 +5,20 @@ import { useEffect, useRef, useState } from 'react';
 import {
   acceptInviteLink,
   backendOn,
-  createWorkspace,
+  companyDomain,
+  createOrganisation,
   currentAccount,
   googleSignIn,
   joinByCode,
+  joinByDomain,
+  joinableOrgs,
   joinInfo,
   myInvite,
   saveProfile,
   sendCode,
   sendInvite,
+  setDomainJoin,
+  slugAvailable,
   uploadLogo,
   verifyCode,
   waitSeconds,
@@ -24,7 +29,8 @@ import { ROUTES } from '@/lib/seek/routes';
 import { applyAccount, setMe, useSeek } from '@/lib/seek/store';
 import { CodeInput, codeComplete } from '../CodeInput';
 import { InviteLink } from '../InviteDialog';
-import { Avatar, Logo, OrgMark } from '../ui';
+import { Avatar, Logo, OrgMark, Switch } from '../ui';
+import { THEMES } from '@/lib/seek/data';
 
 function Brand({ children }: { children?: React.ReactNode }) {
   return (
@@ -288,25 +294,51 @@ const SIZES = ['1–10', '11–50', '51–200', '200+'];
 const USES = ['Team chat', 'Client work', 'Tasks and decisions'];
 
 /**
- * Organization setup, in two steps: 1) name, logo and a few answers (this creates the organization),
- * 2) invite the team with a shareable link or by email.
+ * Organisation setup (build spec 5.4), in three short steps after sign-up and profile:
+ * 3) Organisation: logo, name, workspace address (checked on the server), brand colour, time zone, website;
+ * 4) How your team works: team size and use, which decide what we create (this step creates the organisation);
+ * 5) Invite your team: emails with a role each, the shareable link, and "anyone at @company can join".
+ * The panel on the left is a live preview in the chosen colours. A reload resumes at the same step.
  */
+const ACCENTS = THEMES.acc;
+const DEFAULT_ACCENT = ACCENTS[0][1];
+
+/** WCAG contrast of white text on a colour (≥ 4.5 reads well). */
+function whiteContrast(hex: string) {
+  const ch = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  const lum = 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+  return 1.05 / (lum + 0.05);
+}
+/** A colour k of the way to black (for the preview's rail). */
+function darken(hex: string, k: number) {
+  return '#' + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, '0')).join('');
+}
+
 export function SetupPage() {
   const { s, update, toast } = useSeek();
   const router = useRouter();
-  const [phase, setPhase] = useState<'org' | 'team'>('org');
+  const w = s.ws;
+  const phase = w.step ?? 'org';
+  const accent = w.accent ?? DEFAULT_ACCENT;
+  const autoSlug = slugify(w.name);
+  const slug = (w.slug ?? autoSlug).slice(0, 40);
   const [invite, setInvite] = useState('');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [free, setFree] = useState<boolean | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const w = s.ws;
-  const slug = slugify(w.name);
+  const colorRef = useRef<HTMLInputElement>(null);
   const logo = preview ?? w.logo ?? null;
+  const domain = backendOn ? companyDomain(s.email) : 'convertt.co';
   const ws = (fn: (x: typeof w) => void) =>
     update((d) => {
       fn(d.ws);
+    });
+  const go = (step: 'org' | 'team' | 'invite') =>
+    ws((x) => {
+      x.step = step;
     });
 
   // a fresh form for a real account (not the prototype's sample answers)
@@ -314,10 +346,15 @@ export function SetupPage() {
   useEffect(() => {
     if (!backendOn || cleared.current) return;
     cleared.current = true;
+    if (w.step) return; // resuming a draft
     ws((x) => {
       if (x.name === 'Convertt') x.name = '';
       x.logo = undefined;
       x.invites = [];
+      x.roles = {};
+      x.slug = undefined;
+      x.allowDomain = !!domain;
+      x.tz = guessZone();
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -327,6 +364,48 @@ export function SetupPage() {
     },
     [preview],
   );
+
+  // your company may already be on Seek: offer to join it instead of creating a second workspace
+  const [orgs, setOrgs] = useState<{ id: string; name: string; slug: string; logo: string | null; members: number }[]>([]);
+  useEffect(() => {
+    if (backendOn) void joinableOrgs().then(setOrgs).catch(() => {});
+  }, []);
+  const joinOrg = async (id: string, name: string) => {
+    if (saving) return;
+    setSaving(true);
+    const { error, account } = await joinByDomain(id);
+    setSaving(false);
+    if (error || !account) {
+      toast(error || 'Couldn’t join. Try again');
+      return;
+    }
+    update((d) => {
+      applyAccount(d, account);
+      d.workspaces.C.ch = 'general';
+      d.ws.step = undefined;
+    });
+    toast('You joined ' + name);
+    router.push(ROUTES.channels);
+  };
+
+  // is the address free? (checked on the server, 400ms after typing stops)
+  useEffect(() => {
+    if (!backendOn || phase !== 'org') return;
+    if (!/^[a-z0-9]{2,40}$/.test(slug)) {
+      setFree(null);
+      return;
+    }
+    setFree(null);
+    let alive = true;
+    const t = setTimeout(async () => {
+      const ok = await slugAvailable(slug).catch(() => null);
+      if (alive) setFree(ok);
+    }, 400);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [slug, phase]);
 
   const creates: [string, string][] = [
     ['general', 'everyone'],
@@ -338,47 +417,60 @@ export function SetupPage() {
 
   const pickLogo = (f: File | undefined) => {
     if (!f) return;
-    if (!/^image\/(png|jpe?g|webp|gif)$/.test(f.type)) {
+    if (!/^image\/(png|jpe?g|webp)$/.test(f.type)) {
       toast('Choose a PNG, JPG or WebP image');
       return;
     }
-    if (f.size > 8 * 1024 * 1024) {
-      toast('That image is too big. Choose one under 8 MB');
+    if (f.size > 2 * 1024 * 1024) {
+      toast('That image is over 2 MB. Choose a smaller one');
       return;
     }
     setLogoFile(f);
     setPreview(URL.createObjectURL(f));
   };
 
-  const addInvite = () => {
-    const v = invite.trim();
-    if (!v) return;
-    if (!isEmail(v)) {
-      toast('Enter a valid email');
+  /** Adds one or many emails (pasted lists too); invalid ones are reported, not added. */
+  const addInvites = (raw: string) => {
+    const parts = raw.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+    if (!parts.length) return;
+    const bad = parts.filter((p) => !isEmail(p));
+    ws((x) => {
+      for (const p of parts) if (isEmail(p) && !x.invites.includes(p.toLowerCase())) x.invites.push(p.toLowerCase());
+    });
+    setInvite(bad.join(' '));
+    if (bad.length) toast(`${bad.length === 1 ? bad[0] + ' isn’t' : bad.length + ' of those aren’t'} a valid email`);
+  };
+
+  const toTeam = () => {
+    const n = w.name.trim();
+    if (n.length < 2 || n.length > 50) {
+      toast('Enter your organisation’s name (2 to 50 characters)');
       return;
     }
-    ws((x) => {
-      if (!x.invites.includes(v)) x.invites.push(v);
-    });
-    setInvite('');
+    if (backendOn && !/^[a-z0-9]{2,40}$/.test(slug)) {
+      toast('The address can use lowercase letters and numbers (2 to 40)');
+      return;
+    }
+    if (backendOn && free === false) {
+      toast('That address is taken. Try ' + slug + 'studio');
+      return;
+    }
+    go('team');
   };
 
   const createOrg = async () => {
-    if (!w.name.trim()) {
-      toast('Enter your organization’s name');
-      return;
-    }
     if (!backendOn) {
       setCode('demo-link');
-      setPhase('team');
+      go('invite');
       return;
     }
     if (saving) return;
     setSaving(true);
-    const { error: err, id } = await createWorkspace({ ...w, slug, invites: [] });
+    const { error: err, id } = await createOrganisation({ name: w.name, slug, tz: w.tz, size: w.size, use: w.use, accent, website: w.website ?? '', allowDomain: false });
     if (err || !id) {
       setSaving(false);
-      toast(err || 'Couldn’t create the organization. Try again');
+      toast(err || 'Couldn’t create the organisation. Try again');
+      if (err?.includes('address')) go('org');
       return;
     }
     let url: string | null = null;
@@ -390,14 +482,16 @@ export function SetupPage() {
     const acc = await currentAccount(true);
     setSaving(false);
     setCode(acc?.workspace?.joinCode ?? null);
-    ws((x) => {
-      x.logo = url ?? undefined;
-      if (acc?.workspace) x.name = acc.workspace.name;
+    update((d) => {
+      d.ws.logo = url ?? undefined;
+      if (acc?.workspace) d.ws.name = acc.workspace.name;
+      d.ws.step = 'invite';
+      // the brand colour becomes the app's accent
+      d.theme = { ...d.theme, acc: accent };
     });
-    setPhase('team');
   };
 
-  const finish = async () => {
+  const finish = async (skip = false) => {
     let failed = 0;
     let sent = 0;
     if (backendOn) {
@@ -405,81 +499,107 @@ export function SetupPage() {
       setSaving(true);
       const acc = await currentAccount();
       const id = acc?.workspace?.id;
-      // each teammate gets an invite email whose Join button brings them straight into this organization
-      for (const e of id ? w.invites : []) {
-        if ((await sendInvite(id!, e)).ok) sent++;
+      if (id && domain && w.allowDomain) await setDomainJoin(id, true);
+      for (const e of id && !skip ? w.invites : []) {
+        if ((await sendInvite(id!, e, { role: w.roles?.[e] ?? 'member' })).ok) sent++;
         else failed++;
       }
       setSaving(false);
       update((d) => {
         if (acc) applyAccount(d, acc);
         d.workspaces.C.ch = 'general';
+        d.ws.step = undefined;
+        d.ws.invites = [];
       });
     } else {
-      sent = w.invites.length;
+      sent = skip ? 0 : w.invites.length;
       update((d) => {
         d.session = 'in';
         d.workspaces.C.ch = 'general';
+        d.ws.step = undefined;
       });
     }
     toast(
       failed
         ? `${w.name} is ready. ${failed} invite email${failed === 1 ? '' : 's'} couldn’t be sent; share the invite link instead`
-        : `${w.name} is ready${sent ? ` · ${sent} invite${sent === 1 ? '' : 's'} sent` : ''}`,
+        : `Workspace ${w.name} is ready${sent ? ` · ${sent} invite${sent === 1 ? '' : 's'} sent` : ''}`,
     );
     router.push(ROUTES.channels);
   };
 
+  const n = phase === 'org' ? 3 : phase === 'team' ? 4 : 5;
   const steps = (
     <div className="steps">
-      <span className="d">
-        <i>✓</i>Account
-      </span>
-      <hr />
-      <span className="d">
-        <i>✓</i>Profile
-      </span>
-      <hr />
-      <span className={phase === 'org' ? 'c' : 'd'}>
-        <i>{phase === 'org' ? 3 : '✓'}</i>Organization
-      </span>
-      <hr />
-      <span className={phase === 'team' ? 'c' : ''}>
-        <i>4</i>Invite
-      </span>
+      {(
+        [
+          ['Account', 1],
+          ['Profile', 2],
+          ['Organisation', 3],
+          ['Your team', 4],
+          ['Invite', 5],
+        ] as [string, number][]
+      ).map(([t, i], k) => (
+        <span key={t} style={{ display: 'contents' }}>
+          {k > 0 && <hr />}
+          <span className={i < n ? 'd' : i === n ? 'c' : ''}>
+            <i>{i < n ? '✓' : i}</i>
+            {t}
+          </span>
+        </span>
+      ))}
     </div>
   );
+
+  const rail = darken(accent, 0.28);
+  const lowContrast = whiteContrast(accent) < 4.5;
 
   return (
     <main className="auth">
       <div className="art">
         <Brand />
         <h2>
-          {phase === 'org' ? (
-            <>
-              Set up for how <em>your team works.</em>
-            </>
-          ) : (
+          {phase === 'invite' ? (
             <>
               Bring <em>your team</em> in.
             </>
+          ) : (
+            <>
+              Set up for how <em>your team works.</em>
+            </>
           )}
         </h2>
-        <p>{phase === 'org' ? 'Your answers decide which channels and spaces we create, and your notification defaults.' : 'Share one link in your team chat, or send invites by email. You can always invite more people later.'}</p>
-        <div className="pc" style={{ maxWidth: 420 }}>
-          <div className="r">
-            <OrgMark name={w.name} logo={logo} size={40} />
-            <div>
-              <b>{w.name || 'Your organization'}</b>
-              <div style={{ color: 'var(--sb)', fontSize: 12 }} className="mono">
-                {slug || 'your-team'}.seek.app
-              </div>
+        <p>
+          {phase === 'org'
+            ? 'Give your workspace its own identity. The preview updates as you type.'
+            : phase === 'team'
+              ? 'Your answers decide which channels and spaces we create, and your notification defaults.'
+              : 'Invite by email, or share one link in your team chat. You can choose who sees which channels later.'}
+        </p>
+        <div className="pc" style={{ maxWidth: 420, padding: 0, overflow: 'hidden', display: 'flex' }}>
+          <div style={{ background: rail, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+            <span style={{ borderRadius: 10, boxShadow: '0 0 0 2px #fff' }}>
+              <OrgMark name={w.name} logo={logo} size={34} color={accent} />
+            </span>
+          </div>
+          <div style={{ padding: '12px 14px', flex: 1, minWidth: 0 }}>
+            <b style={{ display: 'block' }}>{w.name.trim() || 'Your organisation'}</b>
+            <div style={{ color: 'var(--sb)', fontSize: 12 }} className="mono">
+              {slug || 'your-team'}.seek.app
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 10, fontSize: 13 }}>
+              {creates
+                .filter(([a]) => a !== 'Clients' && a !== 'Decisions')
+                .map(([a], i) => (
+                  <span key={a} style={{ padding: '3px 8px', borderRadius: 6, background: i === 0 ? accent : 'transparent', color: i === 0 ? '#fff' : 'var(--mu)', fontWeight: i === 0 ? 600 : 400 }}>
+                    # {a}
+                  </span>
+                ))}
             </div>
           </div>
         </div>
         <div>
           <div className="lbl" style={{ color: '#c6a7c6', marginBottom: 8 }}>
-            {phase === 'org' ? "We'll create" : 'Ready for you'}
+            We'll create
           </div>
           <div className="creates">
             {creates.map(([a, b]) => (
@@ -490,6 +610,9 @@ export function SetupPage() {
             ))}
           </div>
         </div>
+        <p style={{ fontSize: 13 }}>
+          Notifications start on <b style={{ color: '#fff' }}>Balanced</b>.
+        </p>
       </div>
       <div className="fm">
         <div className="mbrand">
@@ -498,20 +621,55 @@ export function SetupPage() {
         <div className="top">Signed in as {s.email}</div>
         <div className="in">
           {steps}
-          {phase === 'org' ? (
+
+          {phase === 'org' && orgs.length > 0 && (
+            <div className="card">
+              <div className="ct">
+                <b>Your team is already on Seek</b>
+              </div>
+              {orgs.map((o) => (
+                <div key={o.id} className="trow" style={{ alignItems: 'center' }}>
+                  <span className="joinorg">
+                    <OrgMark name={o.name} logo={o.logo} size={36} />
+                    <span>
+                      <b>{o.name}</b>
+                      <small>
+                        {o.slug}.seek.app · {o.members} {o.members === 1 ? 'person' : 'people'} · anyone at @{domain} can join
+                      </small>
+                    </span>
+                  </span>
+                  <button type="button" className="btn sm pri" disabled={saving} onClick={() => void joinOrg(o.id, o.name)}>
+                    Join
+                  </button>
+                </div>
+              ))}
+              <small style={{ color: 'var(--sb)' }}>Or create a new workspace below.</small>
+            </div>
+          )}
+
+          {phase === 'org' && (
             <>
               <div>
-                <h1>Set up your organization</h1>
+                <h1>Set up your organisation</h1>
               </div>
-              <p className="sub">Your team sees this name and logo everywhere in Seek.</p>
+              <p className="sub">Your team and clients see this name, logo and colour everywhere in Seek.</p>
               <div className="fld">
-                <label>Logo</label>
-                <div className="logopick">
-                  <OrgMark name={w.name} logo={logo} size={56} />
+                <label>
+                  Logo <span style={{ color: 'var(--sb)', fontWeight: 400 }}>(optional)</span>
+                </label>
+                <div
+                  className="logopick"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    pickLogo(e.dataTransfer.files?.[0]);
+                  }}
+                >
+                  <OrgMark name={w.name} logo={logo} size={56} color={accent} />
                   <div className="acts">
                     <span style={{ display: 'flex', gap: 6 }}>
                       <button type="button" className="btn sm" onClick={() => fileRef.current?.click()}>
-                        {logo ? 'Change image' : 'Upload image'}
+                        {logo ? 'Change' : 'Upload logo'}
                       </button>
                       {logo && (
                         <button
@@ -520,18 +678,21 @@ export function SetupPage() {
                           onClick={() => {
                             setLogoFile(null);
                             setPreview(null);
+                            ws((x) => {
+                              x.logo = undefined;
+                            });
                           }}
                         >
                           Remove
                         </button>
                       )}
                     </span>
-                    <small>PNG, JPG or WebP. A square image looks best.</small>
+                    <small>PNG, JPG or WebP up to 2 MB. Cropped to a square. Or drag it here.</small>
                   </div>
                   <input
                     ref={fileRef}
                     type="file"
-                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    accept="image/png,image/jpeg,image/webp"
                     hidden
                     onChange={(e) => {
                       pickLogo(e.target.files?.[0]);
@@ -540,23 +701,91 @@ export function SetupPage() {
                   />
                 </div>
               </div>
-              <div className="grid2">
-                <div className="fld">
-                  <label htmlFor="wsn">Organization name</label>
+              <div className="fld">
+                <label htmlFor="wsn">Organisation name</label>
+                <input
+                  className="inp"
+                  id="wsn"
+                  placeholder="e.g. Convertt"
+                  autoComplete="organization"
+                  maxLength={50}
+                  value={w.name}
+                  onChange={(e) =>
+                    ws((x) => {
+                      x.name = e.target.value;
+                    })
+                  }
+                />
+              </div>
+              <div className="fld">
+                <label htmlFor="wsa">Workspace address</label>
+                <div className="copyrow">
                   <input
-                    className="inp"
-                    id="wsn"
-                    placeholder="e.g. Convertt"
-                    autoComplete="organization"
-                    value={w.name}
+                    className="inp mono"
+                    id="wsa"
+                    placeholder="convertt"
+                    value={slug}
                     onChange={(e) =>
                       ws((x) => {
-                        x.name = e.target.value;
+                        x.slug = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
                       })
                     }
                   />
-                  <em className="mono">{slug || 'your-team'}.seek.app</em>
+                  <span className="mono" style={{ color: 'var(--sb)', fontSize: 13 }}>
+                    .seek.app
+                  </span>
                 </div>
+                <em style={{ color: free === false ? 'var(--red)' : free ? 'var(--ok)' : undefined }}>
+                  {!backendOn || !slug
+                    ? 'Filled in from the name. Lowercase letters and numbers.'
+                    : !/^[a-z0-9]{2,40}$/.test(slug)
+                      ? 'At least 2 letters or numbers'
+                      : free === null
+                        ? 'Checking…'
+                        : free
+                          ? '✓ Available'
+                          : `✗ Taken, try ${slug}studio`}
+                </em>
+              </div>
+              <div className="fld">
+                <label>Brand colour</label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {ACCENTS.map(([nm, c]) => (
+                    <button
+                      key={c}
+                      type="button"
+                      title={nm}
+                      aria-label={'Brand colour ' + nm}
+                      aria-pressed={accent === c}
+                      onClick={() =>
+                        ws((x) => {
+                          x.accent = c;
+                        })
+                      }
+                      style={{ width: 28, height: 28, borderRadius: 8, background: c, border: 0, cursor: 'pointer', boxShadow: accent === c ? '0 0 0 2px #fff, 0 0 0 4px ' + c : 'none' }}
+                    />
+                  ))}
+                  <button type="button" className="btn sm" onClick={() => colorRef.current?.click()}>
+                    Custom
+                  </button>
+                  <input
+                    ref={colorRef}
+                    type="color"
+                    value={accent}
+                    aria-label="Custom brand colour"
+                    style={{ width: 0, height: 0, opacity: 0, border: 0, padding: 0 }}
+                    onChange={(e) =>
+                      ws((x) => {
+                        x.accent = e.target.value;
+                      })
+                    }
+                  />
+                </div>
+                <em style={{ color: lowContrast ? 'var(--red)' : undefined }}>
+                  {lowContrast ? 'White text is hard to read on this colour. Pick a darker one.' : 'Becomes the app’s accent for everyone. People can still pick their own theme.'}
+                </em>
+              </div>
+              <div className="grid2">
                 <div className="fld">
                   <label htmlFor="wtz">Time zone</label>
                   <select
@@ -569,13 +798,42 @@ export function SetupPage() {
                       })
                     }
                   >
-                    {ZONES.map((z) => (
+                    {[...new Set([w.tz, ...ZONES])].map((z) => (
                       <option key={z}>{z}</option>
                     ))}
                   </select>
-                  <em>For working hours and Focus.</em>
+                </div>
+                <div className="fld">
+                  <label htmlFor="wweb">
+                    Website <span style={{ color: 'var(--sb)', fontWeight: 400 }}>(optional)</span>
+                  </label>
+                  <input
+                    className="inp"
+                    id="wweb"
+                    placeholder="convertt.co"
+                    autoComplete="url"
+                    value={w.website ?? ''}
+                    onChange={(e) =>
+                      ws((x) => {
+                        x.website = e.target.value.slice(0, 200);
+                      })
+                    }
+                  />
                 </div>
               </div>
+              <button type="button" className="btn lg pri" onClick={toTeam}>
+                Continue
+              </button>
+              <p className="fine">You can change all of this later.</p>
+            </>
+          )}
+
+          {phase === 'team' && (
+            <>
+              <div>
+                <h1>How does your team work?</h1>
+              </div>
+              <p className="sub">A few answers so the workspace arrives ready to use.</p>
               <div className="fld">
                 <label>Team size</label>
                 <div className="chips">
@@ -619,27 +877,44 @@ export function SetupPage() {
                     );
                   })}
                 </div>
+                <em>This decides what we create: see the list on the left.</em>
               </div>
-              <button type="button" className="btn lg pri" onClick={createOrg} disabled={saving}>
-                {saving ? 'Creating your organization…' : 'Create organization'}
-              </button>
-              <p className="fine">🔒 Secure sign-in · Your data is encrypted</p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="btn lg" onClick={() => go('org')}>
+                  ← Back
+                </button>
+                <button type="button" className="btn lg pri" style={{ flex: 1 }} onClick={createOrg} disabled={saving}>
+                  {saving ? 'Creating your workspace…' : 'Continue'}
+                </button>
+              </div>
             </>
-          ) : (
+          )}
+
+          {phase === 'invite' && (
             <>
               <div>
                 <h1>Invite your team</h1>
               </div>
-              <p className="sub">Anyone with the link joins {w.name} after confirming their email.</p>
-              <InviteLink code={code} onCode={setCode} />
+              <p className="sub">They get an email with a Join button. You can choose which channels each person sees from ＋ Invite people.</p>
               <div className="fld">
-                <label htmlFor="invIn">
-                  Or invite by email <span style={{ color: 'var(--sb)', fontWeight: 400 }}>(optional)</span>
-                </label>
+                <label htmlFor="invIn">Emails</label>
                 <div className="tagin">
                   {w.invites.map((e, i) => (
                     <span key={e}>
                       {e}
+                      <select
+                        aria-label={'Role for ' + e}
+                        value={w.roles?.[e] ?? 'member'}
+                        onChange={(ev) =>
+                          ws((x) => {
+                            x.roles = { ...(x.roles ?? {}), [e]: ev.target.value as 'member' | 'admin' };
+                          })
+                        }
+                        style={{ border: 0, background: 'transparent', font: 'inherit', fontSize: 12, color: 'inherit', cursor: 'pointer' }}
+                      >
+                        <option value="member">Member</option>
+                        <option value="admin">Admin</option>
+                      </select>
                       <button
                         type="button"
                         aria-label={'Remove ' + e}
@@ -656,29 +931,74 @@ export function SetupPage() {
                   <input
                     id="invIn"
                     type="email"
-                    placeholder="Add email, press Enter"
+                    placeholder="Add emails, press Enter"
                     value={invite}
                     onChange={(e) => setInvite(e.target.value)}
+                    onPaste={(e) => {
+                      const t = e.clipboardData.getData('text');
+                      if (/[\s,;]/.test(t.trim())) {
+                        e.preventDefault();
+                        addInvites(t);
+                      }
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ',') {
                         e.preventDefault();
-                        addInvite();
+                        addInvites(invite);
                       }
                     }}
-                    onBlur={() => invite.trim() && isEmail(invite.trim()) && addInvite()}
+                    onBlur={() => invite.trim() && addInvites(invite)}
                   />
                 </div>
+                <em>Paste a list to add several at once. Admins can manage people, channels and settings.</em>
               </div>
-              <button type="button" className="btn lg pri" onClick={finish} disabled={saving}>
+              {domain && (
+                <div className="trow">
+                  <div>
+                    <b>Anyone with an @{domain} email can join</b>
+                    <small>They join as members after confirming their email.</small>
+                  </div>
+                  <Switch
+                    on={!!w.allowDomain}
+                    label={'Anyone with an @' + domain + ' email can join'}
+                    onClick={() =>
+                      ws((x) => {
+                        x.allowDomain = !x.allowDomain;
+                      })
+                    }
+                  />
+                </div>
+              )}
+              <InviteLink code={code ?? (backendOn ? null : 'demo-link')} onCode={setCode} />
+              <button type="button" className="btn lg pri" onClick={() => void finish()} disabled={saving}>
                 {saving ? 'Sending invites…' : w.invites.length ? `Send ${w.invites.length} invite${w.invites.length === 1 ? '' : 's'} and open #general` : 'Continue to #general'}
               </button>
-              <p className="fine">You can invite more people any time from ＋ Invite people.</p>
+              <p className="fine">
+                <button type="button" className="linkbtn" onClick={() => void finish(true)} disabled={saving}>
+                  Skip, I'll invite later
+                </button>{' '}
+                · 🔒 Secure sign-in · Your data is encrypted
+              </p>
             </>
           )}
         </div>
       </div>
     </main>
   );
+}
+
+/** The browser's time zone as one of our labels (falls back to the first). */
+function guessZone() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    const off = -new Date().getTimezoneOffset() / 60;
+    const city = tz.split('/').pop()?.replace(/_/g, ' ') ?? '';
+    const known = ZONES.find((z) => city && z.startsWith(city));
+    if (known) return known;
+    return city ? `${city} (GMT${off >= 0 ? '+' : ''}${off})` : ZONES[0];
+  } catch {
+    return ZONES[0];
+  }
 }
 
 /**
@@ -946,7 +1266,7 @@ export function WelcomePage() {
                   <>
                     <hr />
                     <span>
-                      <i>3</i>Organization
+                      <i>3</i>Organisation
                     </span>
                   </>
                 )}

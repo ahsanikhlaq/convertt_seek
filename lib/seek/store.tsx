@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { backendOn, currentAccount, forgetAccount, sb, type Account } from './backend';
-import { initialState, PEOPLE, STATE_VERSION, type State } from './data';
+import { DEFAULT_THEME, initialState, PEOPLE, STATE_VERSION, type State } from './data';
 import { initialsOf } from './format';
 import { applyTheme } from './theme';
 
@@ -90,6 +90,8 @@ export function applyAccount(d: State, acc: Account | null) {
   if (acc.workspace) {
     d.ws.name = acc.workspace.name;
     d.ws.logo = acc.workspace.logo ?? undefined;
+    // the organisation's brand colour is everyone's accent unless they picked their own
+    if (acc.workspace.accent && d.theme.acc === DEFAULT_THEME.acc) d.theme = { ...d.theme, acc: acc.workspace.accent };
   }
   // a real account starts setup with no sample teammates to invite
   else d.ws.invites = [];

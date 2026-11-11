@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
   const user = who?.user;
   if (!user) return json({ error: 'Please sign in again' }, 401);
 
-  let body: { workspace_id?: string; space_id?: string; email?: string; redirect_to?: string };
+  let body: { workspace_id?: string; space_id?: string; email?: string; redirect_to?: string; role?: string; channels?: unknown[] };
   try {
     body = await req.json();
   } catch {
@@ -64,9 +64,15 @@ Deno.serve(async (req) => {
       name: person.name ?? '',
     };
   } else {
-    // a teammate: saved as an invite to the workspace (only its team may add one)
-    const { error: saveErr } = await asCaller.from('workspace_invites').insert({ workspace_id: workspaceId, email, invited_by: user.id });
-    if (saveErr && saveErr.code !== '23505') return json({ error: 'You can’t invite people to this workspace' }, 403);
+    // a teammate: saved as an invite with their role and the private channels they'll see (row-level security
+    // checks the caller may invite, may give that role and can see those channels)
+    const role = body.role === 'admin' ? 'admin' : 'member';
+    const channels = Array.isArray(body.channels) ? body.channels.filter((c) => typeof c === 'string').slice(0, 200) : [];
+    const { error: saveErr } = await asCaller.from('workspace_invites').insert({ workspace_id: workspaceId, email, invited_by: user.id, role, channels });
+    if (saveErr?.code === '23505') {
+      const { error: upErr } = await asCaller.from('workspace_invites').update({ role, channels }).eq('workspace_id', workspaceId).eq('email', email).is('accepted_at', null);
+      if (upErr) return json({ error: 'You can’t invite people with that role or to those channels' }, 403);
+    } else if (saveErr) return json({ error: role === 'admin' ? 'Only admins can invite admins' : 'You can’t invite people to this workspace' }, 403);
     const { data: ws } = await admin.from('workspaces').select('name').eq('id', workspaceId).single();
     data = { invited_by: inviter, workspace: ws?.name ?? 'their workspace' };
   }

@@ -6,6 +6,9 @@ import { PEOPLE, type ChatMessage, type DecisionCard, type FeedItem, type Person
 import { now } from '@/lib/seek/format';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
+import { backendOn } from '@/lib/seek/backend';
+import { toDbId } from '@/lib/seek/live';
+import { deleteMessage, removeEverywhere, setReaction } from '@/lib/seek/liveSync';
 import { usePopovers } from './Popovers';
 import { Avatar, Emoji, RichText } from './ui';
 
@@ -37,8 +40,32 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
       if (x) fn(x, list);
     });
 
+  const live = backendOn && toDbId(m.id) != null;
+  const mine = (e: string) => (backendOn ? !!m.mx?.includes(e) : m.myrx === e);
+
+  /** Backend mode: several reactions per person, saved and shown to everyone live. */
+  const reactLive = async (e: string) => {
+    const on = !m.mx?.includes(e);
+    const flip = (add: boolean) =>
+      edit((x) => {
+        const rx = { ...(x.rx ?? {}) };
+        const n = (rx[e] ?? 0) + (add ? 1 : -1);
+        if (n > 0) rx[e] = n;
+        else delete rx[e];
+        x.rx = rx;
+        x.mx = add ? [...(x.mx ?? []), e] : (x.mx ?? []).filter((y) => y !== e);
+      });
+    flip(on);
+    if (!(await setReaction(m.id, e, on))) {
+      flip(!on);
+      toast('Couldn’t save the reaction. Check your connection');
+    }
+  };
+
   const react = (e: string) =>
-    edit((x) => {
+    live
+      ? void reactLive(e)
+      : edit((x) => {
       x.rx = x.rx || {};
       if (x.myrx === e) {
         x.rx[e]--;
@@ -93,6 +120,24 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
     });
   };
 
+  const copyText = async () => {
+    setUI({ menu: null });
+    try {
+      await navigator.clipboard.writeText(m.text);
+      toast('Message copied');
+    } catch {
+      toast('Couldn’t copy. Select the text and copy it');
+    }
+  };
+  const remove = async () => {
+    setUI({ menu: null });
+    if (!confirm('Delete this message for everyone? This can’t be undone.')) return;
+    if (await deleteMessage(m.id)) {
+      update((d) => removeEverywhere(d, toDbId(m.id)!));
+      toast('Message deleted');
+    } else toast('Couldn’t delete it. Check your connection');
+  };
+
   const rowRef = useRef<HTMLDivElement>(null);
   // close the "More" menu on a click elsewhere
   useEffect(() => {
@@ -113,6 +158,11 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
       const t = e.target as HTMLElement;
       if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || e.metaKey || e.ctrlKey) return;
       const k = e.key.toLowerCase();
+      if (backendOn) {
+        if (k === 'l') void copyText();
+        else if (k === 'escape') setUI({ menu: null });
+        return;
+      }
       if (k === 't') makeTask();
       else if (k === 'd') logDecision();
       else if (k === 'r') {
@@ -168,7 +218,7 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
         {Object.keys(rx).length > 0 && (
           <div className="reacts">
             {Object.entries(rx).map(([e, n]) => (
-              <button key={e} type="button" className={'rx' + (m.myrx === e ? ' me' : '')} onClick={() => react(e)} aria-pressed={m.myrx === e}>
+              <button key={e} type="button" className={'rx' + (mine(e) ? ' me' : '')} onClick={() => react(e)} aria-pressed={mine(e)}>
                 <Emoji k={e} /> {n}
               </button>
             ))}
@@ -194,24 +244,38 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
           <button type="button" onClick={(ev) => pop.openEmoji(ev.currentTarget, react)}>
             React
           </button>
-          <button
-            type="button"
-            className={m.saved ? 'on' : ''}
-            onClick={() => {
-              edit((x) => {
-                x.saved = !x.saved;
-              });
-              toast(m.saved ? 'Removed from saved' : 'Saved for later');
-            }}
-          >
-            {m.saved ? 'Saved' : 'Save'}
-          </button>
+          {!backendOn && (
+            <button
+              type="button"
+              className={m.saved ? 'on' : ''}
+              onClick={() => {
+                edit((x) => {
+                  x.saved = !x.saved;
+                });
+                toast(m.saved ? 'Removed from saved' : 'Saved for later');
+              }}
+            >
+              {m.saved ? 'Saved' : 'Save'}
+            </button>
+          )}
           <button type="button" data-more={m.id} aria-expanded={menuOpen} onClick={() => setUI({ menu: menuOpen ? null : m.id })}>
             More
           </button>
         </div>
       )}
-      {menuOpen && (
+      {menuOpen && backendOn && (
+        <div className="mm" role="menu">
+          <button type="button" role="menuitem" onClick={() => void copyText()}>
+            ⧉ Copy text <kbd>L</kbd>
+          </button>
+          {live && m.who === 'AH' && (
+            <button type="button" role="menuitem" onClick={() => void remove()} style={{ color: 'var(--red)' }}>
+              🗑 Delete message
+            </button>
+          )}
+        </div>
+      )}
+      {menuOpen && !backendOn && (
         <div className="mm" role="menu">
           <button type="button" role="menuitem" onClick={makeTask}>
             ☐ Make task <kbd>T</kbd>

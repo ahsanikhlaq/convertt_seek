@@ -5,6 +5,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, sb } from './backend';
 import type { ChatMessage, PersonKey } from './data';
 import { inviteByEmail, keyFor, learnProfiles, timeLabel, toUiId } from './live';
+import { hydrateReactions, markRead, unreadCounts } from './liveSync';
 import { useSeek } from './store';
 
 /**
@@ -22,7 +23,7 @@ export type LiveDms = {
   /** opens (or starts) the conversation with a teammate, keyed by their user id */
   open: (k: PersonKey) => Promise<void>;
   send: (text: string) => Promise<void>;
-  invite: (email: string) => Promise<string>;
+  invite: (email: string, opts?: { role?: 'member' | 'admin'; channels?: string[] }) => Promise<string>;
 };
 
 export function useLiveDms(): LiveDms | null {
@@ -35,6 +36,8 @@ export function useLiveDms(): LiveDms | null {
   const threadOf = useRef(new Map<string, string>()); // other user id → thread id
   const otherOf = useRef(new Map<string, string>()); // thread id → other user id
   const current = s.dm;
+  const currentRef = useRef(current);
+  currentRef.current = current;
 
   const key = (userId: string) => keyFor(userId, me.current);
   const toMsg = (r: Row, flash = false): ChatMessage => ({ kind: 'msg', id: toUiId(r.id), who: key(r.user_id), time: timeLabel(r.created_at), text: r.body, flash });
@@ -67,6 +70,7 @@ export function useLiveDms(): LiveDms | null {
     const other = await learnThread(r.dm_id);
     if (!other) return;
     await learnProfiles([r.user_id], me.current);
+    if (key(other) === currentRef.current) markRead('dm:' + r.dm_id);
     update((d) => {
       const k = key(other);
       const t = (d.dms[k] ||= { last: '', unread: 0, msgs: [] });
@@ -107,7 +111,10 @@ export function useLiveDms(): LiveDms | null {
         pairs = ((all ?? []) as { thread_id: string; user_id: string }[]).filter((p) => p.user_id !== me.current);
         lasts = (recent ?? []) as Row[];
       }
-      await learnProfiles([...team, ...pairs.map((p) => p.user_id)], me.current);
+      const [counts] = await Promise.all([
+        unreadCounts(ws.current).catch(() => new Map<string, number>()),
+        learnProfiles([...team, ...pairs.map((p) => p.user_id)], me.current),
+      ]);
       if (!alive) return;
 
       threadOf.current = new Map(pairs.map((p) => [p.user_id, p.thread_id]));
@@ -120,7 +127,7 @@ export function useLiveDms(): LiveDms | null {
         for (const t of [...new Set(order)]) {
           const other = otherOf.current.get(t);
           if (!other) continue;
-          d.dms[key(other)] = { last: lasts.find((r) => r.dm_id === t)?.body ?? '', unread: 0, msgs: [] };
+          d.dms[key(other)] = { last: lasts.find((r) => r.dm_id === t)?.body ?? '', unread: counts.get('dm:' + t) ?? 0, msgs: [] };
         }
         if (!d.dms[d.dm]) d.dm = (Object.keys(d.dms)[0] as PersonKey) ?? '';
       });
@@ -154,6 +161,7 @@ export function useLiveDms(): LiveDms | null {
     const other = current === 'AH' ? null : current;
     const thread = other ? threadOf.current.get(other) : undefined;
     if (!thread) return;
+    markRead('dm:' + thread);
     let alive = true;
     (async () => {
       const { data, error } = await sb()
@@ -169,11 +177,13 @@ export function useLiveDms(): LiveDms | null {
         return;
       }
       const rows = ((data ?? []) as Row[]).reverse();
+      const msgs = rows.map((r) => toMsg(r));
       update((d) => {
         const t = (d.dms[current] ||= { last: '', unread: 0, msgs: [] });
-        t.msgs = rows.map((r) => toMsg(r));
+        t.msgs = msgs;
         t.unread = 0;
       });
+      await hydrateReactions(update, msgs.map((m) => m.id), me.current);
     })();
     return () => {
       alive = false;
@@ -217,6 +227,6 @@ export function useLiveDms(): LiveDms | null {
       }
       await addRow(data as Row);
     },
-    invite: (email) => inviteByEmail(ws.current, me.current, email),
+    invite: (email, opts) => inviteByEmail(ws.current, me.current, email, opts),
   };
 }

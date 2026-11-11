@@ -30,6 +30,8 @@ export type ChatMessage = {
   task?: string;
   rx?: Record<string, number>;
   myrx?: string | null;
+  /** backend mode: the reactions you added (you can add several) */
+  mx?: string[];
   thread?: Reply[];
   saved?: boolean;
   flash?: boolean;
@@ -46,7 +48,7 @@ export type DecisionCard = {
 export type NewMarker = { kind: 'new'; id: number };
 export type FeedItem = ChatMessage | DecisionCard | NewMarker;
 
-export type Channel = { id: string; unread: number; desc: string; tier?: string };
+export type Channel = { id: string; unread: number; desc: string; tier?: string; private?: boolean };
 export type DmThread = { last: string; unread: number; msgs: FeedItem[] };
 export type Space = { id: string; name: string; desc: string; wait: string; color: string };
 export type Decision = {
@@ -82,7 +84,21 @@ export type State = {
   lc?: Record<string, FeedItem[]>;
   email: string;
   /** organization: name, logo (a URL, backend mode), setup answers and teammates to invite */
-  ws: { name: string; logo?: string; tz: string; size: string; use: string[]; invites: string[] };
+  ws: {
+    name: string;
+    logo?: string;
+    tz: string;
+    size: string;
+    use: string[];
+    invites: string[];
+    /** setup draft (backend mode), so a reload resumes at the same step */
+    step?: 'org' | 'team' | 'invite';
+    slug?: string;
+    accent?: string;
+    website?: string;
+    roles?: Record<string, 'member' | 'admin'>;
+    allowDomain?: boolean;
+  };
   /** backend mode: whose data (account and organization) the saved chats belong to */
   owner?: string;
   wsId: WorkspaceId;

@@ -5,6 +5,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, inviteClient, completeStep, sb, type ClientRole } from './backend';
 import type { ChatMessage } from './data';
 import { keyFor, learnProfiles, timeLabel, toUiId } from './live';
+import { hydrateReactions } from './liveSync';
 import { useSeek } from './store';
 
 /**
@@ -180,9 +181,11 @@ export function useLiveClients(): LiveClients | null {
       const rows = ((data ?? []) as Row[]).reverse();
       await learnProfiles(rows.map((r) => r.user_id), me.current);
       if (!alive) return;
+      const msgs = rows.map((r) => toMsg(r));
       update((d) => {
-        (d.lc ||= {})[laneKey(open, lane)] = rows.map((r) => toMsg(r));
+        (d.lc ||= {})[laneKey(open, lane)] = msgs;
       });
+      await hydrateReactions(update, msgs.map((m) => m.id), me.current);
     })();
     return () => {
       alive = false;

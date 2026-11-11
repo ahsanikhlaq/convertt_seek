@@ -8,6 +8,7 @@ import { channelId } from '@/lib/seek/format';
 import { useSeek } from '@/lib/seek/store';
 import { PromptDialog } from '../Dialogs';
 import { InviteDialog } from '../InviteDialog';
+import { ChannelMembersDialog, NewChannelDialog } from '../ChannelDialogs';
 import { Composer, Feed, ThreadPane, useSendTo, type FeedRef } from '../Messages';
 import { MainHeader, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
@@ -19,6 +20,7 @@ export function ChannelsPage() {
   const { s, ui, update, setUI, toast } = useSeek();
   const [creating, setCreating] = useState(false);
   const [inviting, setInviting] = useState(false);
+  const [membersOf, setMembersOf] = useState<string | null>(null);
   // with a backend: real channels and messages, live (lib/seek/live.ts); in demo mode this is null
   const live = useLiveChat();
   const team: PersonKey[] = live ? live.people : TEAM;
@@ -52,16 +54,23 @@ export function ChannelsPage() {
       <div className="sg lbl">Channels</div>
       {ws.channels.map((x) => (
         <button key={x.id} type="button" className={'si' + (x.id === ch ? ' on' : '') + (x.unread ? ' unread' : '')} aria-current={x.id === ch ? 'page' : undefined} onClick={() => open(x.id)}>
-          <span className="h">#</span>
+          <span className="h" title={x.private ? 'Private channel' : undefined}>{x.private ? '🔒' : '#'}</span>
           <span className="x">
             <b>{x.id}</b>
           </span>
           {x.unread ? <span className="badge">{x.unread}</span> : x.tier ? <span className="tag">{x.tier}</span> : null}
         </button>
       ))}
-      <button type="button" className="si" onClick={() => toast('Browse all ' + ws.channels.length + ' channels')}>
-        ＋ Browse channels
-      </button>
+      {!live && (
+        <button type="button" className="si" onClick={() => toast('Browse all ' + ws.channels.length + ' channels')}>
+          ＋ Browse channels
+        </button>
+      )}
+      {live && (
+        <button type="button" className="si" onClick={() => setCreating(true)}>
+          ＋ New channel
+        </button>
+      )}
       {live && (
         <button type="button" className="si" onClick={() => setInviting(true)}>
           ＋ Invite people
@@ -178,7 +187,7 @@ export function ChannelsPage() {
   return (
     <Shell active="channels" side={side} pane={ui.thread != null ? <ThreadPane feed={feed} people={team} onReply={live ? (root, t, also) => void live.reply(ch, root, t, also) : undefined} /> : undefined}>
       <MainHeader
-        title={'# ' + ch}
+        title={(c.private ? '🔒 ' : '# ') + ch}
         sub={c.desc}
         right={
           <>
@@ -201,7 +210,12 @@ export function ChannelsPage() {
             >
               🔔 {s.notif}
             </button>
-            <button type="button" className="btn sm" onClick={() => toast('🎧 Huddle started · others can join')}>
+            {live && c.private && (
+              <button type="button" className="btn sm" onClick={() => setMembersOf(ch)} aria-label={'Members of #' + ch}>
+                👥 <span className="hide-m">Members</span>
+              </button>
+            )}
+            <button type="button" className="btn sm" onClick={() => toast(live ? 'Huddles arrive in a later update' : '🎧 Huddle started · others can join')}>
               🎧 Huddle
             </button>
           </>
@@ -209,25 +223,25 @@ export function ChannelsPage() {
         below={tabs}
       />
       {body}
-      {creating && (
+      {creating && live && (
+        <NewChannelDialog
+          live={live}
+          onClose={() => setCreating(false)}
+          onCreated={() => {
+            setCreating(false);
+            setUI({ thread: null, chTab: 'Messages', sideOpen: false, menu: null });
+          }}
+        />
+      )}
+      {membersOf && live && <ChannelMembersDialog live={live} channel={membersOf} onClose={() => setMembersOf(null)} />}
+      {creating && !live && (
         <PromptDialog
           title="Create a channel"
           label="Channel name"
           initial="qa-team"
           confirm="Create channel"
           onCancel={() => setCreating(false)}
-          onSubmit={async (v) => {
-            if (live) {
-              const err = await live.createChannel(v);
-              if (err) {
-                toast(err);
-                return;
-              }
-              setCreating(false);
-              setUI({ thread: null, chTab: 'Messages', sideOpen: false, menu: null });
-              toast('#' + channelId(v) + ' created');
-              return;
-            }
+          onSubmit={(v) => {
             const id = channelId(v);
             if (!id) return;
             if (ws.channels.some((x) => x.id === id)) {
@@ -245,7 +259,14 @@ export function ChannelsPage() {
           }}
         />
       )}
-      {inviting && live && <InviteDialog onClose={() => setInviting(false)} invite={live.invite} />}
+      {inviting && live && (
+        <InviteDialog
+          onClose={() => setInviting(false)}
+          invite={live.invite}
+          admin={live.admin}
+          channels={[...live.channels.values()].filter((x) => x.private).map((x) => ({ id: x.id, name: x.name }))}
+        />
+      )}
     </Shell>
   );
 }
