@@ -37,6 +37,9 @@ function Brand({ children }: { children?: React.ReactNode }) {
   );
 }
 
+/** Supabase: Authentication → Rate Limits → "Minimum interval per user" (seconds between emails to one person). */
+const RESEND_AFTER = 15;
+
 /** Seconds until another code may be sent; counts down by itself. */
 function useCountdown(): [number, (n: number) => void] {
   const [left, setLeft] = useState(0);
@@ -72,7 +75,7 @@ function Resend({ email, wait, setWait }: { email: string; wait: number; setWait
             setBusy(false);
             const n = waitSeconds(err);
             if (n) setWait(n);
-            else if (!err) setWait(60);
+            else if (!err) setWait(RESEND_AFTER);
             toast(err || 'New code sent to ' + email);
           }}
         >
@@ -120,7 +123,7 @@ export function SignupPage() {
         }
         setWait(n);
         toast('We already sent you a code. Enter it below');
-      } else setWait(60);
+      } else setWait(RESEND_AFTER);
     }
     update((d) => {
       d.email = v;
@@ -1068,7 +1071,7 @@ export function JoinPage() {
         toast(err);
         return;
       }
-      setWait(n || 60);
+      setWait(n || RESEND_AFTER);
       if (n) toast('We already sent you a code. Enter it below');
     }
     setPhase('code');

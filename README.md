@@ -89,6 +89,10 @@ Setting up a new Supabase project:
    up*, and `invite-user.html` into *Invite user* (subjects: "Your Seek sign-in code" and the invite subject
    below). The sender's domain must be authenticated with the SMTP
    provider (SPF/DKIM); otherwise mail to that same domain is rejected (e.g. convertt.co has DMARC `p=reject`).
+1. Authentication → Rate Limits: "Minimum interval per user" **15** seconds (how soon one person can get another
+   code; the app's Resend countdown matches it), sign-ins and code checks **60** per 5 minutes per IP (an office
+   on one network can sign in together). Emails per hour is 3600; the real ceiling is the SMTP plan (Brevo free:
+   300 emails a day).
 1. Invites: Edge Functions → deploy `supabase/functions/seek-invite` and turn **off** "Verify JWT with legacy
    secret" (the function checks the caller itself; projects on the new ES256 signing keys need this). Then set the
    *Invite user* template's subject to `{{ .Data.invited_by }} invited you to {{ .Data.workspace }} on Seek`
