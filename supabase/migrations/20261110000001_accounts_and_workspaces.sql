@@ -2,9 +2,16 @@
 -- People sign in with Supabase Auth (6-digit email code, later Google). Everything here is protected by
 -- row-level security: a person only ever sees workspaces they belong to, and the people in them.
 
+-- Seek's tables live in their own "seek" schema, so they can share a Supabase project with other apps without
+-- touching anything in "public". The schema must also be listed under Project Settings → Data API → Exposed schemas.
+create schema seek;
+grant usage on schema seek to anon, authenticated, service_role;
+alter default privileges in schema seek grant select, insert, update, delete on tables to authenticated, service_role;
+alter default privileges in schema seek grant usage, select on sequences to authenticated, service_role;
+
 -- ---------------------------------------------------------------- profiles
 -- One row per signed-in person, created automatically when they first sign in.
-create table public.profiles (
+create table seek.profiles (
   id          uuid primary key references auth.users (id) on delete cascade,
   email       text not null,
   name        text not null default '',
@@ -13,25 +20,32 @@ create table public.profiles (
   updated_at  timestamptz not null default now()
 );
 
-create or replace function public.handle_new_user()
+create or replace function seek.handle_new_user()
 returns trigger
 language plpgsql
 security definer
 set search_path = ''
 as $$
 begin
-  insert into public.profiles (id, email, name)
-  values (new.id, coalesce(new.email, ''), coalesce(new.raw_user_meta_data ->> 'name', ''));
+  insert into seek.profiles (id, email, name)
+  values (new.id, coalesce(new.email, ''), coalesce(new.raw_user_meta_data ->> 'name', ''))
+  on conflict (id) do nothing;
   return new;
 end;
 $$;
 
-create trigger on_auth_user_created
+create trigger seek_on_auth_user_created
   after insert on auth.users
-  for each row execute function public.handle_new_user();
+  for each row execute function seek.handle_new_user();
+
+-- accounts that already exist in this project get a profile too
+insert into seek.profiles (id, email, name)
+select u.id, coalesce(u.email, ''), coalesce(u.raw_user_meta_data ->> 'name', '')
+from auth.users u
+on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------- workspaces
-create table public.workspaces (
+create table seek.workspaces (
   id          uuid primary key default gen_random_uuid(),
   name        text not null check (char_length(name) between 1 and 80),
   slug        text not null unique check (slug ~ '^[a-z0-9]{1,40}$'),
@@ -43,22 +57,22 @@ create table public.workspaces (
 );
 
 -- owner: created it · admin: manages people and settings · member: the team · guest: a client (phase 3)
-create type public.member_role as enum ('owner', 'admin', 'member', 'guest');
+create type seek.member_role as enum ('owner', 'admin', 'member', 'guest');
 
-create table public.workspace_members (
-  workspace_id  uuid not null references public.workspaces (id) on delete cascade,
+create table seek.workspace_members (
+  workspace_id  uuid not null references seek.workspaces (id) on delete cascade,
   user_id       uuid not null references auth.users (id) on delete cascade,
-  role          public.member_role not null default 'member',
+  role          seek.member_role not null default 'member',
   joined_at     timestamptz not null default now(),
   primary key (workspace_id, user_id)
 );
-create index workspace_members_user_idx on public.workspace_members (user_id);
+create index workspace_members_user_idx on seek.workspace_members (user_id);
 
-create table public.workspace_invites (
+create table seek.workspace_invites (
   id            uuid primary key default gen_random_uuid(),
-  workspace_id  uuid not null references public.workspaces (id) on delete cascade,
+  workspace_id  uuid not null references seek.workspaces (id) on delete cascade,
   email         text not null check (email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$'),
-  role          public.member_role not null default 'member',
+  role          seek.member_role not null default 'member',
   invited_by    uuid not null references auth.users (id),
   created_at    timestamptz not null default now(),
   accepted_at   timestamptz,
@@ -67,17 +81,17 @@ create table public.workspace_invites (
 
 -- ---------------------------------------------------------------- helpers
 -- security definer so policies can ask "is this person in that workspace?" without recursing into RLS.
-create or replace function public.is_member(ws uuid)
+create or replace function seek.is_member(ws uuid)
 returns boolean
 language sql
 stable
 security definer
 set search_path = ''
 as $$
-  select exists (select 1 from public.workspace_members m where m.workspace_id = ws and m.user_id = auth.uid());
+  select exists (select 1 from seek.workspace_members m where m.workspace_id = ws and m.user_id = auth.uid());
 $$;
 
-create or replace function public.is_admin(ws uuid)
+create or replace function seek.is_admin(ws uuid)
 returns boolean
 language sql
 stable
@@ -85,13 +99,13 @@ security definer
 set search_path = ''
 as $$
   select exists (
-    select 1 from public.workspace_members m
+    select 1 from seek.workspace_members m
     where m.workspace_id = ws and m.user_id = auth.uid() and m.role in ('owner', 'admin')
   );
 $$;
 
 -- Creates a workspace, makes the caller its owner and records teammate invites, all in one step.
-create or replace function public.create_workspace(
+create or replace function seek.create_workspace(
   p_name text,
   p_slug text,
   p_time_zone text,
@@ -115,19 +129,19 @@ begin
     raise exception 'not signed in';
   end if;
   -- keep the address unique: convertt, convertt2, convertt3, …
-  while exists (select 1 from public.workspaces w where w.slug = v_slug) loop
+  while exists (select 1 from seek.workspaces w where w.slug = v_slug) loop
     n := n + 1;
     v_slug := left(v_base, 38) || n;
   end loop;
 
-  insert into public.workspaces (name, slug, time_zone, team_size, uses, created_by)
+  insert into seek.workspaces (name, slug, time_zone, team_size, uses, created_by)
   values (p_name, v_slug, p_time_zone, p_team_size, coalesce(p_uses, '{}'), auth.uid())
   returning id into ws_id;
 
-  insert into public.workspace_members (workspace_id, user_id, role) values (ws_id, auth.uid(), 'owner');
+  insert into seek.workspace_members (workspace_id, user_id, role) values (ws_id, auth.uid(), 'owner');
 
   foreach inv in array coalesce(p_invites, '{}') loop
-    insert into public.workspace_invites (workspace_id, email, invited_by)
+    insert into seek.workspace_invites (workspace_id, email, invited_by)
     values (ws_id, lower(trim(inv)), auth.uid())
     on conflict (workspace_id, email) do nothing;
   end loop;
@@ -137,7 +151,7 @@ end;
 $$;
 
 -- When someone signs in with an email that was invited, they join those workspaces.
-create or replace function public.accept_my_invites()
+create or replace function seek.accept_my_invites()
 returns int
 language plpgsql
 security definer
@@ -152,63 +166,63 @@ begin
     return 0;
   end if;
   for inv in
-    select * from public.workspace_invites i where lower(i.email) = my_email and i.accepted_at is null
+    select * from seek.workspace_invites i where lower(i.email) = my_email and i.accepted_at is null
   loop
-    insert into public.workspace_members (workspace_id, user_id, role)
+    insert into seek.workspace_members (workspace_id, user_id, role)
     values (inv.workspace_id, auth.uid(), inv.role)
     on conflict do nothing;
-    update public.workspace_invites set accepted_at = now() where id = inv.id;
+    update seek.workspace_invites set accepted_at = now() where id = inv.id;
     joined := joined + 1;
   end loop;
   return joined;
 end;
 $$;
 
-revoke all on function public.create_workspace(text, text, text, text, text[], text[]) from public, anon;
-revoke all on function public.accept_my_invites() from public, anon;
-grant execute on function public.create_workspace(text, text, text, text, text[], text[]) to authenticated;
-grant execute on function public.accept_my_invites() to authenticated;
+revoke all on function seek.create_workspace(text, text, text, text, text[], text[]) from public, anon;
+revoke all on function seek.accept_my_invites() from public, anon;
+grant execute on function seek.create_workspace(text, text, text, text, text[], text[]) to authenticated;
+grant execute on function seek.accept_my_invites() to authenticated;
 
 -- ---------------------------------------------------------------- row-level security
-alter table public.profiles          enable row level security;
-alter table public.workspaces        enable row level security;
-alter table public.workspace_members enable row level security;
-alter table public.workspace_invites enable row level security;
+alter table seek.profiles          enable row level security;
+alter table seek.workspaces        enable row level security;
+alter table seek.workspace_members enable row level security;
+alter table seek.workspace_invites enable row level security;
 
 -- profiles: yourself, plus anyone you share a workspace with
-create policy "profiles: read self and teammates" on public.profiles
+create policy "profiles: read self and teammates" on seek.profiles
   for select to authenticated
   using (
     id = auth.uid()
     or exists (
-      select 1 from public.workspace_members mine
-      join public.workspace_members theirs on theirs.workspace_id = mine.workspace_id
+      select 1 from seek.workspace_members mine
+      join seek.workspace_members theirs on theirs.workspace_id = mine.workspace_id
       where mine.user_id = auth.uid() and theirs.user_id = profiles.id
     )
   );
-create policy "profiles: update self" on public.profiles
+create policy "profiles: update self" on seek.profiles
   for update to authenticated
   using (id = auth.uid())
   with check (id = auth.uid());
 
 -- workspaces: members read, admins edit; creating goes through create_workspace()
-create policy "workspaces: members read" on public.workspaces
-  for select to authenticated using (public.is_member(id));
-create policy "workspaces: admins update" on public.workspaces
-  for update to authenticated using (public.is_admin(id)) with check (public.is_admin(id));
+create policy "workspaces: members read" on seek.workspaces
+  for select to authenticated using (seek.is_member(id));
+create policy "workspaces: admins update" on seek.workspaces
+  for update to authenticated using (seek.is_admin(id)) with check (seek.is_admin(id));
 
 -- members: visible to fellow members; admins manage; anyone may leave
-create policy "members: members read" on public.workspace_members
-  for select to authenticated using (public.is_member(workspace_id));
-create policy "members: admins update" on public.workspace_members
-  for update to authenticated using (public.is_admin(workspace_id)) with check (public.is_admin(workspace_id));
-create policy "members: admins remove, or leave" on public.workspace_members
-  for delete to authenticated using (public.is_admin(workspace_id) or user_id = auth.uid());
+create policy "members: members read" on seek.workspace_members
+  for select to authenticated using (seek.is_member(workspace_id));
+create policy "members: admins update" on seek.workspace_members
+  for update to authenticated using (seek.is_admin(workspace_id)) with check (seek.is_admin(workspace_id));
+create policy "members: admins remove, or leave" on seek.workspace_members
+  for delete to authenticated using (seek.is_admin(workspace_id) or user_id = auth.uid());
 
 -- invites: admins see and manage their workspace's invites
-create policy "invites: admins read" on public.workspace_invites
-  for select to authenticated using (public.is_admin(workspace_id));
-create policy "invites: admins add" on public.workspace_invites
-  for insert to authenticated with check (public.is_admin(workspace_id) and invited_by = auth.uid());
-create policy "invites: admins remove" on public.workspace_invites
-  for delete to authenticated using (public.is_admin(workspace_id));
+create policy "invites: admins read" on seek.workspace_invites
+  for select to authenticated using (seek.is_admin(workspace_id));
+create policy "invites: admins add" on seek.workspace_invites
+  for insert to authenticated with check (seek.is_admin(workspace_id) and invited_by = auth.uid());
+create policy "invites: admins remove" on seek.workspace_invites
+  for delete to authenticated using (seek.is_admin(workspace_id));

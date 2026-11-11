@@ -76,10 +76,13 @@ secret / `service_role` key in the app.
 
 Setting up a new Supabase project:
 
-1. SQL Editor → run each file in `supabase/migrations/` in order.
-2. Authentication → URL Configuration: Site URL = the app's address; add `https://<app>/**` (and
+1. SQL Editor → run each file in `supabase/migrations/` in order. Seek's tables go in their own `seek` schema, so
+   they can share a project with other apps without touching `public`.
+1. Integrations → Data API → Settings → Exposed schemas: add `seek`.
+1. Authentication → Sign In / Providers → Email: set the email OTP length to **6**.
+1. Authentication → URL Configuration: Site URL = the app's address; add `https://<app>/**` (and
    `http://localhost:3000/**` for development) to Redirect URLs.
-3. For branded emails with the 6-digit code, set up custom SMTP (Resend) and put `{{ .Token }}` in the
+1. For branded emails with the 6-digit code, set up custom SMTP (Resend) and put `{{ .Token }}` in the
    *Magic link or OTP* and *Confirm sign up* templates.
 
 Everything is protected by row-level security: people only see workspaces they belong to and their teammates.

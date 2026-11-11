@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { backendOn, currentAccount, sendCode, sb } from './backend';
+import { backendOn, currentAccount, DB_SCHEMA, sendCode, sb } from './backend';
 import { PEOPLE, type ChatMessage, type FeedItem, type PersonKey } from './data';
 import { channelId as toChannelName, isEmail } from './format';
 import { useSeek } from './store';
@@ -160,12 +160,12 @@ export function useLiveChat(): LiveChat | null {
 
       live = sb()
         .channel('seek:' + ws)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `workspace_id=eq.${ws}` }, async (p) => {
+        .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'messages', filter: `workspace_id=eq.${ws}` }, async (p) => {
           const r = p.new as Row;
           await learnPeople([r.user_id]);
           addRow(r);
         })
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'channels', filter: `workspace_id=eq.${ws}` }, (p) => {
+        .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'channels', filter: `workspace_id=eq.${ws}` }, (p) => {
           const c = p.new as ChannelRow;
           chans.current.set(c.name, c.id);
           update((d) => {
@@ -173,7 +173,7 @@ export function useLiveChat(): LiveChat | null {
             if (!w.channels.some((x) => x.id === c.name)) w.channels.push({ id: c.name, unread: 0, desc: c.description });
           });
         })
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'workspace_members', filter: `workspace_id=eq.${ws}` }, async (p) => {
+        .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'workspace_members', filter: `workspace_id=eq.${ws}` }, async (p) => {
           const id = (p.new as { user_id: string }).user_id;
           await learnPeople([id]);
           setPeople((xs) => (xs.includes(keyOf(id)) ? xs : [...xs, keyOf(id)]));

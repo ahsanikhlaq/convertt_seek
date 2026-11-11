@@ -17,11 +17,16 @@ const KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export const backendOn = Boolean(URL_ && KEY);
 
-let client: SupabaseClient | null = null;
+/** Seek's tables live in their own schema, so the app can share a Supabase project with others. */
+export const DB_SCHEMA = 'seek';
 
-export function sb(): SupabaseClient {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Client = SupabaseClient<any, any, any>;
+let client: Client | null = null;
+
+export function sb(): Client {
   if (!backendOn) throw new Error('Supabase is not configured');
-  client ??= createClient(URL_!, KEY!, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  client ??= createClient(URL_!, KEY!, { db: { schema: DB_SCHEMA }, auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   return client;
 }
 
