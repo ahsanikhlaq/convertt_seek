@@ -45,6 +45,7 @@ function friendly(message: string): string {
   if (m.includes('rate limit') || m.includes('security purposes')) return 'Please wait a minute before asking for another code';
   if (m.includes('expired') || m.includes('invalid')) return 'That code is wrong or has expired. Check it, or resend a new one';
   if (m.includes('provider is not enabled')) return 'Google sign-in isn’t set up yet. Use your email instead';
+  if (m.includes('sending') || m.includes('unexpected_failure') || m.includes('credentials')) return 'We couldn’t send the email right now. Please try again shortly';
   if (m.includes('fetch')) return 'Can’t reach Seek. Check your connection and try again';
   return message;
 }
@@ -64,6 +65,9 @@ export async function verifyCode(email: string, token: string): Promise<{ error:
 }
 
 export async function googleSignIn(): Promise<string | null> {
+  // otherwise an unconfigured provider sends people to a raw error page
+  const settings = await fetch(`${URL_}/auth/v1/settings`, { headers: { apikey: KEY! } }).then((r) => r.json()).catch(() => null);
+  if (settings && !settings.external?.google) return 'Google sign-in isn’t set up yet. Use your email instead';
   const { error } = await sb().auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${location.origin}/` } });
   return error ? friendly(error.message) : null;
 }
