@@ -577,7 +577,7 @@ export function SetupPage() {
         </h2>
         <p>
           {phase === 'org'
-            ? 'Give your workspace its own identity. Your answers decide which channels and spaces we create. The preview updates as you type.'
+            ? 'Give your workspace its own identity. The preview updates as you type.'
             : 'Invite by email, or share one link in your team chat. You can choose who sees which channels later.'}
         </p>
         <div className="pc" style={{ maxWidth: 420, padding: 0, overflow: 'hidden', display: 'flex' }}>
@@ -826,31 +826,6 @@ export function SetupPage() {
                     </button>
                   ))}
                 </div>
-              </div>
-              <div className="fld">
-                <label>How will you use Seek?</label>
-                <div className="chips">
-                  {USES.map((u) => {
-                    const on = w.use.includes(u);
-                    return (
-                      <button
-                        key={u}
-                        type="button"
-                        aria-pressed={on}
-                        className={'chip' + (on ? ' on' : '')}
-                        onClick={() =>
-                          ws((x) => {
-                            x.use = on ? x.use.filter((y) => y !== u) : [...x.use, u];
-                          })
-                        }
-                      >
-                        {on ? '✓ ' : ''}
-                        {u}
-                      </button>
-                    );
-                  })}
-                </div>
-                <em>This decides what we create: see the list on the left.</em>
               </div>
               <button type="button" className="btn lg pri" onClick={toTeam} disabled={saving}>
                 {saving ? 'Creating your workspace…' : 'Continue'}
