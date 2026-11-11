@@ -12,6 +12,7 @@ import {
   joinByCode,
   joinByDomain,
   joinableOrgs,
+  preferOrg,
   joinInfo,
   myInvite,
   saveProfile,
@@ -161,7 +162,8 @@ export function SignupPage() {
     }
     update((d) => applyAccount(d, account));
     toast('Email verified ✓');
-    router.push(!account.onboarded ? ROUTES.welcome : homeOf(account));
+    // a new owner goes straight to organisation setup; invited people set up their profile first
+    router.push(!account.workspace && !account.clientSpaces.length ? ROUTES.setup : !account.onboarded ? ROUTES.welcome : homeOf(account));
   };
 
   const google = async () => {
@@ -318,7 +320,8 @@ export function SetupPage() {
   const { s, update, toast } = useSeek();
   const router = useRouter();
   const w = s.ws;
-  const phase = w.step ?? 'org';
+  // two screens: the organisation (name, logo, colour, team), then invites
+  const phase = w.step === 'invite' ? 'invite' : 'org';
   const accent = w.accent ?? DEFAULT_ACCENT;
   const autoSlug = slugify(w.name);
   const slug = (w.slug ?? autoSlug).slice(0, 40);
@@ -455,7 +458,7 @@ export function SetupPage() {
       toast('That address is taken. Try ' + slug + 'studio');
       return;
     }
-    go('team');
+    void createOrg();
   };
 
   const createOrg = async () => {
@@ -479,7 +482,12 @@ export function SetupPage() {
       if (r.error) toast(r.error + '. You can add it later from your profile');
       url = r.url;
     }
-    const acc = await currentAccount(true);
+    // the owner's profile starts from their email; they can change it any time from their profile
+    let acc = await currentAccount(true);
+    if (acc && !acc.onboarded) {
+      await saveProfile({ name: acc.name.trim() || acc.email.split('@')[0], title: '' });
+      acc = await currentAccount(true);
+    }
     setSaving(false);
     setCode(acc?.workspace?.joinCode ?? null);
     update((d) => {
@@ -527,17 +535,15 @@ export function SetupPage() {
     router.push(ROUTES.channels);
   };
 
-  const n = phase === 'org' ? 3 : phase === 'team' ? 4 : 5;
+  const n = phase === 'org' ? 2 : 3;
   // five steps don't fit the card: only the current one shows its name (the others on hover)
   const steps = (
-    <div className="steps compact" aria-label={'Step ' + n + ' of 5'}>
+    <div className="steps compact" aria-label={'Step ' + n + ' of 3'}>
       {(
         [
           ['Account', 1],
-          ['Profile', 2],
-          ['Organisation', 3],
-          ['Your team', 4],
-          ['Invite', 5],
+          ['Organisation', 2],
+          ['Invite', 3],
         ] as [string, number][]
       ).map(([t, i], k) => (
         <span key={t} style={{ display: 'contents' }}>
@@ -571,10 +577,8 @@ export function SetupPage() {
         </h2>
         <p>
           {phase === 'org'
-            ? 'Give your workspace its own identity. The preview updates as you type.'
-            : phase === 'team'
-              ? 'Your answers decide which channels and spaces we create, and your notification defaults.'
-              : 'Invite by email, or share one link in your team chat. You can choose who sees which channels later.'}
+            ? 'Give your workspace its own identity. Your answers decide which channels and spaces we create. The preview updates as you type.'
+            : 'Invite by email, or share one link in your team chat. You can choose who sees which channels later.'}
         </p>
         <div className="pc" style={{ maxWidth: 420, padding: 0, overflow: 'hidden', display: 'flex' }}>
           <div style={{ background: rail, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
@@ -786,55 +790,23 @@ export function SetupPage() {
                   {lowContrast ? 'White text is hard to read on this colour. Pick a darker one.' : 'Becomes the app’s accent for everyone. People can still pick their own theme.'}
                 </em>
               </div>
-              <div className="grid2">
-                <div className="fld">
-                  <label htmlFor="wtz">Time zone</label>
-                  <select
-                    id="wtz"
-                    className="inp"
-                    value={w.tz}
-                    onChange={(e) =>
-                      ws((x) => {
-                        x.tz = e.target.value;
-                      })
-                    }
-                  >
-                    {[...new Set([w.tz, ...ZONES])].map((z) => (
-                      <option key={z}>{z}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="fld">
-                  <label htmlFor="wweb">
-                    Website <span style={{ color: 'var(--sb)', fontWeight: 400 }}>(optional)</span>
-                  </label>
-                  <input
-                    className="inp"
-                    id="wweb"
-                    placeholder="convertt.co"
-                    autoComplete="url"
-                    value={w.website ?? ''}
-                    onChange={(e) =>
-                      ws((x) => {
-                        x.website = e.target.value.slice(0, 200);
-                      })
-                    }
-                  />
-                </div>
+              <div className="fld">
+                <label htmlFor="wtz">Time zone</label>
+                <select
+                  id="wtz"
+                  className="inp"
+                  value={w.tz}
+                  onChange={(e) =>
+                    ws((x) => {
+                      x.tz = e.target.value;
+                    })
+                  }
+                >
+                  {[...new Set([w.tz, ...ZONES])].map((z) => (
+                    <option key={z}>{z}</option>
+                  ))}
+                </select>
               </div>
-              <button type="button" className="btn lg pri" onClick={toTeam}>
-                Continue
-              </button>
-              <p className="fine">You can change all of this later.</p>
-            </>
-          )}
-
-          {phase === 'team' && (
-            <>
-              <div>
-                <h1>How does your team work?</h1>
-              </div>
-              <p className="sub">A few answers so the workspace arrives ready to use.</p>
               <div className="fld">
                 <label>Team size</label>
                 <div className="chips">
@@ -880,14 +852,10 @@ export function SetupPage() {
                 </div>
                 <em>This decides what we create: see the list on the left.</em>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" className="btn lg" onClick={() => go('org')}>
-                  ← Back
-                </button>
-                <button type="button" className="btn lg pri" style={{ flex: 1 }} onClick={createOrg} disabled={saving}>
-                  {saving ? 'Creating your workspace…' : 'Continue'}
-                </button>
-              </div>
+              <button type="button" className="btn lg pri" onClick={toTeam} disabled={saving}>
+                {saving ? 'Creating your workspace…' : 'Continue'}
+              </button>
+              <p className="fine">You can change all of this later.</p>
             </>
           )}
 
@@ -1024,6 +992,10 @@ export function WelcomePage() {
 
   /** Signed in: set up the profile, or carry on if that's already done. */
   const toProfile = async (acc: Account) => {
+    if (!acc.workspace && !acc.clientSpaces.length) {
+      router.replace(ROUTES.setup);
+      return;
+    }
     if (acc.onboarded) {
       router.replace(homeOf(acc));
       return;
@@ -1058,6 +1030,9 @@ export function WelcomePage() {
         return;
       }
       const q = new URLSearchParams(location.search);
+      // an invite to someone who already has an account: open the organisation they were invited to
+      const org = q.get('org');
+      if (org) preferOrg(org);
       setEmail(q.get('email') ?? '');
       const th = q.get('token_hash');
       if (th) {
@@ -1067,9 +1042,12 @@ export function WelcomePage() {
         setPhase('join');
         return;
       }
-      const acc = await currentAccount().catch(() => null);
+      const acc = await currentAccount(!!org).catch(() => null);
       if (!acc) router.replace(ROUTES.signup);
-      else await toProfile(acc);
+      else {
+        update((d) => applyAccount(d, acc));
+        await toProfile(acc);
+      }
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

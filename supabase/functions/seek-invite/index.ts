@@ -81,7 +81,14 @@ Deno.serve(async (req) => {
   if (!error) return json({ status: 'invited' });
 
   if ((error as { code?: string }).code === 'email_exists' || /already (been )?registered|already exists/i.test(error.message)) {
-    const { error: otpErr } = await createClient(url, anon, opts).auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: redirectTo } });
+    // They already have an account: send the sign-in email dressed as an invite. The account carries the invite
+    // details only while that one email is written (the "Magic link" template checks .Data.invite_org), and the
+    // Join link opens the organisation they were invited to.
+    const { data: uid } = await admin.rpc('user_id_by_email', { p_email: email });
+    const link = redirectTo && workspaceId ? `${redirectTo}${redirectTo.includes('?') ? '&' : '?'}org=${workspaceId}` : redirectTo;
+    if (uid) await admin.auth.admin.updateUserById(uid as string, { user_metadata: { invite_by: data.invited_by, invite_org: data.workspace } });
+    const { error: otpErr } = await createClient(url, anon, opts).auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: link } });
+    if (uid) await admin.auth.admin.updateUserById(uid as string, { user_metadata: { invite_by: null, invite_org: null } });
     return json(otpErr ? { status: 'saved', error: otpErr.message } : { status: 'existing' });
   }
   return json({ status: 'saved', error: error.message });

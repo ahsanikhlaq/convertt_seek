@@ -1,6 +1,6 @@
 'use client';
 
-import { backendOn } from '@/lib/seek/backend';
+import { backendOn, forgetAccount, preferOrg } from '@/lib/seek/backend';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { WORKSPACES, type WorkspaceId } from '@/lib/seek/data';
@@ -35,29 +35,53 @@ const NAV: [RouteKey, IconName, string][] = [
   ['agents', 'ap', 'Apps'],
 ];
 
-/** The workspaces to list: the two samples in demo mode, or just your real one with a backend. */
-function useWorkspaceList() {
-  const { s } = useSeek();
-  const wsIds: WorkspaceId[] = backendOn ? ['C'] : (Object.keys(WORKSPACES) as WorkspaceId[]);
-  const wsName = (w: WorkspaceId) => (backendOn ? s.ws.name || 'Workspace' : WORKSPACES[w].name);
-  // your organization's logo (or first letter) with a backend; the sample workspaces' letters in demo mode
-  const wsLetter = (w: WorkspaceId): React.ReactNode => (backendOn ? <OrgMark name={s.ws.name} logo={s.ws.logo} /> : w);
-  return { wsIds, wsName, wsLetter };
+type WsItem = { key: string; name: string; mark: React.ReactNode; on: boolean; open: () => void };
+
+/** The workspaces to list: the two samples in demo mode, or every organisation you belong to with a backend. */
+function useWorkspaceList(): { items: WsItem[] } {
+  const { s, toast } = useSeek();
+  const sw = useWorkspaceSwitch();
+  if (!backendOn)
+    return {
+      items: (Object.keys(WORKSPACES) as WorkspaceId[]).map((w) => ({ key: w, name: WORKSPACES[w].name, mark: w, on: s.wsId === w, open: () => sw(w) })),
+    };
+  const orgs = s.orgs?.length ? s.orgs : [{ id: s.orgId ?? 'current', name: s.ws.name || 'Workspace', logo: s.ws.logo }];
+  return {
+    items: orgs.map((o) => {
+      const on = o.id === s.orgId || orgs.length === 1;
+      return {
+        key: o.id,
+        name: o.name,
+        mark: <OrgMark name={o.name} logo={on ? s.ws.logo ?? o.logo : o.logo} />,
+        on,
+        open: () => {
+          if (on) {
+            toast('You are in ' + o.name);
+            return;
+          }
+          // open the other organisation: everything reloads for it
+          preferOrg(o.id);
+          forgetAccount();
+          toast('Switching to ' + o.name + '…');
+          location.assign(ROUTES.channels);
+        },
+      };
+    }),
+  };
 }
 
 function Rail({ active }: { active: RouteKey }) {
   const { s, setUI, toast } = useSeek();
-  const { wsIds, wsName, wsLetter } = useWorkspaceList();
-  const sw = useWorkspaceSwitch();
+  const { items } = useWorkspaceList();
   const dot: Partial<Record<RouteKey, boolean>> = {
     dms: Object.values(s.dms).some((d) => d && d.unread > 0),
     clients: !backendOn && !s.replied,
   };
   return (
     <nav className="rail" aria-label="Main">
-      {wsIds.map((w) => (
-        <button key={w} type="button" className={'wsb' + (s.wsId === w ? ' on' : '')} onClick={() => sw(w)} title={wsName(w)} aria-label={'Workspace ' + wsName(w)}>
-          {wsLetter(w)}
+      {items.map((w) => (
+        <button key={w.key} type="button" className={'wsb' + (w.on ? ' on' : '')} onClick={w.open} title={w.name} aria-label={'Workspace ' + w.name}>
+          {w.mark}
         </button>
       ))}
       <button type="button" className="wsb add" onClick={() => toast('Create or join another workspace')} aria-label="Add a workspace">
@@ -133,9 +157,8 @@ function TopBar() {
 /** Left list column (becomes a full-screen drawer on phones). */
 export function Sidebar({ title, sub, action, children }: { title: string; sub: string; action?: React.ReactNode; children: React.ReactNode }) {
   const { s, setUI } = useSeek();
-  const { wsIds, wsName, wsLetter } = useWorkspaceList();
+  const { items } = useWorkspaceList();
   const pop = usePopovers();
-  const sw = useWorkspaceSwitch();
   return (
     <aside className="side" aria-label={title}>
       <div className="sh">
@@ -149,12 +172,12 @@ export function Sidebar({ title, sub, action, children }: { title: string; sub: 
           <ModeSeg />
         </div>
         <div className="wsrow">
-          {wsIds.map((w) => (
-            <button key={w} type="button" className={'si' + (s.wsId === w ? ' on' : '')} style={{ flex: 1, justifyContent: 'center', border: '1px solid var(--sln)' }} onClick={() => sw(w)}>
-              <span className={'wsb' + (s.wsId === w ? ' on' : '')} style={{ width: 24, height: 24, fontSize: 12, borderRadius: 7 }}>
-                {wsLetter(w)}
+          {items.map((w) => (
+            <button key={w.key} type="button" className={'si' + (w.on ? ' on' : '')} style={{ flex: 1, justifyContent: 'center', border: '1px solid var(--sln)' }} onClick={w.open}>
+              <span className={'wsb' + (w.on ? ' on' : '')} style={{ width: 24, height: 24, fontSize: 12, borderRadius: 7 }}>
+                {w.mark}
               </span>
-              {wsName(w)}
+              {w.name}
             </button>
           ))}
         </div>

@@ -101,6 +101,9 @@ export type State = {
   };
   /** backend mode: whose data (account and organization) the saved chats belong to */
   owner?: string;
+  /** backend mode: every organisation you belong to, and the open one */
+  orgs?: { id: string; name: string; logo?: string }[];
+  orgId?: string;
   wsId: WorkspaceId;
   workspaces: Record<WorkspaceId, Workspace>;
   dm: PersonKey;

@@ -104,11 +104,17 @@ Each organization has a logo (stored in the public `seek-logos` bucket; only its
 invite link (`/join?c=<code>`, shown under ＋ Invite people; admins can reset it). Invite emails carry both a Join
 button and a 6-digit code, so if the button fails the person types the code instead of waiting for a new email.
 
-**Organisation setup** (build spec 5.4): after sign-up and profile, three steps: organisation (logo cropped to a
-square, name, workspace address checked on the server, brand colour, time zone, website), how the team works, then
-invites (emails with Member/Admin each, the invite link, and "anyone with an @company email can join", never offered
-for personal email providers). The brand colour becomes everyone's accent. If the person's company domain already
-has a workspace that allows it, setup offers to join that one instead.
+**Organisation setup:** a new owner goes from the email code straight to two screens: (1) the organisation:
+name, logo (cropped to a square), workspace address (checked on the server), brand colour, time zone, team size and
+use; (2) invite the team: emails with Member/Admin each, the invite link, and "anyone with an @company email can
+join" (never offered for personal email providers). Then #general. The owner's name starts from their email and can
+be changed in the profile. Invited teammates and clients still set up their profile first. The brand colour becomes
+everyone's accent. If the person's company domain already has a workspace that allows it, setup offers to join it.
+People in several organisations switch between them from the rail.
+
+**Invites to existing accounts:** someone who already has a Seek account gets an invite email too ("X invited you
+to Y on Seek", with a Join button), not a bare sign-in code. The invite function marks the account with the invite
+only while that email is written, and the *Magic link* template shows the invite version when it sees it.
 
 **Channel access:** a channel is open (everyone on the team) or private (only the people added, plus owners and
 admins). New channels default to private. Invites can include private channels; people who join with the invite

@@ -42,6 +42,8 @@ export type Account = {
   workspace: Org | null;
   /** client spaces this person was invited to as a client (empty for the agency's team) */
   clientSpaces: ClientSpaceRef[];
+  /** every organisation you belong to (the rail lists them; one is open) */
+  orgs: Org[];
 };
 
 /** A client space you belong to as a client. */
@@ -172,6 +174,9 @@ async function loadAccount(id: string, email: string): Promise<Account> {
     onboarded: Boolean(p.onboarded_at),
     workspace: w ? { id: w.id, name: w.name, slug: w.slug, role: m!.role, logo: w.logo_url, joinCode: w.join_code, accent: w.brand_accent } : null,
     clientSpaces,
+    orgs: rows
+      .filter((r) => r.workspaces && r.role !== 'guest')
+      .map((r) => ({ id: r.workspaces!.id, name: r.workspaces!.name, slug: r.workspaces!.slug, role: r.role, logo: r.workspaces!.logo_url, joinCode: r.workspaces!.join_code, accent: r.workspaces!.brand_accent })),
   };
 }
 

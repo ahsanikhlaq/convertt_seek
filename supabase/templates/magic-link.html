@@ -7,7 +7,7 @@
 <title>Your Seek sign-in code</title>
 </head>
 <body style="margin:0;padding:0;background:#faf7f9;-webkit-text-size-adjust:100%;">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Your Seek code is {{ .Token }}. Enter it in Seek to sign in.</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">{{ if .Data.invite_org }}{{ .Data.invite_by }} invited you to {{ .Data.invite_org }} on Seek. One click to join.{{ else }}Your Seek code is {{ .Token }}. Enter it in Seek to sign in.{{ end }}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#faf7f9;">
 <tr><td align="center" style="padding:40px 16px;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
@@ -18,8 +18,14 @@
       </tr></table>
     </td></tr>
     <tr><td style="background:#ffffff;border:1px solid #e9e1e9;border-radius:16px;padding:32px 28px;font-family:'Outfit','Helvetica Neue',Arial,sans-serif;color:#261325;">
-      <h1 style="margin:0 0 8px;font-size:22px;line-height:1.3;font-weight:700;color:#261325;">Your sign-in code</h1>
-      <p style="margin:0 0 24px;font-size:15px;line-height:1.55;color:#5f4a5e;">Enter this code in Seek to continue.</p>
+      <h1 style="margin:0 0 8px;font-size:22px;line-height:1.3;font-weight:700;color:#261325;">{{ if .Data.invite_org }}{{ .Data.invite_by }} invited you to {{ .Data.invite_org }}{{ else }}Your sign-in code{{ end }}</h1>
+      <p style="margin:0 0 24px;font-size:15px;line-height:1.55;color:#5f4a5e;">{{ if .Data.invite_org }}You already have a Seek account, so joining takes one click.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;"><tr>
+        <td align="center" bgcolor="#4b154a" style="border-radius:10px;background:#4b154a;">
+          <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:13px 26px;font-family:'Outfit','Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">Join {{ .Data.invite_org }}</a>
+        </td>
+      </tr></table>
+      <p style="margin:0 0 8px;font-size:13px;line-height:1.55;color:#5f4a5e;">Button not working? Open Seek and enter this code:{{ else }}Enter this code in Seek to continue.{{ end }}</p>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
         <td align="center" style="background:#f2e6f2;border-radius:12px;padding:18px 12px;font-family:'Geist Mono',SFMono-Regular,Menlo,Consolas,monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:#4b154a;">{{ .Token }}</td>
       </tr></table>

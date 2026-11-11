@@ -66,7 +66,8 @@ export function useSeek() {
  */
 export function applyAccount(d: State, acc: Account | null) {
   // people who are only a client of an agency (no team of their own) get just their client space
-  d.session = !acc ? 'out' : !acc.onboarded ? 'profile' : acc.workspace ? 'in' : acc.clientSpaces.length ? 'client' : 'setup';
+  // a new owner goes straight to organisation setup; invited teammates and clients set up their profile first
+  d.session = !acc ? 'out' : acc.workspace ? (acc.onboarded ? 'in' : 'profile') : acc.clientSpaces.length ? (acc.onboarded ? 'client' : 'profile') : 'setup';
   const owner = acc ? acc.id + ':' + (acc.workspace?.id ?? '') : '';
   if (backendOn && d.owner !== owner) {
     d.owner = owner;
@@ -83,6 +84,8 @@ export function applyAccount(d: State, acc: Account | null) {
     d.ws.logo = c.agencyLogo ?? undefined;
   }
   if (!acc) return;
+  d.orgs = acc.orgs.map((o) => ({ id: o.id, name: o.name, logo: o.logo ?? undefined }));
+  d.orgId = acc.workspace?.id;
   d.email = acc.email;
   // your real profile replaces the prototype's sample person
   d.me = { ...d.me, email: acc.email, name: acc.name.trim() || acc.email.split('@')[0] || 'You', title: acc.title, tz: acc.timeZone || d.me.tz };
