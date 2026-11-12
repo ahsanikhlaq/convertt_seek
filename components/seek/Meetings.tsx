@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { PEOPLE, type MeetingCard } from '@/lib/seek/data';
+import { PEOPLE, type HuddleCard, type MeetingCard } from '@/lib/seek/data';
 import type { Space } from '@/lib/seek/liveClients';
 import {
   cancelMeeting,
@@ -287,6 +287,29 @@ export function MeetingCardView({ c }: { c: MeetingCard }) {
               Cancel meeting
             </button>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A HUDDLE card: a live video room anyone in the conversation can join (it shows as ended after 4 hours). */
+export function HuddleCardView({ c, call }: { c: HuddleCard; call?: boolean }) {
+  const start = new Date(c.started_at);
+  const live = Date.now() - start.getTime() < 4 * 3600e3;
+  return (
+    <div className="dec meet" style={{ boxShadow: 'inset 4px 0 0 var(--ok)', marginLeft: 0, marginRight: 0 }}>
+      <div className="k">
+        <span style={{ color: 'var(--ok)' }}>{call ? '📞 CALL' : '🎧 HUDDLE'}</span>
+        {live ? <span className="tag ok">live</span> : <span className="tag">ended</span>}
+        <small style={{ marginLeft: 'auto' }}>started {clock(start, null)}</small>
+      </div>
+      {live && (
+        <div className="a">
+          <a className="btn sm pri" href={c.link} target="_blank" rel="noopener noreferrer">
+            Join
+          </a>
+          <small style={{ color: 'var(--sb)', alignSelf: 'center' }}>Opens in your browser · camera and mic optional</small>
         </div>
       )}
     </div>

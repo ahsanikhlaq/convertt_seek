@@ -13,6 +13,7 @@ import { Composer, Feed, ThreadPane, useSendTo, type FeedRef } from '../Messages
 import { MainHeader, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
 import { FileList, useAttach } from '../Files';
+import { startHuddle } from '@/lib/seek/liveExtras';
 import { CanvasEditor, PinsList, SavedDialog, ScheduledDialog, TasksDialog, useSchedule } from '../Extras';
 import { channelFiles, type SharedFile } from '@/lib/seek/liveFiles';
 
@@ -257,7 +258,12 @@ export function ChannelsPage() {
                 👥 <span className="hide-m">Members</span>
               </button>
             )}
-            <button type="button" className="btn sm" onClick={() => toast(live ? 'Huddles arrive in a later update' : '🎧 Huddle started · others can join')}>
+            <button type="button" className="btn sm" onClick={async () => {
+                if (!live) return toast('🎧 Huddle started · others can join');
+                if (!c.cid) return;
+                const err = await startHuddle({ channel: c.cid });
+                toast(err ?? '🎧 Huddle started · everyone in #' + ch + ' can join');
+              }}>
               🎧 Huddle
             </button>
           </>

@@ -2,7 +2,7 @@
 
 /** The sample people, plus real accounts (keyed by user id) when a backend is connected. 'AH' is always you. */
 export type PersonKey = 'AH' | 'SY' | 'MO' | 'ZA' | 'CH' | 'PR' | 'AI' | (string & {});
-export type Person = { name: string; color: string; role: string; initials?: string };
+export type Person = { name: string; color: string; role: string; initials?: string; /** profile photo URL */ photo?: string };
 
 export const PEOPLE: Record<PersonKey, Person> = {
   AH: { name: 'Ahsan', color: '#4b154a', role: 'Account lead' },
@@ -28,8 +28,8 @@ export type ChatMessage = {
   file?: [string, string];
   /** backend mode: files attached to the message (in private storage) */
   files?: FileRef[];
-  /** backend mode: a card the message carries (a scheduled meeting) */
-  card?: MeetingCard;
+  /** backend mode: a card the message carries (a scheduled meeting, a huddle) */
+  card?: MessageCard;
   /** backend mode: pinned in its conversation */
   pinned?: boolean;
   /** backend mode: the author changed the text after sending */
@@ -81,6 +81,9 @@ export type Decision = {
 export type LiveTask = { id: number; title: string; owner: string; due: string | null; source: number | null; status: 'open' | 'done'; by: string; at: string; doneAt: string | null; conv: string | null; place: string | null };
 /** A meeting posted in a client space (the MEETING card). */
 export type MeetingCard = { type: 'meeting'; id: number; title: string; starts_at: string; duration: number; tool: 'meet' | 'zoom' | 'seek' | 'person'; link: string; agenda: string; record: boolean; cancelled: boolean };
+/** A huddle or call: a link to a Seek video room. */
+export type HuddleCard = { type: 'huddle'; link: string; started_at: string };
+export type MessageCard = MeetingCard | HuddleCard;
 /** A file attached to a message: where it is stored, its name, size in bytes and type. */
 export type FileRef = { path: string; name: string; size: number; type: string };
 /** A formal approval in a client space (backend mode). */
@@ -124,7 +127,7 @@ export type AppRequest = { id: string; n: string; by: string; c: string };
 export type Theme = { side: string; body: string; acc: string };
 export type Mode = 'light' | 'dark' | 'system';
 export type StatusKey = 'on' | 'mt' | 'fc' | 'aw';
-export type CustomEmoji = { n: string; src: string };
+export type CustomEmoji = { n: string; src: string; /** backend mode: who added it */ by?: string };
 export type WorkspaceId = 'C' | 'K';
 export type ClientTab = 'Client chat' | 'Team notes' | 'Status' | 'Approvals' | 'Files' | 'Pins' | 'People';
 
@@ -164,6 +167,8 @@ export type State = {
   ldecs?: LiveDecision[];
   /** backend mode: your user id */
   meId?: string;
+  /** backend mode: the look last saved to your account (JSON), so changes are saved once */
+  savedLook?: string;
   /** backend mode: ids of the messages you saved */
   lsaved?: number[];
   /** backend mode: the team's tasks (open, and done in the last two weeks) */

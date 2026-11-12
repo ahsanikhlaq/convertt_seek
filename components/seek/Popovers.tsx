@@ -3,6 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { EMOJI, THEMES, DEFAULT_THEME, type Theme } from '@/lib/seek/data';
 import { useSeek } from '@/lib/seek/store';
+import { backendOn } from '@/lib/seek/backend';
+import { addEmoji, clearEmoji, reloadEmoji } from '@/lib/seek/liveEmoji';
 import { Emoji, ModeSeg } from './ui';
 import { PromptDialog, ConfirmDialog } from './Dialogs';
 
@@ -209,9 +211,26 @@ function EmojiPicker({ req, onClose }: { req: EmojiReq; onClose: () => void }) {
           initial={naming.suggested}
           confirm="Add emoji"
           onCancel={() => setNaming(null)}
-          onSubmit={(v) => {
-            const n = v.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+          onSubmit={async (v) => {
+            const n = v.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
             if (!n) return;
+            if (backendOn) {
+              if (!s.orgId || s.session !== 'in') {
+                toast('Only the team can add emoji');
+                return;
+              }
+              const err = await addEmoji(s.orgId, n, naming.src);
+              if (err) {
+                toast(err);
+                return;
+              }
+              await reloadEmoji(update, s.orgId);
+              setNaming(null);
+              setCat('Custom');
+              setQ('');
+              toast('Added :' + n + ': for everyone in ' + (s.ws.name || 'your workspace'));
+              return;
+            }
             update((d) => {
               d.custom = d.custom.filter((c) => c.n !== n).concat([{ n, src: naming.src }]);
             });
@@ -229,11 +248,18 @@ function EmojiPicker({ req, onClose }: { req: EmojiReq; onClose: () => void }) {
           confirm="Remove all"
           danger
           onCancel={() => setClearing(false)}
-          onConfirm={() => {
+          onConfirm={async () => {
+            setClearing(false);
+            if (backendOn) {
+              if (!s.orgId || !s.meId) return;
+              const err = await clearEmoji(s.orgId, s.meId, false);
+              toast(err ?? 'Removed the emoji you added');
+              await reloadEmoji(update, s.orgId);
+              return;
+            }
             update((d) => {
               d.custom = [];
             });
-            setClearing(false);
           }}
         />
       )}

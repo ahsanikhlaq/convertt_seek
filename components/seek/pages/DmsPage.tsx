@@ -13,6 +13,7 @@ import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
 import { FileList, useAttach } from '../Files';
 import { PinsList, useSchedule } from '../Extras';
+import { startHuddle } from '@/lib/seek/liveExtras';
 import { dmFiles, type SharedFile } from '@/lib/seek/liveFiles';
 
 export function DmsPage() {
@@ -154,9 +155,23 @@ function LiveDmsPage() {
         </div>
       }
       right={
-        <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Profile details" aria-pressed={ui.paneOpen}>
-          ⓘ
-        </button>
+        <>
+          {dm !== 'AH' && (
+            <button
+              type="button"
+              className="btn sm"
+              onClick={async () => {
+                const err = await startHuddle({ dmWith: dm });
+                toast(err ?? '📞 Call started · ' + nameOf(dm) + ' can join from the chat');
+              }}
+            >
+              📞 Call
+            </button>
+          )}
+          <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Profile details" aria-pressed={ui.paneOpen}>
+            ⓘ
+          </button>
+        </>
       }
     />
   ) : (

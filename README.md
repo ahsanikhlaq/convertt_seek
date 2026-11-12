@@ -135,6 +135,24 @@ the source message) and **Saved**. Channels also have a **Pins** tab and a **Can
 (brief, owners, key dates); if someone saved it while you were editing, your save stops and shows their version
 instead of overwriting it. Tasks are team-only: clients never see them.
 
+**More chat features:** ✎ Edit your own messages (E; only the text can change, marked "edited"). 🔗 Copy link (L) gives
+a link (/open?m=…) that opens the message for anyone who can see its conversation. ⏱ Later sends a message at a set
+time (Seek delivers it while it is open on one of your devices, or as soon as you next open it); Scheduled in the
+channels sidebar lists and cancels them. Messages that fail to send stay in the conversation as "Not sent" with Retry
+and Discard, and go by themselves when the connection is back; an offline banner shows while you are offline. DMs
+have Files and Pins tabs; client spaces have a Pins tab (clients see Client chat pins). 🎧 Huddle (channels) and 📞 Call
+(DMs) open a private Seek video room (a free Jitsi Meet room with a random name, no account needed) and post a card
+others join from; the database only accepts such cards from people, so nobody can forge a meeting card or link.
+
+**Profile and workspace:** upload a profile photo (✎ on your avatar in the profile drawer; cropped to 256px). Custom
+emoji belong to the workspace (anyone on the team adds them; everyone, clients included, sees them). Your theme and
+light/dark mode are saved to your account and follow you to other devices.
+
+**Reply timer:** each client space shows how long the client has waited for a reply, in working hours (Mon–Fri,
+09:00–18:00 in your time zone), from their first unanswered Client chat message until anyone on the team replies; red
+once over the reply target. It shows in the clients list, the space's side panel, and the Status tab (with checklist
+progress, next meeting and open approvals).
+
 **Decisions:** any message's More menu → Log decision (or D) saves it with who logged it, where and the source
 message; the decision card shows under the message, and Undo is offered for a few seconds. In the Decisions log you
 filter by place and type, search, jump to the source message, edit (the new wording replaces the old, which stays in

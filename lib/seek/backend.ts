@@ -47,6 +47,10 @@ export type Account = {
   clientSpaces: ClientSpaceRef[];
   /** every organisation you belong to (the rail lists them; one is open) */
   orgs: Org[];
+  /** your profile photo (public URL) */
+  avatar: string | null;
+  /** your saved look: theme tokens and light/dark mode */
+  look: { theme?: Record<string, string>; mode?: string } | null;
 };
 
 /** A client space you belong to as a client. */
@@ -139,7 +143,7 @@ async function loadAccount(id: string, email: string): Promise<Account> {
   // anyone invited by email joins those workspaces the first time we see them signed in
   await sb().rpc('accept_my_invites');
   const [{ data: profile }, { data: memberships }, { data: spaces }] = await Promise.all([
-    sb().from('profiles').select('name, title, time_zone, onboarded_at, status, dnd_until').eq('id', id).maybeSingle(),
+    sb().from('profiles').select('name, title, time_zone, onboarded_at, status, dnd_until, avatar_url, theme').eq('id', id).maybeSingle(),
     sb()
       .from('workspace_members')
       .select('role, joined_at, workspaces ( id, name, slug, logo_url, join_code, brand_accent )')
@@ -167,7 +171,7 @@ async function loadAccount(id: string, email: string): Promise<Account> {
   } catch {}
   const m = rows.find((r) => r.workspaces?.id === pref) ?? rows.find((r) => r.workspaces);
   const w = m?.workspaces;
-  const p = (profile ?? {}) as { name?: string; title?: string; time_zone?: string; onboarded_at?: string | null; status?: string; dnd_until?: string | null };
+  const p = (profile ?? {}) as { name?: string; title?: string; time_zone?: string; onboarded_at?: string | null; status?: string; dnd_until?: string | null; avatar_url?: string | null; theme?: Account['look'] };
   return {
     id,
     email,
@@ -176,6 +180,8 @@ async function loadAccount(id: string, email: string): Promise<Account> {
     timeZone: p.time_zone ?? '',
     status: p.status ?? 'on',
     dndUntil: p.dnd_until ?? null,
+    avatar: p.avatar_url ?? null,
+    look: p.theme ?? null,
     onboarded: Boolean(p.onboarded_at),
     workspace: w ? { id: w.id, name: w.name, slug: w.slug, role: m!.role, logo: w.logo_url, joinCode: w.join_code, accent: w.brand_accent } : null,
     clientSpaces,
@@ -230,6 +236,45 @@ async function toLogoPng(file: File): Promise<Blob> {
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/** Uploads your profile photo (cropped to a square, 256px) and saves it on your profile. Returns its URL. */
+export async function uploadAvatar(file: File): Promise<{ error: string | null; url: string | null }> {
+  try {
+    const { data } = await sb().auth.getSession();
+    const uid = data.session?.user.id;
+    if (!uid) return { error: 'Sign in again to change your photo', url: null };
+    const png = await toLogoPng(file);
+    const path = `${uid}/photo-${Date.now()}.png`;
+    const store = sb().storage.from('seek-avatars');
+    const { error } = await store.upload(path, png, { contentType: 'image/png', cacheControl: '31536000' });
+    if (error) return { error: 'Couldn’t upload the photo. ' + friendly(error.message), url: null };
+    const url = store.getPublicUrl(path).data.publicUrl;
+    const { error: e2 } = await sb().from('profiles').update({ avatar_url: url }).eq('id', uid);
+    forgetAccount();
+    return e2 ? { error: friendly(e2.message), url: null } : { error: null, url };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Couldn’t upload the photo', url: null };
+  }
+}
+
+/** Removes your profile photo (your initials show again). */
+export async function removeAvatar(): Promise<string | null> {
+  const { data } = await sb().auth.getSession();
+  const uid = data.session?.user.id;
+  if (!uid) return 'Sign in again';
+  const { error } = await sb().from('profiles').update({ avatar_url: null }).eq('id', uid);
+  forgetAccount();
+  return error ? friendly(error.message) : null;
+}
+
+/** Saves your theme and light/dark mode to your account, so they follow you to other devices. */
+export async function saveLook(look: { theme: Record<string, string>; mode: string }) {
+  const { data } = await sb().auth.getSession();
+  const uid = data.session?.user.id;
+  if (!uid) return;
+  await sb().from('profiles').update({ theme: look }).eq('id', uid);
+  forgetAccount();
 }
 
 /** Uploads an organization's logo (admins only) and saves it on the organization. Returns its public URL. */

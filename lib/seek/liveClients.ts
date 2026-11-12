@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, inviteClient, completeStep, sb, type ClientRole } from './backend';
-import type { ChatMessage, FileRef, MeetingCard } from './data';
+import type { ChatMessage, FileRef, MessageCard } from './data';
 import { keyFor, learnProfiles, timeLabel, toUiId } from './live';
 import { hydrateReactions, markNotSent } from './liveSync';
 import { mentionIds } from './liveNotes';
@@ -35,7 +35,7 @@ export type Space = {
   steps: Step[];
 };
 
-type Row = { id: number; space_id: string | null; lane: Lane | null; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; card?: MeetingCard | null; pinned_at?: string | null; edited_at?: string | null };
+type Row = { id: number; space_id: string | null; lane: Lane | null; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; card?: MessageCard | null; pinned_at?: string | null; edited_at?: string | null };
 const COLS = 'id, space_id, lane, user_id, parent_id, body, created_at, files, card, pinned_at, edited_at';
 
 export const laneKey = (space: string, lane: Lane) => space + ':' + lane;

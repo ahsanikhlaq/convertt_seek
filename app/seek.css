@@ -685,3 +685,7 @@ html.dark :is(.frow,.appr){background-color:var(--card)!important;border-color:v
 .timer.late b{color:var(--red)}
 .timer.ok{background:var(--oks);border-color:#cfe8d8}
 .timer.wait{background:var(--golds);color:var(--gold)}
+
+.pf-av{position:relative}
+.pf-photo{position:absolute;left:-4px;bottom:-4px;width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:var(--v);color:#fff;font-size:13px;cursor:pointer;display:grid;place-items:center}
+.av img{pointer-events:none}

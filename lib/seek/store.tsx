@@ -97,6 +97,11 @@ export function applyAccount(d: State, acc: Account | null) {
   const st = STATUSES.find((x) => x[0] === acc.status);
   if (st) d.status = { k: st[0], t: st[1] };
   setMe(d.me.name);
+  PEOPLE.AH = { ...PEOPLE.AH, photo: acc.avatar ?? undefined };
+  // your saved look follows you to every device
+  if (acc.look?.theme) d.theme = { ...d.theme, ...acc.look.theme } as State['theme'];
+  if (acc.look?.mode === 'light' || acc.look?.mode === 'dark' || acc.look?.mode === 'system') d.mode = acc.look.mode;
+  d.savedLook = JSON.stringify({ theme: d.theme, mode: d.mode });
   if (acc.workspace) {
     d.ws.name = acc.workspace.name;
     d.ws.logo = acc.workspace.logo ?? undefined;

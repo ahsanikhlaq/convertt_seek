@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { backendOn, DB_SCHEMA, sb } from './backend';
-import type { ChatMessage, FeedItem, State , MeetingCard } from './data';
+import type { ChatMessage, FeedItem, State , MessageCard } from './data';
 import { toDbId, toUiId } from './live';
 import { useSeek } from './store';
 
@@ -160,7 +160,7 @@ export function useLiveSync(me: string | null) {
         );
       })
       .on('postgres_changes', { event: 'UPDATE', schema: DB_SCHEMA, table: 'messages' }, (p) => {
-        const r = p.new as { id: number; body: string; edited_at: string | null; pinned_at: string | null; card: MeetingCard | null };
+        const r = p.new as { id: number; body: string; edited_at: string | null; pinned_at: string | null; card: MessageCard | null };
         if (!r.id) return;
         update((d) =>
           onMessage(d, toUiId(r.id), (m) => {

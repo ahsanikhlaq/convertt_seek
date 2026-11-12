@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, sb } from './backend';
-import type { ChatMessage, FileRef, PersonKey } from './data';
+import type { ChatMessage, FileRef, MessageCard, PersonKey } from './data';
 import { inviteByEmail, keyFor, learnProfiles, timeLabel, toUiId } from './live';
 import { hydrateReactions, markNotSent, markRead, unreadCounts } from './liveSync';
 import { useSeek } from './store';
@@ -14,7 +14,7 @@ import { useSeek } from './store';
  * (s.dms keyed by the other person, s.dm = the open one), so the existing feed and composer render it.
  */
 
-type Row = { id: number; dm_id: string | null; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; pinned_at?: string | null; edited_at?: string | null };
+type Row = { id: number; dm_id: string | null; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; pinned_at?: string | null; edited_at?: string | null; card?: MessageCard | null };
 
 export type LiveDms = {
   ready: boolean;
@@ -40,7 +40,7 @@ export function useLiveDms(): LiveDms | null {
   currentRef.current = current;
 
   const key = (userId: string) => keyFor(userId, me.current);
-  const toMsg = (r: Row, flash = false): ChatMessage => ({ kind: 'msg', id: toUiId(r.id), who: key(r.user_id), time: timeLabel(r.created_at), text: r.body, files: r.files?.length ? r.files : undefined, pinned: !!r.pinned_at, edited: !!r.edited_at, flash });
+  const toMsg = (r: Row, flash = false): ChatMessage => ({ kind: 'msg', id: toUiId(r.id), who: key(r.user_id), time: timeLabel(r.created_at), text: r.body, files: r.files?.length ? r.files : undefined, pinned: !!r.pinned_at, edited: !!r.edited_at, card: r.card ?? undefined, flash });
 
   /** Registers a conversation so it shows in the list (with no messages loaded yet). */
   const remember = (thread: string, other: string, last = '') => {
@@ -106,7 +106,7 @@ export function useLiveDms(): LiveDms | null {
       if (threadIds.length) {
         const [{ data: all }, { data: recent }] = await Promise.all([
           sb().from('dm_members').select('thread_id, user_id').in('thread_id', threadIds),
-          sb().from('messages').select('id, dm_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at').in('dm_id', threadIds).order('created_at', { ascending: false }).limit(400),
+          sb().from('messages').select('id, dm_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at, card').in('dm_id', threadIds).order('created_at', { ascending: false }).limit(400),
         ]);
         pairs = ((all ?? []) as { thread_id: string; user_id: string }[]).filter((p) => p.user_id !== me.current);
         lasts = (recent ?? []) as Row[];
@@ -166,7 +166,7 @@ export function useLiveDms(): LiveDms | null {
     (async () => {
       const { data, error } = await sb()
         .from('messages')
-        .select('id, dm_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at')
+        .select('id, dm_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at, card')
         .eq('dm_id', thread)
         .is('parent_id', null)
         .order('created_at', { ascending: false })
@@ -220,7 +220,7 @@ export function useLiveDms(): LiveDms | null {
       const { data, error } = await sb()
         .from('messages')
         .insert({ dm_id: thread, body: text })
-        .select('id, dm_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at')
+        .select('id, dm_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at, card')
         .single();
       if (error) {
         markNotSent(update, (d) => (d.dms[k] ||= { last: '', unread: 0, msgs: [] }).msgs, text, () => send(text));

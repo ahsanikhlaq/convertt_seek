@@ -14,7 +14,7 @@ import { decisionFrom, decisionsFor, loadDecisions, logDecision as saveDecision,
 import type { LiveDecision } from '@/lib/seek/data';
 import { PromptDialog } from './Dialogs';
 import { FileCards } from './Files';
-import { MeetingCardView } from './Meetings';
+import { HuddleCardView, MeetingCardView } from './Meetings';
 import { dueText, RemindDialog, SendLaterDialog, TaskDialog } from './Extras';
 import { editMessage, messageLink, pinMessage, saveMessage } from '@/lib/seek/liveExtras';
 import { approvalDraft } from '@/lib/seek/liveApprovals';
@@ -334,6 +334,7 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
         )}
         {m.files && m.files.length > 0 && <FileCards files={m.files} />}
         {m.card?.type === 'meeting' && <MeetingCardView c={m.card} />}
+        {m.card?.type === 'huddle' && <HuddleCardView c={m.card} call={m.text.startsWith('📞')} />}
         {m.after && (
           <div className="tx" style={{ marginTop: 6 }}>
             <RichText text={m.after} />

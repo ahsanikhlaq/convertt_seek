@@ -13,7 +13,7 @@ export function Avatar({ k, size = 32, className = '' }: { k: PersonKey; size?: 
       aria-hidden="true"
       title={p.name}
     >
-      {k === 'AI' ? '✦' : (p.initials ?? k)}
+      {p.photo ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit', display: 'block' }} /> : k === 'AI' ? '✦' : (p.initials ?? k)}
     </span>
   );
 }

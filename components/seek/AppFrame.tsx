@@ -4,13 +4,14 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PEOPLE, STATUSES, WORKSPACES, type PersonKey } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
-import { backendOn, currentAccount, saveProfile, saveStatus, signOut, uploadLogo } from '@/lib/seek/backend';
+import { backendOn, currentAccount, saveLook, saveProfile, saveStatus, signOut, uploadAvatar, uploadLogo } from '@/lib/seek/backend';
 import { prototypeName, ROUTES, routeFromPrototype, routeOf, type RouteKey } from '@/lib/seek/routes';
 import { setMe, useSeek } from '@/lib/seek/store';
 import { useLiveSync } from '@/lib/seek/liveSync';
 import { useLiveNotes } from '@/lib/seek/liveNotes';
 import { useLiveDecisions } from '@/lib/seek/liveDecisions';
 import { useLiveSaved, useLiveTasks, useReminders } from '@/lib/seek/liveExtras';
+import { useWorkspaceEmoji } from '@/lib/seek/liveEmoji';
 import { ConfirmDialog, Modal } from './Dialogs';
 import { WorkspaceSettings } from './WorkspaceSettings';
 import { usePopovers } from './Popovers';
@@ -34,6 +35,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   useLiveSync(meId);
   useLiveNotes(meId);
   useLiveDecisions(meId);
+  useWorkspaceEmoji(meId);
+  useSaveLook();
   const online = useOnline();
   useLiveSaved(meId);
   useLiveTasks(meId);
@@ -276,6 +279,24 @@ function ProfileDrawer() {
     if (!backendOn) return;
     void currentAccount().then((a) => a?.workspace && setOrg({ id: a.workspace.id, admin: ['owner', 'admin'].includes(a.workspace.role) }));
   }, []);
+  const photoIn = useRef<HTMLInputElement>(null);
+  const changePhoto = async (f: File | undefined) => {
+    if (!f) return;
+    if (!/^image\/(png|jpe?g|webp)$/.test(f.type) || f.size > 5 * 1024 * 1024) {
+      toast('Choose a PNG, JPG or WebP image up to 5 MB');
+      return;
+    }
+    setUploading(true);
+    const r = await uploadAvatar(f);
+    setUploading(false);
+    if (r.error || !r.url) {
+      toast(r.error ?? 'Couldn’t upload the photo');
+      return;
+    }
+    PEOPLE.AH = { ...PEOPLE.AH, photo: r.url };
+    update(() => {});
+    toast('Photo updated');
+  };
   const changeLogo = async (f: File | undefined) => {
     if (!f || !org) return;
     if (!/^image\/(png|jpe?g|webp|gif)$/.test(f.type)) {
@@ -310,6 +331,23 @@ function ProfileDrawer() {
             <span className="pf-av">
               <Avatar k="AH" size={84} />
               <span className={'st ' + s.status.k}></span>
+              {backendOn && (
+                <>
+                  <button type="button" className="pf-photo" disabled={uploading} onClick={() => photoIn.current?.click()} aria-label="Change your photo" title="Change your photo">
+                    ✎
+                  </button>
+                  <input
+                    ref={photoIn}
+                    type="file"
+                    hidden
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(e) => {
+                      void changePhoto(e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
+                  />
+                </>
+              )}
             </span>
             <div>
               <b className="pf-n">{s.me.name}</b>
@@ -513,4 +551,21 @@ function useOnline() {
     };
   }, []);
   return on;
+}
+
+/** Saves your theme and light/dark mode to your account (a moment after you change them). */
+function useSaveLook() {
+  const { s, update } = useSeek();
+  const on = backendOn && (s.session === 'in' || s.session === 'client');
+  const look = JSON.stringify({ theme: s.theme, mode: s.mode });
+  useEffect(() => {
+    if (!on || !s.savedLook || look === s.savedLook) return;
+    const id = setTimeout(() => {
+      void saveLook({ theme: s.theme as unknown as Record<string, string>, mode: s.mode });
+      update((d) => {
+        d.savedLook = look;
+      });
+    }, 1200);
+    return () => clearTimeout(id);
+  }, [on, look, s.savedLook]); // eslint-disable-line react-hooks/exhaustive-deps
 }

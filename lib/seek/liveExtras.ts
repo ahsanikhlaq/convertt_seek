@@ -393,3 +393,32 @@ export async function convOfMessage(id: number): Promise<string | null> {
   if (!m) return null;
   return m.channel_id ? 'ch:' + m.channel_id : m.dm_id ? 'dm:' + m.dm_id : 'sp:' + m.space_id + ':' + m.lane;
 }
+
+// ---------------------------------------------------------------- huddles and calls
+/**
+ * Starts a huddle (channel) or a call (DM): opens a private Seek video room for you and posts a HUDDLE card so
+ * others can join. Rooms are free Jitsi Meet rooms with a random name; nobody needs an account.
+ */
+export async function startHuddle(target: ConvTarget): Promise<string | null> {
+  const link = 'https://meet.jit.si/Seek-' + crypto.randomUUID().replace(/-/g, '').slice(0, 24);
+  // open the tab now, so popup blockers allow it
+  const w = window.open(link, '_blank');
+  if (w) w.opener = null;
+  let where: Record<string, string>;
+  if ('channel' in target) where = { channel_id: target.channel };
+  else if ('space' in target) where = { space_id: target.space, lane: target.lane ?? 'team' };
+  else {
+    const thread = await dmThreadWith(target.dmWith);
+    if (!thread) return 'Couldn’t open this conversation';
+    where = { dm_id: thread };
+  }
+  const { error } = await sb()
+    .from('messages')
+    .insert({ ...where, body: 'dmWith' in target ? '📞 Started a call' : '🎧 Started a huddle', card: { type: 'huddle', link } });
+  if (error) {
+    w?.close();
+    return 'Couldn’t start it. Check your connection';
+  }
+  if (!w) return 'Your browser blocked the video tab. Allow pop-ups for Seek, or press Join on the card';
+  return null;
+}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, sb, sendInvite } from './backend';
-import { PEOPLE, type ChatMessage, type FeedItem, type FileRef, type PersonKey } from './data';
+import { PEOPLE, type ChatMessage, type FeedItem, type FileRef, type MessageCard, type PersonKey } from './data';
 import { initialsOf, channelId as toChannelName, isEmail } from './format';
 import { hydrateReactions, markNotSent, markRead, unreadCounts } from './liveSync';
 import { mentionIds } from './liveNotes';
@@ -15,7 +15,7 @@ import { useSeek } from './store';
  * thread pane and composer render it unchanged. You are always person 'AH'; teammates are keyed by user id.
  */
 
-type Row = { id: number; channel_id: string; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; pinned_at?: string | null; edited_at?: string | null };
+type Row = { id: number; channel_id: string; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; pinned_at?: string | null; edited_at?: string | null; card?: MessageCard | null };
 type ChannelRow = { id: string; name: string; description: string; private?: boolean; created_by?: string | null };
 
 /** Database ids are offset so they never collide with ids the app hands out locally (decision cards, etc.). */
@@ -42,11 +42,11 @@ const learned = new Set<string>();
 export async function learnProfiles(ids: string[], me: string | null) {
   const missing = [...new Set(ids)].filter((id) => !learned.has(id));
   if (!missing.length) return;
-  const { data } = await sb().from('profiles').select('id, name, email').in('id', missing);
-  for (const p of (data ?? []) as { id: string; name: string; email: string }[]) {
+  const { data } = await sb().from('profiles').select('id, name, email, avatar_url').in('id', missing);
+  for (const p of (data ?? []) as { id: string; name: string; email: string; avatar_url: string | null }[]) {
     const name = displayName(p.name, p.email);
     const key = keyFor(p.id, me);
-    PEOPLE[key] = { name, color: key === 'AH' ? PEOPLE.AH?.color ?? colorFor(p.id) : colorFor(p.id), role: key === 'AH' ? 'You' : p.email, initials: initialsOf(name) };
+    PEOPLE[key] = { name, color: key === 'AH' ? PEOPLE.AH?.color ?? colorFor(p.id) : colorFor(p.id), role: key === 'AH' ? 'You' : p.email, initials: initialsOf(name), photo: key === 'AH' ? PEOPLE.AH?.photo : (p.avatar_url ?? undefined) };
     learned.add(p.id);
   }
 }
@@ -110,7 +110,7 @@ export function useLiveChat(): LiveChat | null {
     const byId = new Map<number, ChatMessage>();
     for (const r of rows) {
       if (r.parent_id == null) {
-        const m: ChatMessage = { kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), text: r.body, files: r.files?.length ? r.files : undefined, pinned: !!r.pinned_at, edited: !!r.edited_at };
+        const m: ChatMessage = { kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), text: r.body, files: r.files?.length ? r.files : undefined, pinned: !!r.pinned_at, edited: !!r.edited_at, card: r.card ?? undefined };
         roots.push(m);
         byId.set(r.id, m);
       }
@@ -246,7 +246,7 @@ export function useLiveChat(): LiveChat | null {
     (async () => {
       const { data, error } = await sb()
         .from('messages')
-        .select('id, channel_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at')
+        .select('id, channel_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at, card')
         .eq('channel_id', id)
         .order('created_at', { ascending: false })
         .limit(300);
@@ -277,7 +277,7 @@ export function useLiveChat(): LiveChat | null {
     const { data, error } = await sb()
       .from('messages')
       .insert({ channel_id, body, parent_id: parent, mentions: mentionIds(body, people.filter((k) => k !== 'AH')) })
-      .select('id, channel_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at')
+      .select('id, channel_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at, card')
       .single();
     if (error) {
       if (parent == null) {
