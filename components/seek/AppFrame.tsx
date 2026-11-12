@@ -9,6 +9,7 @@ import { prototypeName, ROUTES, routeFromPrototype, routeOf, type RouteKey } fro
 import { setMe, useSeek } from '@/lib/seek/store';
 import { useLiveSync } from '@/lib/seek/liveSync';
 import { useLiveNotes } from '@/lib/seek/liveNotes';
+import { useLiveDecisions } from '@/lib/seek/liveDecisions';
 import { ConfirmDialog, Modal } from './Dialogs';
 import { WorkspaceSettings } from './WorkspaceSettings';
 import { usePopovers } from './Popovers';
@@ -31,6 +32,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   }, [s.session]);
   useLiveSync(meId);
   useLiveNotes(meId);
+  useLiveDecisions(meId);
 
   // with a real backend, screens need a signed-in account with a profile; demo mode keeps every screen open like
   // the prototype. The welcome and join screens are always open: invite emails and invite links land there,

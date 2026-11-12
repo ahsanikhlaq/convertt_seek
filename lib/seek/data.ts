@@ -67,6 +67,26 @@ export type Decision = {
   /** History lines shown on a replaced decision ("Fri 15:02 · … logged by Ahsan"). */
   hist?: string[];
 };
+/** A saved decision (backend mode). Edits add a new one that replaces the old (`replaces`), so history is kept. */
+export type LiveDecision = {
+  id: number;
+  text: string;
+  kind: 'decision' | 'approval';
+  /** where it was agreed: 'ch:<id>', 'dm:<id>' or 'sp:<id>:<lane>' */
+  conv: string;
+  /** readable place: "# design", "DM · Sara", "Hollow & Bright · Client chat" */
+  place: string;
+  /** the other person in a DM (to open it) */
+  dmWith?: string;
+  /** client-visible (logged in a Client chat) */
+  client: boolean;
+  source: number | null;
+  by: string;
+  byId: string;
+  replaces: number | null;
+  replacedAt: string | null;
+  at: string;
+};
 export type Agent = { n: string; d: string; lv: string; sc: string; on: boolean; st: string };
 export type App = { id: string; n: string; d: string; to: string; tier: string; c: string; by: string; acc: string; on: boolean };
 export type AppRequest = { id: string; n: string; by: string; c: string };
@@ -109,6 +129,8 @@ export type State = {
   orgId?: string;
   /** backend mode: your latest notifications */
   notes?: Note[];
+  /** backend mode: the decision log you can see (newest first, replaced versions included) */
+  ldecs?: LiveDecision[];
   wsId: WorkspaceId;
   workspaces: Record<WorkspaceId, Workspace>;
   dm: PersonKey;

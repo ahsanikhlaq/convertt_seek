@@ -1,9 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { backendOn } from '@/lib/seek/backend';
-import type { Decision } from '@/lib/seek/data';
+import { useEffect, useState } from 'react';
+import { backendOn, currentAccount } from '@/lib/seek/backend';
+import type { Decision, LiveDecision } from '@/lib/seek/data';
+import { decisionRoute, decisionsCsv, flashMessage, historyOf, loadDecisions, openDecision, replaceDecision, sourceUiId, undoDecision } from '@/lib/seek/liveDecisions';
 import { now } from '@/lib/seek/format';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
@@ -13,13 +14,237 @@ import { MainHeader, Shell, Sidebar } from '../Shell';
 const whereLabel = (w: string) => (w === 'HB' ? 'Hollow & Bright' : w.startsWith('DM ') ? w : '#' + w);
 
 export function DecisionsPage() {
+  return backendOn ? <LiveDecisionsPage /> : <DemoDecisionsPage />;
+}
+
+const HOW = [
+  'Log one from any message: More, then Log decision, or press D.',
+  'Undo appears for a few seconds after logging.',
+  'Edit a decision to replace it. The old one stays in history.',
+  'Clients see decisions made in their Client chat; Team notes decisions stay private.',
+];
+
+const whenLabel = (iso: string) => {
+  const d = new Date(iso);
+  const days = Math.floor((Date.now() - d.getTime()) / 864e5);
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === new Date().toDateString()) return 'Today ' + time;
+  if (days < 6) return d.toLocaleDateString('en-GB', { weekday: 'short' }) + ' ' + time;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+};
+
+/** Backend mode: the real decision log, filtered by place and type, with edit history, undo and CSV export. */
+function LiveDecisionsPage() {
+  const { s, ui, update, setUI, toast } = useSeek();
+  const router = useRouter();
+  const [me, setMe] = useState<string | null>(null);
+  const [editing, setEditing] = useState<LiveDecision | null>(null);
+  const [q, setQ] = useState('');
+  const all = s.ldecs ?? [];
+  const current = all.filter((d) => !d.replacedAt);
+
+  useEffect(() => {
+    void currentAccount().then((a) => setMe(a?.id ?? null));
+  }, []);
+
+  const reload = async () => {
+    const list = await loadDecisions(s.orgId ?? null);
+    if (list)
+      update((d) => {
+        d.ldecs = list;
+      });
+  };
+
+  const places = Array.from(new Set(current.map((d) => d.place))).sort((a, b) => a.localeCompare(b));
+  const W: [string, string, number][] = [['All', 'Everywhere', current.length], ...places.map((p): [string, string, number] => [p, p, current.filter((d) => d.place === p).length])];
+  const T: [string, string][] = [
+    ['All', 'All types'],
+    ['decision', 'Decisions'],
+    ['approval', 'Approvals from clients'],
+    ['client', 'Visible to clients'],
+  ];
+  const where = W.some(([k]) => k === ui.dWhere) ? ui.dWhere : 'All';
+  const type = T.some(([k]) => k === ui.dType) ? ui.dType : 'All';
+  const needle = q.trim().toLowerCase();
+  const list = current.filter(
+    (d) =>
+      (where === 'All' || d.place === where) &&
+      (type === 'All' || (type === 'client' ? d.client : d.kind === type)) &&
+      (!needle || d.text.toLowerCase().includes(needle) || d.by.toLowerCase().includes(needle)),
+  );
+  const thisWeek = current.filter((d) => Date.now() - new Date(d.at).getTime() < 7 * 864e5).length;
+
+  const remove = async (d: LiveDecision) => {
+    if (!confirm(`Remove “${d.text}” from the log?` + (d.replaces != null ? ' The previous version comes back.' : ''))) return;
+    if (await undoDecision(d.id)) {
+      await reload();
+      toast('Decision removed');
+    } else toast('Couldn’t remove it. Only the person who logged it can');
+  };
+
+  const exportCsv = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + decisionsCsv(all)], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'decisions-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('Exported ' + all.length + ' decisions, including replaced ones');
+  };
+
+  const side = (
+    <Sidebar title="Decisions" sub="agreements, with where they came from">
+      <div className="sg lbl">Where</div>
+      {W.map(([k, l, n]) => (
+        <button key={k} type="button" className={'si' + (where === k ? ' on' : '')} aria-pressed={where === k} onClick={() => setUI({ dWhere: k, sideOpen: false })}>
+          <span className="x">
+            <b>{l}</b>
+          </span>
+          <span className="tag">{n}</span>
+        </button>
+      ))}
+      <div className="sg lbl">Type</div>
+      {T.map(([k, l]) => (
+        <button key={k} type="button" className={'si' + (type === k ? ' on' : '')} aria-pressed={type === k} onClick={() => setUI({ dType: k, sideOpen: false })}>
+          <span className="x">
+            <b>{l}</b>
+          </span>
+        </button>
+      ))}
+    </Sidebar>
+  );
+
+  return (
+    <Shell active="decisions" side={side}>
+      <MainHeader
+        title="Decisions"
+        sub="What the team agreed, who agreed it, and the message it came from."
+        right={
+          all.length ? (
+            <button type="button" className="btn sm" onClick={exportCsv}>
+              <span aria-hidden="true" style={{ marginRight: 4 }}>
+                ⇩
+              </span>
+              Export
+            </button>
+          ) : undefined
+        }
+      />
+      <div className="dl">
+        <div className="intro">
+          <p>{current.length ? 'Edit a decision to replace it; the old version stays in its history.' : 'Nothing logged yet.'}</p>
+          <span className="tag v">This week · {thisWeek}</span>
+        </div>
+        {current.length > 0 && (
+          <input className="inp" type="search" placeholder="Search decisions" aria-label="Search decisions" value={q} onChange={(e) => setQ(e.target.value)} style={{ margin: '0 0 4px' }} />
+        )}
+        {!current.length ? (
+          <div className="empty">No decisions logged. When the team agrees something, open the message&apos;s More menu and choose Log decision (or press D) so it&apos;s easy to find later.</div>
+        ) : list.length ? (
+          list.map((d) => {
+            const hist = historyOf(all, d);
+            return (
+              <div key={d.id} className={'dec' + (d.client ? ' gold' : '')}>
+                <div className="k">
+                  <span>{d.kind === 'approval' ? 'APPROVAL' : 'DECISION'}</span>
+                  {d.client && <span className="tag gold">client can see</span>}
+                  {hist.length > 0 && <span className="tag">edited</span>}
+                  <small style={{ marginLeft: 'auto' }}>{whenLabel(d.at)}</small>
+                </div>
+                <b>{d.text}</b>
+                <small>
+                  {hist.length ? 'Edited' : 'Logged'} by {d.by} · {d.place}
+                </small>
+                <div className="a">
+                  {d.source != null && (
+                    <button
+                      type="button"
+                      className="btn sm"
+                      onClick={() => {
+                        update((x) => openDecision(d, x, me));
+                        setUI({ chTab: 'Messages', thread: null });
+                        router.push(decisionRoute(d));
+                        const id = sourceUiId(d);
+                        if (id != null) flashMessage(id);
+                      }}
+                    >
+                      Source message
+                    </button>
+                  )}
+                  <button type="button" className="btn sm ghost" onClick={() => setEditing(d)}>
+                    Edit
+                  </button>
+                  {hist.length > 0 && (
+                    <button type="button" className="btn sm ghost" aria-expanded={ui.hist === d.id} onClick={() => setUI({ hist: ui.hist === d.id ? null : d.id })}>
+                      History ({hist.length})
+                    </button>
+                  )}
+                  {me === d.byId && (
+                    <button type="button" className="btn sm ghost" onClick={() => void remove(d)}>
+                      {d.replaces != null ? 'Undo edit' : 'Remove'}
+                    </button>
+                  )}
+                </div>
+                {ui.hist === d.id && (
+                  <div className="hist">
+                    <b style={{ color: 'var(--ink)' }}>History</b>
+                    <span>
+                      {whenLabel(d.at)} · “{d.text}” · {d.by} (current)
+                    </span>
+                    {hist.map((h) => (
+                      <span key={h.id} style={{ textDecoration: 'line-through' }}>
+                        {whenLabel(h.at)} · “{h.text}” · {h.by}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <div className="empty">No decisions match these filters.</div>
+        )}
+        <div className="how">
+          {HOW.map((t, i) => (
+            <div key={i}>
+              <i>{i + 1}</i>
+              {t}
+            </div>
+          ))}
+        </div>
+      </div>
+      {editing && (
+        <PromptDialog
+          title="Edit decision"
+          label={editing.client ? 'Decision (the client will see the change)' : 'Decision'}
+          initial={editing.text}
+          confirm="Replace decision"
+          multiline
+          onCancel={() => setEditing(null)}
+          onSubmit={async (n) => {
+            const d = editing;
+            setEditing(null);
+            if (n === d.text) return;
+            const err = await replaceDecision(d.id, n.slice(0, 300));
+            if (err) {
+              toast(err);
+              return;
+            }
+            await reload();
+            toast('Decision replaced · history kept');
+          }}
+        />
+      )}
+    </Shell>
+  );
+}
+
+function DemoDecisionsPage() {
   const { s, ui, update, setUI, toast, nextId } = useSeek();
   const router = useRouter();
   const [editing, setEditing] = useState<Decision | null>(null);
 
-  // with a backend, decisions aren't saved yet, so the prototype's sample log never shows
-  const decs = backendOn ? [] : s.decs;
-  const none = backendOn && !decs.length;
+  const decs = s.decs;
+  const none = false;
   // same order as the prototype (launch-squad, design, Hollow & Bright), then any other place in log order
   const places = Array.from(new Set(['launch-squad', 'design', 'HB', ...decs.map((d) => d.where)])).filter((p) => decs.some((d) => d.where === p));
   const W: [string, string, number][] = [['All', 'All channels', decs.length], ...places.map((p): [string, string, number] => [p, p === 'HB' ? 'Hollow & Bright' : p.startsWith('DM ') ? p : '# ' + p, decs.filter((d) => d.where === p).length])];

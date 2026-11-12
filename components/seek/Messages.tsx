@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { PEOPLE, type ChatMessage, type DecisionCard, type FeedItem, type PersonKey, type State } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
 import { ROUTES } from '@/lib/seek/routes';
@@ -9,6 +10,9 @@ import { useSeek } from '@/lib/seek/store';
 import { backendOn } from '@/lib/seek/backend';
 import { toDbId } from '@/lib/seek/live';
 import { deleteMessage, removeEverywhere, setReaction } from '@/lib/seek/liveSync';
+import { decisionFrom, decisionsFor, loadDecisions, logDecision as saveDecision, undoDecision } from '@/lib/seek/liveDecisions';
+import type { LiveDecision } from '@/lib/seek/data';
+import { PromptDialog } from './Dialogs';
 import { usePopovers } from './Popovers';
 import { Avatar, Emoji, RichText } from './ui';
 
@@ -27,9 +31,12 @@ const findMsg = (list: FeedItem[], id: number) => list.find((m): m is ChatMessag
 /* ---------------- one message ---------------- */
 
 function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inThread?: boolean }) {
-  const { update, ui, setUI, toast, nextId } = useSeek();
+  const { s, update, ui, setUI, toast, nextId } = useSeek();
   const pop = usePopovers();
   const menuOpen = ui.menu === m.id;
+  const [logging, setLogging] = useState(false);
+  // the agency's team logs decisions; clients see the ones from their Client chat
+  const canLog = s.session === 'in';
   const rx = m.rx || {};
   const p = PEOPLE[m.who] ?? { name: 'Someone', color: '#7a6179', role: '' };
 
@@ -120,6 +127,30 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
     });
   };
 
+  /** Backend mode: saves the decision (you can rephrase it first), with Undo for a few seconds. */
+  const logLive = async (text: string) => {
+    setLogging(false);
+    const r = await saveDecision(m.id, text);
+    if (r.error || r.id == null) {
+      toast(r.error ?? 'Couldn’t log the decision');
+      return;
+    }
+    const reload = async () => {
+      const list = await loadDecisions(s.session === 'in' ? (s.orgId ?? null) : null);
+      if (list)
+        update((d) => {
+          d.ldecs = list;
+        });
+    };
+    await reload();
+    toast('Decision logged', async () => {
+      if (await undoDecision(r.id!)) {
+        await reload();
+        toast('Decision removed');
+      } else toast('Couldn’t undo it. Remove it from the Decisions log');
+    });
+  };
+
   const copyText = async () => {
     setUI({ menu: null });
     try {
@@ -160,7 +191,11 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
       const k = e.key.toLowerCase();
       if (backendOn) {
         if (k === 'l') void copyText();
-        else if (k === 'escape') setUI({ menu: null });
+        else if (k === 'd' && live && canLog) {
+          e.preventDefault();
+          setUI({ menu: null });
+          setLogging(true);
+        } else if (k === 'escape') setUI({ menu: null });
         return;
       }
       if (k === 't') makeTask();
@@ -265,6 +300,18 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
       )}
       {menuOpen && backendOn && (
         <div className="mm" role="menu">
+          {live && canLog && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setUI({ menu: null });
+                setLogging(true);
+              }}
+            >
+              ◇ Log decision <kbd>D</kbd>
+            </button>
+          )}
           <button type="button" role="menuitem" onClick={() => void copyText()}>
             ⧉ Copy text <kbd>L</kbd>
           </button>
@@ -303,6 +350,48 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
           >
             🔗 Copy link <kbd>L</kbd>
           </button>
+        </div>
+      )}
+      {logging &&
+        createPortal(
+        <PromptDialog
+          title="Log decision"
+          label={feed.clientVisible ? 'Decision (the client will see it)' : 'Decision'}
+          initial={decisionFrom(m.text)}
+          confirm="Log decision"
+          multiline
+          onCancel={() => setLogging(false)}
+          onSubmit={(t) => void logLive(t.slice(0, 300))}
+        />,
+          document.body,
+        )}
+    </div>
+  );
+}
+
+/* ---------------- a saved decision under its message (backend mode) ---------------- */
+
+function LiveDecisionRow({ d }: { d: LiveDecision }) {
+  const { s } = useSeek();
+  const when = new Date(d.at);
+  const today = when.toDateString() === new Date().toDateString();
+  const label = today ? when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : when.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return (
+    <div className={'dec' + (d.client ? ' gold' : '')}>
+      <div className="k">
+        <span>{d.kind === 'approval' ? 'APPROVAL' : 'DECISION'}</span>
+        {d.client && <span className="tag gold">client</span>}
+        {d.replaces != null && <span className="tag">edited</span>}
+      </div>
+      <b>{d.text}</b>
+      <small>
+        Logged by {d.by} · {label}
+      </small>
+      {s.session === 'in' && (
+        <div className="a">
+          <Link className="btn sm" href={ROUTES.decisions}>
+            Open log
+          </Link>
         </div>
       )}
     </div>
@@ -352,7 +441,22 @@ function DecisionRow({ c }: { c: DecisionCard }) {
 export function FeedItemView({ item, feed, inThread }: { item: FeedItem; feed: FeedRef; inThread?: boolean }) {
   if (item.kind === 'new') return <div className="newsep">New</div>;
   if (item.kind === 'dec') return <DecisionRow c={item} />;
+  if (backendOn) return <LiveMessage m={item} feed={feed} inThread={inThread} />;
   return <MessageRow m={item} feed={feed} inThread={inThread} />;
+}
+
+/** A saved message with the decisions logged from it underneath (clients only see Client chat ones). */
+function LiveMessage({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inThread?: boolean }) {
+  const { s } = useSeek();
+  const decs = decisionsFor(s, m.id);
+  return (
+    <>
+      <MessageRow m={m} feed={feed} inThread={inThread} />
+      {decs.map((d) => (
+        <LiveDecisionRow key={d.id} d={d} />
+      ))}
+    </>
+  );
 }
 
 /** Scrollable message list that sticks to the newest message. */

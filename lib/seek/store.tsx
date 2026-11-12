@@ -76,6 +76,8 @@ export function applyAccount(d: State, acc: Account | null) {
     d.dm = '';
     d.lc = {};
     d.cs = '';
+    d.ldecs = [];
+    d.notes = [];
   }
   if (acc && !acc.workspace && acc.clientSpaces[0]) {
     const c = acc.clientSpaces.find((x) => x.id === d.cs) ?? acc.clientSpaces[0];
