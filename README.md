@@ -153,6 +153,22 @@ light/dark mode are saved to your account and follow you to other devices.
 once over the reply target. It shows in the clients list, the space's side panel, and the Status tab (with checklist
 progress, next meeting and open approvals).
 
+**Search (⌘K / Ctrl+K):** finds messages, files, decisions, people and client spaces (filter by kind), and opens the
+result in place. It runs in the database as you, so a client never finds Team notes, team channels or other clients.
+
+**AI agents:** the six agents from the spec with an on/off switch and permission level each (admins only; agents that
+can reach clients never "Act" on their own), Pause all AI for everyone, and a log of every change. The agents run once
+the AI connection (a Claude API key on the server) is added; until then the screen says so.
+
+**Profiles and the client view:** pronouns and working hours on your profile (the DM profile panel shows them, with
+the person's local time and status); your email-notification preference is saved for when email sending is set up.
+Clients get Upcoming calls (Join, Add to calendar) and Settings (name, role, email preference, desktop alerts, sign
+out). The reply timer uses the workspace's time zone.
+
+**Security tests:** `supabase/tests/security_rules.sql` checks every access rule (35 checks: client isolation, Team
+notes, files, search, approvals, decisions history, agents, outsiders). Paste it into the SQL Editor and run it after any
+database change; it rolls everything back and prints e.g. "RESULT: 35 passed, 0 failed".
+
 **Decisions:** any message's More menu → Log decision (or D) saves it with who logged it, where and the source
 message; the decision card shows under the message, and Undo is offered for a few seconds. In the Decisions log you
 filter by place and type, search, jump to the source message, edit (the new wording replaces the old, which stays in

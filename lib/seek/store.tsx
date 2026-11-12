@@ -93,7 +93,7 @@ export function applyAccount(d: State, acc: Account | null) {
   d.meId = acc.id;
   d.email = acc.email;
   // your real profile replaces the prototype's sample person
-  d.me = { ...d.me, email: acc.email, name: acc.name.trim() || acc.email.split('@')[0] || 'You', title: acc.title, tz: acc.timeZone || d.me.tz, dnd: !!acc.dndUntil && new Date(acc.dndUntil) > new Date() };
+  d.me = { ...d.me, email: acc.email, name: acc.name.trim() || acc.email.split('@')[0] || 'You', title: acc.title, tz: acc.timeZone || d.me.tz, dnd: !!acc.dndUntil && new Date(acc.dndUntil) > new Date(), pronouns: acc.pronouns, workHours: acc.workHours, notifyEmail: acc.notifyEmail };
   const st = STATUSES.find((x) => x[0] === acc.status);
   if (st) d.status = { k: st[0], t: st[1] };
   setMe(d.me.name);
@@ -105,6 +105,7 @@ export function applyAccount(d: State, acc: Account | null) {
   if (acc.workspace) {
     d.ws.name = acc.workspace.name;
     d.ws.logo = acc.workspace.logo ?? undefined;
+    if (acc.workspace.tz) d.ws.tz = acc.workspace.tz;
     // the organisation's brand colour is everyone's accent unless they picked their own
     if (acc.workspace.accent && d.theme.acc === DEFAULT_THEME.acc) d.theme = { ...d.theme, acc: acc.workspace.accent };
   }

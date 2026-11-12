@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { backendOn } from '@/lib/seek/backend';
-import { PEOPLE, type DmThread, type PersonKey } from '@/lib/seek/data';
+import { backendOn, sb } from '@/lib/seek/backend';
+import { clock, offsetOf, placeOf } from '@/lib/seek/liveMeetings';
+import { PEOPLE, STATUSES, type DmThread, type PersonKey } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
 import { useLiveDms } from '@/lib/seek/liveDms';
 import { useSeek } from '@/lib/seek/store';
@@ -37,6 +38,24 @@ function LiveDmsPage() {
   const attach = useAttach(dm && dm !== 'AH' ? { dmWith: dm } : null);
   const schedule = useSchedule(dm && dm !== 'AH' ? { dmWith: dm } : null);
   const [tab, setTab] = useState<'Messages' | 'Files' | 'Pins'>('Messages');
+  const [info, setInfo] = useState<{ title: string; pronouns: string; workHours: string; timeZone: string; status: string; email: string } | null>(null);
+  useEffect(() => {
+    setInfo(null);
+    if (!dm || dm === 'AH' || !ui.paneOpen) return;
+    let alive = true;
+    void sb()
+      .from('profiles')
+      .select('title, pronouns, work_hours, time_zone, status, email')
+      .eq('id', dm)
+      .maybeSingle()
+      .then(({ data }) => {
+        const p = data as { title: string; pronouns: string; work_hours: string; time_zone: string; status: string; email: string } | null;
+        if (alive && p) setInfo({ title: p.title, pronouns: p.pronouns, workHours: p.work_hours, timeZone: p.time_zone, status: p.status, email: p.email });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [dm, ui.paneOpen]);
   const [files, setFiles] = useState<SharedFile[] | null>(null);
   const msgs = dm ? (s.dms[dm]?.msgs ?? []) : [];
   const pinned = msgs.filter((m) => m.kind === 'msg' && m.pinned).length;
@@ -185,9 +204,34 @@ function LiveDmsPage() {
           <Avatar k={dm} size={72} />
           <div>
             <b style={{ fontSize: 17 }}>{nameOf(dm)}</b>
-            <div style={{ color: 'var(--sb)', fontSize: 13 }}>{PEOPLE[dm]?.role}</div>
+            <div style={{ color: 'var(--sb)', fontSize: 13 }}>
+              {[info?.title, info?.pronouns].filter(Boolean).join(' · ') || PEOPLE[dm]?.role}
+            </div>
           </div>
         </div>
+        {info && (
+          <div className="kv" style={{ marginTop: 12 }}>
+            <div>
+              <span>Status</span>
+              <b>{(STATUSES.find((x) => x[0] === info.status) ?? STATUSES[0])[2]} {(STATUSES.find((x) => x[0] === info.status) ?? STATUSES[0])[1]}</b>
+            </div>
+            <div>
+              <span>Local time</span>
+              <b>
+                {clock(new Date(), offsetOf(info.timeZone))}
+                {info.timeZone ? ' · ' + placeOf(info.timeZone) : ''}
+              </b>
+            </div>
+            <div>
+              <span>Working hours</span>
+              <b>Mon–Fri {info.workHours}</b>
+            </div>
+            <div>
+              <span>Email</span>
+              <b style={{ overflowWrap: 'anywhere' }}>{info.email}</b>
+            </div>
+          </div>
+        )}
       </Pane>
     ) : undefined;
 

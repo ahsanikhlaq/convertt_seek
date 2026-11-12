@@ -51,13 +51,17 @@ export type Account = {
   avatar: string | null;
   /** your saved look: theme tokens and light/dark mode */
   look: { theme?: Record<string, string>; mode?: string } | null;
+  pronouns: string;
+  workHours: string;
+  /** how often you want email notifications (used once Seek sends them) */
+  notifyEmail: 'instant' | 'daily' | 'off';
 };
 
 /** A client space you belong to as a client. */
 export type ClientSpaceRef = { id: string; name: string; project: string; code: string; color: string; agency: string; agencyLogo: string | null; role: string; invitedBy: string };
 
 /** A workspace (organization) you belong to. */
-export type Org = { id: string; name: string; slug: string; role: string; logo: string | null; joinCode: string; accent: string | null };
+export type Org = { id: string; name: string; slug: string; role: string; logo: string | null; joinCode: string; accent: string | null; tz?: string };
 
 /** Plain-language messages for the errors people actually hit. */
 function friendly(message: string): string {
@@ -137,16 +141,16 @@ export async function currentAccount(fresh = false): Promise<Account | null> {
   return p;
 }
 
-type OrgRow = { id: string; name: string; slug: string; logo_url: string | null; join_code: string; brand_accent: string | null };
+type OrgRow = { id: string; name: string; slug: string; logo_url: string | null; join_code: string; brand_accent: string | null; time_zone?: string };
 
 async function loadAccount(id: string, email: string): Promise<Account> {
   // anyone invited by email joins those workspaces the first time we see them signed in
   await sb().rpc('accept_my_invites');
   const [{ data: profile }, { data: memberships }, { data: spaces }] = await Promise.all([
-    sb().from('profiles').select('name, title, time_zone, onboarded_at, status, dnd_until, avatar_url, theme').eq('id', id).maybeSingle(),
+    sb().from('profiles').select('name, title, time_zone, onboarded_at, status, dnd_until, avatar_url, theme, pronouns, work_hours, notify_email').eq('id', id).maybeSingle(),
     sb()
       .from('workspace_members')
-      .select('role, joined_at, workspaces ( id, name, slug, logo_url, join_code, brand_accent )')
+      .select('role, joined_at, workspaces ( id, name, slug, logo_url, join_code, brand_accent, time_zone )')
       .eq('user_id', id)
       .order('joined_at', { ascending: true })
       .limit(20),
@@ -171,7 +175,7 @@ async function loadAccount(id: string, email: string): Promise<Account> {
   } catch {}
   const m = rows.find((r) => r.workspaces?.id === pref) ?? rows.find((r) => r.workspaces);
   const w = m?.workspaces;
-  const p = (profile ?? {}) as { name?: string; title?: string; time_zone?: string; onboarded_at?: string | null; status?: string; dnd_until?: string | null; avatar_url?: string | null; theme?: Account['look'] };
+  const p = (profile ?? {}) as { name?: string; title?: string; time_zone?: string; onboarded_at?: string | null; status?: string; dnd_until?: string | null; avatar_url?: string | null; theme?: Account['look']; pronouns?: string; work_hours?: string; notify_email?: Account['notifyEmail'] };
   return {
     id,
     email,
@@ -181,9 +185,12 @@ async function loadAccount(id: string, email: string): Promise<Account> {
     status: p.status ?? 'on',
     dndUntil: p.dnd_until ?? null,
     avatar: p.avatar_url ?? null,
+    pronouns: p.pronouns ?? '',
+    workHours: p.work_hours ?? '09:00–18:00',
+    notifyEmail: p.notify_email ?? 'instant',
     look: p.theme ?? null,
     onboarded: Boolean(p.onboarded_at),
-    workspace: w ? { id: w.id, name: w.name, slug: w.slug, role: m!.role, logo: w.logo_url, joinCode: w.join_code, accent: w.brand_accent } : null,
+    workspace: w ? { id: w.id, name: w.name, slug: w.slug, role: m!.role, logo: w.logo_url, joinCode: w.join_code, accent: w.brand_accent, tz: w.time_zone } : null,
     clientSpaces,
     orgs: rows
       .filter((r) => r.workspaces && r.role !== 'guest')
@@ -417,12 +424,15 @@ export async function createWorkspace(w:{ name: string; slug: string; tz: string
 }
 
 /** Saves your profile; the first save also marks it as set up, so the welcome screen doesn't come back. */
-export async function saveProfile(p: { name: string; title: string; timeZone?: string }): Promise<string | null> {
+export async function saveProfile(p: { name: string; title: string; timeZone?: string; pronouns?: string; workHours?: string; notifyEmail?: string }): Promise<string | null> {
   const { data } = await sb().auth.getUser();
   if (!data.user) return 'Not signed in';
   const now = new Date().toISOString();
   const row: Record<string, string> = { name: p.name, title: p.title, updated_at: now };
   if (p.timeZone) row.time_zone = p.timeZone;
+  if (p.pronouns != null) row.pronouns = p.pronouns.slice(0, 30);
+  if (p.workHours != null) row.work_hours = p.workHours.slice(0, 40);
+  if (p.notifyEmail) row.notify_email = p.notifyEmail;
   const { error } = await sb().from('profiles').update(row).eq('id', data.user.id);
   if (error) return friendly(error.message);
   await sb().from('profiles').update({ onboarded_at: now }).eq('id', data.user.id).is('onboarded_at', null);

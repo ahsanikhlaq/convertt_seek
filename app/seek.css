@@ -689,3 +689,21 @@ html.dark :is(.frow,.appr){background-color:var(--card)!important;border-color:v
 .pf-av{position:relative}
 .pf-photo{position:absolute;left:-4px;bottom:-4px;width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:var(--v);color:#fff;font-size:13px;cursor:pointer;display:grid;place-items:center}
 .av img{pointer-events:none}
+
+/* phone fixes for the newer screens */
+.mm{max-height:min(420px,70vh);overflow-y:auto}
+@media (max-width:760px){
+  .frow{flex-wrap:wrap}
+  .frow .x{flex:1 1 calc(100% - 56px)}
+  .frow>.btn,.frow>a.btn{flex:0 0 auto}
+  .appr .a .btn{flex:1 1 auto}
+  .appr .big{min-width:0;width:100%}
+  .files .file{max-width:100%}
+  .dl input[type=search]{width:100%}
+  .unsent{flex-wrap:wrap}
+  .offline{left:12px;right:12px;transform:none;text-align:center;border-radius:12px}
+}
+@media (max-width:480px){
+  .slots{grid-template-columns:1fr}
+  .mb .chips{flex-wrap:wrap}
+}

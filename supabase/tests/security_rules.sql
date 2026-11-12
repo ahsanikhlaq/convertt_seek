@@ -1,7 +1,7 @@
 -- Seek · security rule tests (spec section 7 and the rules each feature added)
 -- Paste into Supabase → SQL Editor and Run. It creates temporary data, checks every rule as the right kind of
 -- person, and always rolls everything back. The result is one line:
---   RESULT: 30 passed, 0 failed
+--   RESULT: 35 passed, 0 failed
 -- or the names of the checks that failed. Needs one workspace with an owner and three other sign-ins in auth.users.
 
 do $$
@@ -42,6 +42,10 @@ begin
   insert into seek.decisions (text, source_message_id) values ('Client decision', m_client) returning id into d_client;
   ap := seek.request_approval(sp, 'Hero B', 'v4', cli, current_date + 3);
   mt := seek.schedule_meeting(sp, 'Internal prep', now() + interval '1 day', 30, 'person', 'Office', '', false, false, '{}');
+
+  -- rule 4: admins change agents and pause AI (the owner is an admin)
+  begin perform seek.set_agent(ws, 'summariser', true, 'suggest'); perform seek.set_ai_paused(ws, true); ok := ok + 1;
+  exception when others then bad := bad + 1; failed := failed || ' admin-changes-agents'; end;
 
   -- rule 7: decisions keep history
   d_new := seek.replace_decision(d_client, 'Client decision v2');
@@ -87,6 +91,12 @@ begin
   exception when others then ok := ok + 1; end;
   begin insert into seek.decisions (text, source_message_id) values ('x', m_client); bad := bad + 1; failed := failed || ' client-logs-decision';
   exception when others then ok := ok + 1; end;
+  begin perform seek.set_ai_paused(ws, false); bad := bad + 1; failed := failed || ' client-resumes-ai';
+  exception when others then ok := ok + 1; end;
+  begin perform seek.set_agent(ws, 'away_assistant', true, 'ask'); bad := bad + 1; failed := failed || ' client-changes-agent';
+  exception when others then ok := ok + 1; end;
+  select count(*) into n from seek.agent_log where workspace_id = ws;
+  if n = 0 then ok := ok + 1; else bad := bad + 1; failed := failed || ' client-reads-agent-log'; end if;
 
   -- ------------------------------------------------------------ as the viewer (read-only client)
   perform set_config('request.jwt.claims', json_build_object('sub', viewer, 'role', 'authenticated')::text, true);
@@ -117,6 +127,8 @@ begin
   if n = 0 then ok := ok + 1; else bad := bad + 1; failed := failed || ' reads-others-notifications'; end if;
   begin perform seek.pin_message(m_chan, true); bad := bad + 1; failed := failed || ' outsider-pins';
   exception when others then ok := ok + 1; end;
+  select count(*) into n from seek.agent_settings where workspace_id = ws;
+  if n = 0 then ok := ok + 1; else bad := bad + 1; failed := failed || ' outsider-reads-agent-settings'; end if;
   update seek.messages set body = 'hacked' where id = m_chan; get diagnostics n = row_count;
   if n = 0 then ok := ok + 1; else bad := bad + 1; failed := failed || ' outsider-edits'; end if;
 

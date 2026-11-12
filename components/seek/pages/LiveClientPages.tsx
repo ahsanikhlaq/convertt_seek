@@ -14,7 +14,8 @@ import { ClientRail, MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
 import { ApprovalsTab, type Approver } from '../Approvals';
 import { ScheduleDialog } from '../Meetings';
-import { clock, dayLabel, toolName, upcomingMeetings, type Upcoming } from '@/lib/seek/liveMeetings';
+import { clock, dayLabel, downloadIcs, toolName, upcomingMeetings, type Upcoming } from '@/lib/seek/liveMeetings';
+import { saveProfile, signOut } from '@/lib/seek/backend';
 import { useSpaceWaits, waitFor, type Wait } from '@/lib/seek/liveTimer';
 import { FileList, useAttach } from '../Files';
 import { PinsList, useSchedule } from '../Extras';
@@ -59,6 +60,7 @@ function progress(sp: Space, side?: 'client' | 'team') {
 
 /** The Clients sidebar: every client space, newest first. */
 function ClientList({ live, current, onOpen, waits }: { live: LiveClients; current: Space | null; onOpen: (id: string) => void; waits?: Map<string, Wait> }) {
+  const tzLabel = useSeek().s.ws.tz;
   return (
     <Sidebar
       title="Clients"
@@ -73,7 +75,7 @@ function ClientList({ live, current, onOpen, waits }: { live: LiveClients; curre
       {live.spaces.length ? (
         live.spaces.map((x) => {
           const p = progress(x);
-          const w = waitFor(waits?.get(x.id), x.replyTarget, undefined);
+          const w = waitFor(waits?.get(x.id), x.replyTarget, tzLabel);
           return (
             <button key={x.id} type="button" className={'si' + (x.id === current?.id ? ' on' : '')} aria-current={x.id === current?.id ? 'page' : undefined} onClick={() => onOpen(x.id)}>
               <SpaceMark sp={x} />
@@ -124,6 +126,7 @@ function TeamClients({ live }: { live: LiveClients }) {
 
   const appr = useApprovals(sp?.id ?? null);
   const [scheduling, setScheduling] = useState(false);
+  const tzLabel = s.ws.tz;
   const clientMsgs = live.spaces.reduce((n, x) => n + (s.lc?.[laneKey(x.id, 'client')]?.length ?? 0), 0);
   const waits = useSpaceWaits(live.orgId, clientMsgs);
   const [nextMeeting, setNextMeeting] = useState<Upcoming | null>(null);
@@ -242,7 +245,7 @@ function TeamClients({ live }: { live: LiveClients }) {
       </>
     );
   } else if (tab === 'Status') {
-    const w = waitFor(waits.get(sp.id), sp.replyTarget, undefined);
+    const w = waitFor(waits.get(sp.id), sp.replyTarget, tzLabel);
     const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
     body = (
       <>
@@ -321,7 +324,7 @@ function TeamClients({ live }: { live: LiveClients }) {
         ))}
       </div>
       {(() => {
-        const w = waitFor(waits.get(sp.id), sp.replyTarget, undefined);
+        const w = waitFor(waits.get(sp.id), sp.replyTarget, tzLabel);
         return w ? (
           <div className={'timer' + (w.over ? ' late' : ' wait')}>
             <b>Reply target: {sp.replyTarget}</b>
@@ -697,7 +700,7 @@ function LiveMeetings({ live }: { live: LiveClients }) {
 
 // ---------------------------------------------------------------- the client's own view
 
-type PortalTab = 'start' | 'chat' | 'status' | 'approvals' | 'files' | 'pins';
+type PortalTab = 'start' | 'chat' | 'status' | 'approvals' | 'files' | 'pins' | 'calls' | 'settings';
 
 function ClientPortal({ live }: { live: LiveClients }) {
   const { s, update, setUI } = useSeek();
@@ -765,6 +768,8 @@ function ClientPortal({ live }: { live: LiveClients }) {
           ['approvals', 'Approvals', mineWaiting ? String(mineWaiting) : ''],
           ['files', 'Files', ''],
           ['pins', 'Pinned', ''],
+          ['calls', 'Upcoming calls', ''],
+          ['settings', 'Settings', ''],
         ] as [PortalTab, string, string][]
       ).map(([k, l, b]) => (
         <button key={k} type="button" className={'si' + (tab === k ? ' on' : '')} aria-current={tab === k ? 'page' : undefined} onClick={() => open(k)}>
@@ -816,6 +821,18 @@ function ClientPortal({ live }: { live: LiveClients }) {
     );
   } else if (tab === 'approvals') {
     body = <ApprovalsTab space={sp.id} list={appr.list} reload={appr.reload} me={live.me} team={false} approvers={[]} />;
+  } else if (tab === 'calls') {
+    body = (
+      <div className="pg">
+        <UpcomingCalls space={sp.id} />
+      </div>
+    );
+  } else if (tab === 'settings') {
+    body = (
+      <div className="pg">
+        <ClientSettings agency={agency} />
+      </div>
+    );
   } else if (tab === 'pins') {
     body = (
       <div className="pg">
@@ -886,7 +903,7 @@ function ClientPortal({ live }: { live: LiveClients }) {
   return (
     <Shell active="clients" side={side} rail={<ClientRail />}>
       <MainHeader
-        title={tab === 'chat' ? 'Conversation' : tab === 'status' ? 'Project status' : tab === 'approvals' ? 'Approvals' : tab === 'files' ? 'Files' : tab === 'pins' ? 'Pinned' : sp.name}
+        title={tab === 'chat' ? 'Conversation' : tab === 'status' ? 'Project status' : tab === 'approvals' ? 'Approvals' : tab === 'files' ? 'Files' : tab === 'pins' ? 'Pinned' : tab === 'calls' ? 'Upcoming calls' : tab === 'settings' ? 'Settings' : sp.name}
         sub={tab === 'chat' ? `You${others.length ? ', ' + others.map((k) => nameOf(k).split(' ')[0]).join(', ') : ''} and the ${agency} team` : `${sp.project || 'Project space'} · with ${agency}`}
         right={
           <span className="stack hide-m">
@@ -921,5 +938,127 @@ function SpaceFiles({ space, me, lanes }: { space: string; me: string | null; la
       lanes={lanes}
       empty={lanes ? 'No files yet. Share one with ＋ in Client chat (the client sees it) or Team notes (they never do).' : 'No files yet. Files you and the team share in the conversation show here.'}
     />
+  );
+}
+
+/** The client's upcoming calls with the agency (only the ones sent to them), with Join and Add to calendar. */
+function UpcomingCalls({ space }: { space: string }) {
+  const { s } = useSeek();
+  const [list, setList] = useState<Upcoming[] | null>(null);
+  const msgs = s.lc?.[laneKey(space, 'client')]?.length ?? 0;
+  useEffect(() => {
+    let alive = true;
+    void upcomingMeetings().then((l) => alive && setList((l ?? []).filter((m) => m.spaceId === space)));
+    return () => {
+      alive = false;
+    };
+  }, [space, msgs]);
+  if (!list) return <p className="sub">Loading…</p>;
+  if (!list.length) return <div className="empty">No calls booked. When the team schedules one with you, it shows here and in your conversation.</div>;
+  return (
+    <div className="flist">
+      {list.map((m) => {
+        const d = new Date(m.startsAt);
+        const end = new Date(d.getTime() + m.minutes * 60e3);
+        return (
+          <div key={m.id} className="frow">
+            <span className="av" style={{ width: 36, height: 36, borderRadius: 9, background: 'var(--v)', fontSize: 15, flex: 'none' }}>
+              ▤
+            </span>
+            <span className="x">
+              <b>{m.title}</b>
+              <small>
+                {dayLabel(d)} {clock(d, null)}–{clock(end, null)} (your time) · {toolName(m.tool)}
+              </small>
+            </span>
+            {m.link.startsWith('https://') && (
+              <a className="btn sm pri" href={m.link} target="_blank" rel="noopener noreferrer">
+                Join
+              </a>
+            )}
+            <button
+              type="button"
+              className="btn sm"
+              onClick={() => downloadIcs({ id: m.id, title: m.title, starts_at: m.startsAt, duration: m.minutes, tool: m.tool, link: m.link, agenda: '' }, s.ws.name || 'Seek')}
+            >
+              Add to calendar
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The client's own settings: their name and title, how often they get email, desktop alerts, sign out. */
+function ClientSettings({ agency }: { agency: string }) {
+  const { s, update, toast } = useSeek();
+  const [name, setName] = useState(s.me.name);
+  const [title, setTitle] = useState(s.me.title);
+  const [notify, setNotify] = useState<'instant' | 'daily' | 'off'>(s.me.notifyEmail ?? 'instant');
+  const [busy, setBusy] = useState(false);
+  const canAlert = typeof window !== 'undefined' && 'Notification' in window;
+  const [alerts, setAlerts] = useState(canAlert ? Notification.permission : 'denied');
+  return (
+    <div className="card" style={{ maxWidth: 560 }}>
+      <div className="ct">
+        <b>Your details</b>
+      </div>
+      <div className="fld">
+        <label htmlFor="cs-n">Your name</label>
+        <input id="cs-n" className="inp" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div className="fld">
+        <label htmlFor="cs-t">Your role</label>
+        <input id="cs-t" className="inp" value={title} maxLength={60} placeholder="e.g. Marketing lead" onChange={(e) => setTitle(e.target.value)} />
+      </div>
+      <div className="fld">
+        <label htmlFor="cs-e">Email me about replies, approvals and calls</label>
+        <select id="cs-e" className="inp" value={notify} onChange={(e) => setNotify(e.target.value as typeof notify)}>
+          <option value="instant">As they happen</option>
+          <option value="daily">Once a day (summary)</option>
+          <option value="off">Never (I’ll check Seek)</option>
+        </select>
+        <em>Saved now; email starts once {agency}’s Seek email sending is set up. You always see updates here and in 🔔.</em>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="btn pri"
+          disabled={busy || !name.trim()}
+          onClick={async () => {
+            setBusy(true);
+            const err = await saveProfile({ name: name.trim(), title: title.trim(), notifyEmail: notify });
+            setBusy(false);
+            if (err) return toast(err);
+            update((d) => {
+              d.me.name = name.trim();
+              d.me.title = title.trim();
+              d.me.notifyEmail = notify;
+            });
+            toast('Settings saved');
+          }}
+        >
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+        {canAlert && alerts !== 'granted' && (
+          <button
+            type="button"
+            className="btn"
+            onClick={async () => {
+              const r = await Notification.requestPermission();
+              setAlerts(r);
+              toast(r === 'granted' ? 'Desktop alerts are on' : 'Desktop alerts stay off (you can allow them in your browser)');
+            }}
+          >
+            Get desktop alerts
+          </button>
+        )}
+        <span style={{ flex: 1 }}></span>
+        <button type="button" className="btn ghost" onClick={() => void signOut().then(() => location.assign('/signup'))}>
+          Sign out
+        </button>
+      </div>
+    </div>
   );
 }

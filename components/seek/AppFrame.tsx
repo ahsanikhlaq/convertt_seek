@@ -332,6 +332,9 @@ function ProfileDrawer() {
   const pop = usePopovers();
   const [name, setName] = useState(s.me.name);
   const [title, setTitle] = useState(s.me.title);
+  const [pronouns, setPronouns] = useState(s.me.pronouns ?? '');
+  const [hours, setHours] = useState(s.me.workHours ?? '09:00–18:00');
+  const [notify, setNotify] = useState<'instant' | 'daily' | 'off'>(s.me.notifyEmail ?? 'instant');
   const [confirmReset, setConfirmReset] = useState(false);
   const close = () => setUI({ profile: false });
   const st = STATUSES.find((x) => x[0] === s.status.k)!;
@@ -454,6 +457,29 @@ function ProfileDrawer() {
             <label htmlFor="pft">Title</label>
             <input className="inp" id="pft" value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
+          {backendOn && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="fld">
+                <label htmlFor="pfp">Pronouns</label>
+                <input className="inp" id="pfp" maxLength={30} placeholder="e.g. she/her" value={pronouns} onChange={(e) => setPronouns(e.target.value)} />
+              </div>
+              <div className="fld">
+                <label htmlFor="pfh">Working hours</label>
+                <input className="inp" id="pfh" maxLength={40} value={hours} onChange={(e) => setHours(e.target.value)} />
+              </div>
+            </div>
+          )}
+          {backendOn && (
+            <div className="fld">
+              <label htmlFor="pfe">Email notifications</label>
+              <select id="pfe" className="inp" value={notify} onChange={(e) => setNotify(e.target.value as typeof notify)}>
+                <option value="instant">As they happen</option>
+                <option value="daily">Once a day (summary)</option>
+                <option value="off">Off</option>
+              </select>
+              <em>Saved now; emails start once Seek’s email sending is set up. In-app notifications always show in 🔔.</em>
+            </div>
+          )}
           <div className="kv">
             <div>
               <span>Email</span>
@@ -564,7 +590,7 @@ function ProfileDrawer() {
               const n = name.trim() || s.me.name;
               const ti = title.trim() || s.me.title;
               if (backendOn) {
-                const err = await saveProfile({ name: n, title: ti });
+                const err = await saveProfile({ name: n, title: ti, pronouns: pronouns.trim(), workHours: hours.trim() || '09:00–18:00', notifyEmail: notify });
                 if (err) {
                   toast(err);
                   return;
@@ -574,6 +600,9 @@ function ProfileDrawer() {
               update((d) => {
                 d.me.name = n;
                 d.me.title = ti;
+                d.me.pronouns = pronouns.trim();
+                d.me.workHours = hours.trim() || '09:00–18:00';
+                d.me.notifyEmail = notify;
               });
               close();
               toast('Profile saved');

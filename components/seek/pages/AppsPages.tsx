@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { backendOn } from '@/lib/seek/backend';
+import { useEffect, useState } from 'react';
+import { backendOn, currentAccount } from '@/lib/seek/backend';
+import { AGENTS, agentLog, levelName, LEVELS, loadAgents, setAgent, setAiPaused, type AgentKey, type AgentState, type Level, type LogEntry } from '@/lib/seek/liveAgents';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
@@ -48,6 +50,217 @@ const LOG: [string, string, string][] = [
 ];
 
 export function AgentsPage() {
+  return backendOn ? <LiveAgentsPage /> : <DemoAgentsPage />;
+}
+
+/** Backend mode: real settings. Admins switch agents, set levels and pause all AI; everyone sees the log. */
+function LiveAgentsPage() {
+  const { s, toast } = useSeek();
+  const ws = s.orgId ?? null;
+  const [admin, setAdmin] = useState(false);
+  const [data, setData] = useState<{ settings: Map<AgentKey, AgentState>; paused: boolean } | null>(null);
+  const [logOf, setLogOf] = useState<AgentKey | 'all' | null>(null);
+  const [log, setLog] = useState<LogEntry[] | null>(null);
+  const reload = async () => {
+    if (!ws) return;
+    const d = await loadAgents(ws);
+    if (d) setData(d);
+  };
+  useEffect(() => {
+    void currentAccount().then((a) => setAdmin(!!a?.workspace && ['owner', 'admin'].includes(a.workspace.role)));
+    void reload();
+  }, [ws]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!logOf || !ws) return;
+    setLog(null);
+    void agentLog(ws, logOf).then((l) => setLog(l ?? []));
+  }, [logOf, ws]);
+
+  const pa = !!data?.paused;
+  const running = data ? AGENTS.filter((a) => data.settings.get(a.key)?.enabled).length : 0;
+  const change = async (key: AgentKey, next: AgentState, msg: string) => {
+    if (!ws) return;
+    const err = await setAgent(ws, key, next.enabled, next.level);
+    toast(err ?? msg);
+    if (!err) await reload();
+  };
+
+  return (
+    <Shell active="agents" side={<AppsSide active="agents" />}>
+      <MainHeader
+        title="AI agents"
+        sub="Each agent follows the same hard rules, keeps a log, and can be switched off."
+        right={
+          <button type="button" className="btn sm" onClick={() => setLogOf('all')}>
+            Agent log
+          </button>
+        }
+      />
+      <div className="pg">
+        <div className="intro">
+          <div>
+            <h2>Your agents</h2>
+            <p>{data ? `${pa ? 0 : running} of ${AGENTS.length} switched on${pa ? ' · all paused' : ''}` : 'Loading…'}</p>
+          </div>
+          <div className={'pause' + (pa ? ' on' : '')} title={admin ? undefined : 'Only admins can change agents'}>
+            <div>
+              <b>{pa ? 'All AI paused' : 'Pause all AI'}</b>
+              <small>admins only</small>
+            </div>
+            <Switch
+              on={pa}
+              danger
+              disabled={!admin || !data}
+              label="Pause all AI"
+              onClick={async () => {
+                if (!ws) return;
+                const err = await setAiPaused(ws, !pa);
+                toast(err ?? (pa ? 'AI resumed' : 'All AI paused for everyone'));
+                if (!err) await reload();
+              }}
+            />
+          </div>
+        </div>
+        <div className="banner v" style={{ margin: 0 }}>
+          ✦{' '}
+          <span>
+            Agents are set up but not running yet: they start once the AI connection is added (a Claude API key, saved on the
+            server by an admin). Your choices here are kept and apply from then on.
+          </span>
+        </div>
+        {pa && (
+          <div className="banner gold" style={{ margin: 0 }}>
+            ⏸ <span>All AI is paused for everyone. Agents keep their settings and resume when you turn this off.</span>
+          </div>
+        )}
+        <div className="ag">
+          {AGENTS.map((a) => {
+            const st = data?.settings.get(a.key) ?? { enabled: a.on, level: a.level };
+            return (
+              <div key={a.key} className={'agc' + (!st.enabled || pa ? ' off' : '')}>
+                <div className="ct">
+                  <span className="ic">✦</span>
+                  <div>
+                    <b>{a.name}</b>
+                    <small>{a.does}</small>
+                  </div>
+                  <Switch
+                    on={st.enabled && !pa}
+                    disabled={pa || !admin || !data}
+                    label={'Turn ' + a.name + (st.enabled ? ' off' : ' on')}
+                    onClick={() => void change(a.key, { ...st, enabled: !st.enabled }, a.name + (st.enabled ? ' turned off' : ' turned on'))}
+                  />
+                </div>
+                <div className="tg">
+                  {admin ? (
+                    <select
+                      className="inp"
+                      style={{ width: 'auto', height: 28, fontSize: 12.5, padding: '0 8px' }}
+                      aria-label={'Permission level for ' + a.name}
+                      value={st.level}
+                      disabled={pa || !data}
+                      onChange={(e) => void change(a.key, { ...st, level: e.target.value as Level }, a.name + ': ' + levelName(e.target.value as Level))}
+                    >
+                      {LEVELS.filter(([l]) => !(a.client && l === 'act')).map(([l, n]) => (
+                        <option key={l} value={l}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="tag ai">{levelName(st.level)}</span>
+                  )}
+                  <span className={'tag' + (a.client ? ' gold' : '')}>{a.client ? 'Client-visible only' : 'Team side'}</span>
+                </div>
+                <div className="rules">
+                  <span>Never reads Team notes</span>
+                  <span>Never approves</span>
+                  <span>Shows sources</span>
+                  <span>Posts via What reaches clients</span>
+                </div>
+                <div className="ft">
+                  <span>{pa ? 'Paused' : !st.enabled ? 'Off' : a.needs ? 'Needs ' + a.needs : 'Waiting for the AI connection'}</span>
+                  <button type="button" className="btn sm" onClick={() => setLogOf(a.key)}>
+                    Log
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <RuleBoxes />
+      </div>
+      {logOf && (
+        <>
+          <div className="scrim" style={{ background: 'rgba(28,14,28,.3)' }} onClick={() => setLogOf(null)}></div>
+          <aside className="drawer" role="dialog" aria-label="Agent log">
+            <div className="ph">
+              <div style={{ flex: 1 }}>
+                <b>{logOf === 'all' ? 'All agents' : AGENTS.find((a) => a.key === logOf)?.name} · log</b>
+                <small>Every action and change, with sources</small>
+              </div>
+              <button type="button" className="x" onClick={() => setLogOf(null)} aria-label="Close log">
+                ×
+              </button>
+            </div>
+            <div className="pb">
+              {!log ? (
+                <p className="sub">Loading…</p>
+              ) : !log.length ? (
+                <div className="empty">Nothing yet. Changes to agents, and everything they do once running, are logged here.</div>
+              ) : (
+                <div className="log">
+                  {log.map((e) => (
+                    <div key={e.id}>
+                      <small>
+                        {new Date(e.at).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        {logOf === 'all' ? ' · ' + (e.agent === 'all' ? 'All AI' : (AGENTS.find((a) => a.key === e.agent)?.name ?? e.agent)) : ''}
+                      </small>
+                      <b style={{ fontWeight: 600 }}>{e.action}</b>
+                      {e.sources.length > 0 && <small>Sources: {e.sources.join(', ')}</small>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </aside>
+        </>
+      )}
+    </Shell>
+  );
+}
+
+function RuleBoxes() {
+  return (
+    <div className="rulebox">
+      <div className="card">
+        <div className="ct">
+          <b>Hard rules</b>
+          <span className="tag">Always on</span>
+        </div>
+        <ul>
+          <li>Never reads Team notes when talking to a client</li>
+          <li>Never approves, prices or promises dates</li>
+          <li>Always shows its sources</li>
+          <li>Posts to clients only through What reaches clients</li>
+        </ul>
+      </div>
+      <div className="card">
+        <div className="ct">
+          <b>Permission levels</b>
+        </div>
+        {LEVELS.map(([k, a, b]) => (
+          <div key={k} className="lv">
+            <b>{a}</b>
+            <span>{b}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DemoAgentsPage() {
   const { s, ui, update, setUI, toast } = useSeek();
   const pa = s.pauseAll;
 
