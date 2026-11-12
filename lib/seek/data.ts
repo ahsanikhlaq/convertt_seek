@@ -26,6 +26,8 @@ export type ChatMessage = {
   client?: boolean;
   src?: string;
   file?: [string, string];
+  /** backend mode: files attached to the message (in private storage) */
+  files?: FileRef[];
   after?: string;
   task?: string;
   rx?: Record<string, number>;
@@ -51,7 +53,7 @@ export type FeedItem = ChatMessage | DecisionCard | NewMarker;
 export type Channel = { id: string; unread: number; desc: string; tier?: string; private?: boolean; /** backend: the channel's database id */ cid?: string };
 
 /** A notification (backend mode): a DM, a mention, a thread reply or a client message. */
-export type Note = { id: number; kind: 'dm' | 'mention' | 'reply' | 'client' | 'team'; title: string; body: string; conv: string; actor: string | null; at: string; read: boolean };
+export type Note = { id: number; kind: 'dm' | 'mention' | 'reply' | 'client' | 'team' | 'approval'; title: string; body: string; conv: string; actor: string | null; at: string; read: boolean };
 export type DmThread = { last: string; unread: number; msgs: FeedItem[] };
 export type Space = { id: string; name: string; desc: string; wait: string; color: string };
 export type Decision = {
@@ -66,6 +68,23 @@ export type Decision = {
   a: string;
   /** History lines shown on a replaced decision ("Fri 15:02 · … logged by Ahsan"). */
   hist?: string[];
+};
+/** A file attached to a message: where it is stored, its name, size in bytes and type. */
+export type FileRef = { path: string; name: string; size: number; type: string };
+/** A formal approval in a client space (backend mode). */
+export type Approval = {
+  id: number;
+  spaceId: string;
+  title: string;
+  items: string;
+  approver: string;
+  due: string | null;
+  status: 'requested' | 'approved' | 'changes';
+  note: string;
+  requestedBy: string;
+  requestedAt: string;
+  respondedAt: string | null;
+  nudgedAt: string | null;
 };
 /** A saved decision (backend mode). Edits add a new one that replaces the old (`replaces`), so history is kept. */
 export type LiveDecision = {
@@ -95,7 +114,7 @@ export type Mode = 'light' | 'dark' | 'system';
 export type StatusKey = 'on' | 'mt' | 'fc' | 'aw';
 export type CustomEmoji = { n: string; src: string };
 export type WorkspaceId = 'C' | 'K';
-export type ClientTab = 'Client chat' | 'Team notes' | 'Status' | 'Approvals' | 'People';
+export type ClientTab = 'Client chat' | 'Team notes' | 'Status' | 'Approvals' | 'Files' | 'People';
 
 export type Workspace = { ch: string; channels: Channel[]; msgs: Record<string, FeedItem[]> };
 

@@ -650,3 +650,28 @@ button,a,[role=button]{-webkit-tap-highlight-color:transparent}
 .notes .ni.unread .x b:before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--v);margin-right:6px;vertical-align:middle}
 html.dark .notes{background:var(--card)}
 .mbell{display:none}@media (max-width:760px){.mbell{display:block}}
+
+/* files on messages and Files tabs (backend mode) */
+.files{display:flex;flex-wrap:wrap;gap:8px;margin-top:7px}
+.files .file{margin-top:0;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.files .file:hover{border-color:var(--v)}
+.fpic{padding:0;border:1px solid var(--ln);border-radius:10px;overflow:hidden;background:var(--bg);cursor:zoom-in;line-height:0}
+.fimg{display:block;max-width:260px;max-height:200px;width:auto;height:auto;object-fit:cover}
+.fimg.ph{width:180px;height:120px;background:var(--soft)}
+.flist{display:flex;flex-direction:column;gap:8px}
+.frow{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--ln);border-radius:12px;background:var(--card,#fff)}
+.frow>i{width:36px;height:36px;border-radius:8px;background:var(--vs);color:var(--v);display:grid;place-items:center;font-style:normal;font-weight:700;font-size:11px;flex:none}
+.frow .x{flex:1;min-width:0}.frow .x b{display:block;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.frow .x small{font-size:12px;color:var(--sb)}
+.comp .up{font-size:12px;color:var(--sb)}
+@media (max-width:760px){.fimg{max-width:100%}.frow .tag{display:none}}
+/* approvals */
+.appr{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border:1px solid var(--ln);border-radius:12px;background:var(--card,#fff);box-shadow:inset 4px 0 0 var(--gold)}
+.appr .k{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.appr .k b{font-size:15px}
+.appr .k .tag{margin-left:auto}
+.appr small{color:var(--sb);font-size:12.5px}
+.appr .note{background:var(--golds);border-radius:8px;padding:8px 10px;font-size:13px}
+.appr .a{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.appr.done{box-shadow:inset 4px 0 0 var(--ok,#1f6b45)}
+.appr .big{flex:1;min-width:140px;padding:12px;font-size:14px}
+html.dark :is(.frow,.appr){background-color:var(--card)!important;border-color:var(--ln)!important}

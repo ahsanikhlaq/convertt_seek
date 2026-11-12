@@ -11,6 +11,10 @@ import { useSeek } from '@/lib/seek/store';
 import { Composer, Feed, type FeedRef } from '../Messages';
 import { ClientRail, MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
+import { ApprovalsTab, type Approver } from '../Approvals';
+import { FileList, useAttach } from '../Files';
+import { useApprovals } from '@/lib/seek/liveApprovals';
+import { spaceFiles, type SharedFile } from '@/lib/seek/liveFiles';
 
 /**
  * Client spaces with a real backend. The agency's team sees every client with Client chat, Team notes, Status,
@@ -25,7 +29,7 @@ export function LiveClientsPage({ scheduling }: { scheduling?: boolean }) {
   return <TeamClients live={live} />;
 }
 
-const TABS: ClientTab[] = ['Client chat', 'Team notes', 'Status', 'Approvals', 'People'];
+const TABS: ClientTab[] = ['Client chat', 'Team notes', 'Status', 'Approvals', 'Files', 'People'];
 const ROLES: [ClientRole, string][] = [
   ['approver', 'Approver'],
   ['contributor', 'Contributor'],
@@ -106,6 +110,9 @@ function TeamClients({ live }: { live: LiveClients }) {
     setUI({ sideOpen: false });
   };
 
+  const appr = useApprovals(sp?.id ?? null);
+  const attachTeam = useAttach(sp ? { space: sp.id, lane: 'team' } : null);
+  const attachClient = useAttach(sp ? { space: sp.id, lane: 'client' } : null);
   const side = <ClientList live={live} current={sp} onOpen={open} />;
 
   if (!sp) {
@@ -142,6 +149,8 @@ function TeamClients({ live }: { live: LiveClients }) {
   const teamKeys = sp.team.map((t) => (t.userId === live.me ? 'AH' : t.userId)) as PersonKey[];
   const clientKeys = joined.map((p) => p.userId as PersonKey);
   const prog = progress(sp);
+  const approvers: Approver[] = sp.people.filter((p) => p.role === 'approver' && p.userId).map((p) => ({ userId: p.userId!, name: personName(p) }));
+  const waiting = (appr.list ?? []).filter((a) => a.status === 'requested');
 
   const tabs = (
     <div className="tabs" role="tablist">
@@ -149,6 +158,7 @@ function TeamClients({ live }: { live: LiveClients }) {
         <button key={t} type="button" role="tab" aria-selected={tab === t} className={'tb' + (tab === t ? ' on' : '') + (t === 'Client chat' ? ' gold' : '')} onClick={() => setTab(t)}>
           {t}
           {t === 'Status' && sp.status === 'onboarding' && prog.total > 0 && <span className="badge">{`${prog.done}/${prog.total}`}</span>}
+          {t === 'Approvals' && waiting.length > 0 && <span className="badge" style={{ background: 'var(--gold)' }}>{waiting.length}</span>}
         </button>
       ))}
     </div>
@@ -185,7 +195,7 @@ function TeamClients({ live }: { live: LiveClients }) {
           }
         />
         {team ? (
-          <Composer key={'team' + sp.id} placeholder="Note for the team…" people={teamKeys} onSend={(t) => void live.send(sp.id, 'team', t)} />
+          <Composer key={'team' + sp.id} placeholder="Note for the team…" people={teamKeys} onSend={(t) => void live.send(sp.id, 'team', t)} onAttach={attachTeam} />
         ) : (
           <Composer
             key={'client' + sp.id}
@@ -198,6 +208,7 @@ function TeamClients({ live }: { live: LiveClients }) {
               void live.send(sp.id, 'client', t);
               toast('Sent to ' + readers);
             }}
+            onAttach={attachClient}
           />
         )}
       </>
@@ -206,13 +217,20 @@ function TeamClients({ live }: { live: LiveClients }) {
     body = <Checklist live={live} sp={sp} />;
   } else if (tab === 'Approvals') {
     body = (
+      <ApprovalsTab
+        space={sp.id}
+        list={appr.list}
+        reload={appr.reload}
+        me={live.me}
+        team
+        approvers={approvers}
+        pendingApprovers={sp.people.filter((p) => p.role === 'approver' && !p.userId).map(firstName)}
+      />
+    );
+  } else if (tab === 'Files') {
+    body = (
       <div className="pg">
-        <div className="empty">
-          <b style={{ display: 'block', fontSize: 16, color: 'var(--ink)' }}>No approvals yet</b>
-          Formal sign-off on exact file versions lives here. A “yes” in Client chat is a decision, not an approval.
-          <br />
-          Requesting approvals arrives in a later update.
-        </div>
+        <SpaceFiles space={sp.id} me={live.me} lanes />
       </div>
     );
   } else {
@@ -247,6 +265,22 @@ function TeamClients({ live }: { live: LiveClients }) {
       <div className="timer">
         <b>Reply target: {sp.replyTarget}</b>Shown to {readers} in their space.
       </div>
+      {waiting.length > 0 && (
+        <div className="card">
+          <div className="ct">
+            <b>Waiting for approval</b>
+            <span className="tag gold">{waiting.length}</span>
+          </div>
+          {waiting.slice(0, 3).map((a) => (
+            <small key={a.id} style={{ display: 'block' }}>
+              {a.title} · {PEOPLE[a.approver]?.name ?? 'client'}
+            </small>
+          ))}
+          <button type="button" className="btn sm" onClick={() => setTab('Approvals')}>
+            Open approvals
+          </button>
+        </div>
+      )}
       {sp.status === 'onboarding' && prog.total > 0 && (
         <div className="card">
           <div className="ct">
@@ -513,7 +547,7 @@ function MeetingsEmpty({ live }: { live: LiveClients }) {
 
 // ---------------------------------------------------------------- the client's own view
 
-type PortalTab = 'start' | 'chat' | 'status';
+type PortalTab = 'start' | 'chat' | 'status' | 'approvals' | 'files';
 
 function ClientPortal({ live }: { live: LiveClients }) {
   const { s, update, setUI } = useSeek();
@@ -522,6 +556,18 @@ function ClientPortal({ live }: { live: LiveClients }) {
   const me = sp?.people.find((p) => p.userId === live.me) ?? null;
   const canWrite = !!me && me.role !== 'viewer';
   const agency = s.ws.name || 'your agency';
+  const appr = useApprovals(sp?.id ?? null);
+  const attach = useAttach(sp && canWrite ? { space: sp.id, lane: 'client' } : null);
+  const mineWaiting = (appr.list ?? []).filter((a) => a.status === 'requested' && a.approver === live.me).length;
+  // a notification about an approval opens the Approvals tab
+  useEffect(() => {
+    if (s.cTab === 'Approvals') {
+      setTab('approvals');
+      update((d) => {
+        d.cTab = 'Client chat';
+      });
+    }
+  }, [s.cTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the profile step is done once they've signed in and set up their profile
   const profileStep = sp?.steps.find((x) => x.kind === 'profile' && !x.doneAt)?.id;
@@ -566,6 +612,8 @@ function ClientPortal({ live }: { live: LiveClients }) {
           ['start', 'Getting started', prog.total ? `${prog.done}/${prog.total}` : ''],
           ['chat', 'Conversation', ''],
           ['status', 'Project status', ''],
+          ['approvals', 'Approvals', mineWaiting ? String(mineWaiting) : ''],
+          ['files', 'Files', ''],
         ] as [PortalTab, string, string][]
       ).map(([k, l, b]) => (
         <button key={k} type="button" className={'si' + (tab === k ? ' on' : '')} aria-current={tab === k ? 'page' : undefined} onClick={() => open(k)}>
@@ -609,11 +657,19 @@ function ClientPortal({ live }: { live: LiveClients }) {
           }
         />
         {canWrite ? (
-          <Composer key={'c' + sp.id} placeholder={`Message the ${agency} team…`} people={[...team, ...others]} onSend={(t) => void live.send(sp.id, 'client', t)} />
+          <Composer key={'c' + sp.id} placeholder={`Message the ${agency} team…`} people={[...team, ...others]} onSend={(t) => void live.send(sp.id, 'client', t)} onAttach={attach} />
         ) : (
           <div className="banner">You can read this conversation. Ask the team if you need to write here.</div>
         )}
       </>
+    );
+  } else if (tab === 'approvals') {
+    body = <ApprovalsTab space={sp.id} list={appr.list} reload={appr.reload} me={live.me} team={false} approvers={[]} />;
+  } else if (tab === 'files') {
+    body = (
+      <div className="pg">
+        <SpaceFiles space={sp.id} me={live.me} />
+      </div>
     );
   } else if (tab === 'status') {
     const all = progress(sp, 'client');
@@ -673,7 +729,7 @@ function ClientPortal({ live }: { live: LiveClients }) {
   return (
     <Shell active="clients" side={side} rail={<ClientRail />}>
       <MainHeader
-        title={tab === 'chat' ? 'Conversation' : tab === 'status' ? 'Project status' : sp.name}
+        title={tab === 'chat' ? 'Conversation' : tab === 'status' ? 'Project status' : tab === 'approvals' ? 'Approvals' : tab === 'files' ? 'Files' : sp.name}
         sub={tab === 'chat' ? `You${others.length ? ', ' + others.map((k) => nameOf(k).split(' ')[0]).join(', ') : ''} and the ${agency} team` : `${sp.project || 'Project space'} · with ${agency}`}
         right={
           <span className="stack hide-m">
@@ -685,5 +741,28 @@ function ClientPortal({ live }: { live: LiveClients }) {
       />
       {body}
     </Shell>
+  );
+}
+
+/** Every file shared in a client space that you can see (clients: only Client chat), newest first. */
+function SpaceFiles({ space, me, lanes }: { space: string; me: string | null; lanes?: boolean }) {
+  const { s } = useSeek();
+  const [files, setFiles] = useState<SharedFile[] | null>(null);
+  // reload when a message with files arrives in either lane
+  const count = (['client', 'team'] as const).reduce((n, l) => n + (s.lc?.[laneKey(space, l)] ?? []).filter((m) => m.kind === 'msg' && m.files?.length).length, 0);
+  useEffect(() => {
+    let alive = true;
+    void spaceFiles(space).then((f) => alive && setFiles(f ?? []));
+    return () => {
+      alive = false;
+    };
+  }, [space, count]);
+  return (
+    <FileList
+      files={files}
+      me={me}
+      lanes={lanes}
+      empty={lanes ? 'No files yet. Share one with ＋ in Client chat (the client sees it) or Team notes (they never do).' : 'No files yet. Files you and the team share in the conversation show here.'}
+    />
   );
 }

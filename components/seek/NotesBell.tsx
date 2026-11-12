@@ -8,7 +8,7 @@ import { markNotesRead, openNote } from '@/lib/seek/liveNotes';
 import { useSeek } from '@/lib/seek/store';
 import { Avatar } from './ui';
 
-const ICON: Record<Note['kind'], string> = { dm: '✉', mention: '@', reply: '↩', client: '◆', team: '◆' };
+const ICON: Record<Note['kind'], string> = { dm: '✉', mention: '@', reply: '↩', client: '◆', team: '◆', approval: '✓' };
 
 function ago(iso: string) {
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);

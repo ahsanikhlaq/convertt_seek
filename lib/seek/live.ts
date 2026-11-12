@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, sb, sendInvite } from './backend';
-import { PEOPLE, type ChatMessage, type FeedItem, type PersonKey } from './data';
+import { PEOPLE, type ChatMessage, type FeedItem, type FileRef, type PersonKey } from './data';
 import { initialsOf, channelId as toChannelName, isEmail } from './format';
 import { hydrateReactions, markRead, unreadCounts } from './liveSync';
 import { mentionIds } from './liveNotes';
@@ -15,7 +15,7 @@ import { useSeek } from './store';
  * thread pane and composer render it unchanged. You are always person 'AH'; teammates are keyed by user id.
  */
 
-type Row = { id: number; channel_id: string; user_id: string; parent_id: number | null; body: string; created_at: string };
+type Row = { id: number; channel_id: string; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[] };
 type ChannelRow = { id: string; name: string; description: string; private?: boolean; created_by?: string | null };
 
 /** Database ids are offset so they never collide with ids the app hands out locally (decision cards, etc.). */
@@ -110,7 +110,7 @@ export function useLiveChat(): LiveChat | null {
     const byId = new Map<number, ChatMessage>();
     for (const r of rows) {
       if (r.parent_id == null) {
-        const m: ChatMessage = { kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), text: r.body };
+        const m: ChatMessage = { kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), text: r.body, files: r.files?.length ? r.files : undefined };
         roots.push(m);
         byId.set(r.id, m);
       }
@@ -143,7 +143,7 @@ export function useLiveChat(): LiveChat | null {
         const list = (w.msgs[name] ||= []);
         if (r.parent_id == null) {
           if (list.some((m) => m.id === toUiId(r.id))) return;
-          list.push({ kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), text: r.body, flash: r.user_id === meRef.current });
+          list.push({ kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), text: r.body, files: r.files?.length ? r.files : undefined, flash: r.user_id === meRef.current });
         } else {
           const root = list.find((m): m is ChatMessage => m.kind === 'msg' && m.id === toUiId(r.parent_id!));
           if (!root) return;
@@ -246,7 +246,7 @@ export function useLiveChat(): LiveChat | null {
     (async () => {
       const { data, error } = await sb()
         .from('messages')
-        .select('id, channel_id, user_id, parent_id, body, created_at')
+        .select('id, channel_id, user_id, parent_id, body, created_at, files')
         .eq('channel_id', id)
         .order('created_at', { ascending: false })
         .limit(300);
@@ -277,7 +277,7 @@ export function useLiveChat(): LiveChat | null {
     const { data, error } = await sb()
       .from('messages')
       .insert({ channel_id, body, parent_id: parent, mentions: mentionIds(body, people.filter((k) => k !== 'AH')) })
-      .select('id, channel_id, user_id, parent_id, body, created_at')
+      .select('id, channel_id, user_id, parent_id, body, created_at, files')
       .single();
     if (error) {
       toast('Message not sent. Check your connection and try again');

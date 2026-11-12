@@ -11,6 +11,7 @@ import { InviteDialog } from '../InviteDialog';
 import { Composer, Feed, type FeedRef } from '../Messages';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
+import { useAttach } from '../Files';
 
 export function DmsPage() {
   // with a backend, DMs are real (lib/seek/liveDms.ts); the demo below stays exactly like the prototype
@@ -30,6 +31,7 @@ function LiveDmsPage() {
   const dm = s.dms[s.dm] ? s.dm : null;
   const feed: FeedRef = { get: (d) => (d.dms[dm as PersonKey] ||= { last: '', unread: 0, msgs: [] }).msgs, where: 'DM ' + (dm ? nameOf(dm) : '') };
   const others = (live?.people ?? []).filter((k) => !s.dms[k]);
+  const attach = useAttach(dm && dm !== 'AH' ? { dmWith: dm } : null);
 
   const open = async (k: PersonKey) => {
     setPicking(false);
@@ -150,7 +152,7 @@ function LiveDmsPage() {
       {dm ? (
         <>
           <Feed key={dm} feed={feed} banner={<div className="banner v">🔒 This conversation is just between you and {nameOf(dm)}.</div>} />
-          <Composer key={'c' + dm} placeholder={'Message ' + nameOf(dm)} people={[dm, 'AH']} onSend={(t) => void live?.send(t)} />
+          <Composer key={'c' + dm} placeholder={'Message ' + nameOf(dm)} people={[dm, 'AH']} onSend={(t) => void live?.send(t)} onAttach={attach} />
         </>
       ) : (
         <div className="pg">

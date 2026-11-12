@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { backendOn } from '@/lib/seek/backend';
 import { WORKSPACES, type PersonKey } from '@/lib/seek/data';
 import { useLiveChat } from '@/lib/seek/live';
@@ -12,6 +12,8 @@ import { ChannelMembersDialog, NewChannelDialog } from '../ChannelDialogs';
 import { Composer, Feed, ThreadPane, useSendTo, type FeedRef } from '../Messages';
 import { MainHeader, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
+import { FileList, useAttach } from '../Files';
+import { channelFiles, type SharedFile } from '@/lib/seek/liveFiles';
 
 const TEAM: PersonKey[] = ['AH', 'SY', 'MO', 'ZA'];
 const TABS = ['Messages', 'Files', 'Canvas', 'Pins'];
@@ -30,6 +32,7 @@ export function ChannelsPage() {
   const c = ws.channels.find((x) => x.id === ch) ?? { id: ch, unread: 0, desc: '' };
   const feed: FeedRef = { get: (d) => (d.workspaces[wsId].msgs[ch] ||= []), where: ch, threads: true };
   const send = useSendTo(feed);
+  const attach = useAttach(live && c.cid ? { channel: c.cid } : null);
 
   const open = (id: string) => {
     update((d) => {
@@ -120,17 +123,21 @@ export function ChannelsPage() {
             ↓ 2 new messages
           </button>
         )}
-        <Composer key={wsId + ch} placeholder={'Message #' + ch} people={team} onSend={(t) => (live ? void live.send(ch, t) : send(t))} />
+        <Composer key={wsId + ch} placeholder={'Message #' + ch} people={team} onSend={(t) => (live ? void live.send(ch, t) : send(t))} onAttach={attach} />
       </>
+    );
+  } else if (live && ui.chTab === 'Files') {
+    body = (
+      <div className="pg">
+        <ChannelFiles key={c.cid} cid={c.cid ?? null} me={live.me} name={ch} />
+      </div>
     );
   } else if (live) {
     // with a backend, files, canvases and pins aren't saved yet, so a real channel shows empty tabs, not samples
     body = (
       <div className="pg">
         <div className="empty">
-          {ui.chTab === 'Files'
-            ? 'No files yet. Files shared in this channel land here, with every version kept. Sharing files arrives in a later update.'
-            : ui.chTab === 'Canvas'
+          {ui.chTab === 'Canvas'
               ? "No canvas yet. A canvas keeps the channel's brief, owners and key dates in one place. Canvases arrive in a later update."
               : 'Nothing pinned yet. Pinned messages stay here so everyone in #' + ch + ' can find them. Pinning arrives in a later update.'}
         </div>
@@ -278,4 +285,21 @@ export function ChannelsPage() {
       )}
     </Shell>
   );
+}
+
+/** Backend mode: every file shared in the channel, newest first (live as new ones arrive). */
+function ChannelFiles({ cid, me, name }: { cid: string | null; me: string | null; name: string }) {
+  const { s } = useSeek();
+  const [files, setFiles] = useState<SharedFile[] | null>(null);
+  // reload when a new message with files arrives in this channel
+  const withFiles = (s.workspaces.C.msgs[name] ?? []).filter((m) => m.kind === 'msg' && m.files?.length).length;
+  useEffect(() => {
+    if (!cid) return;
+    let alive = true;
+    void channelFiles(cid).then((f) => alive && setFiles(f ?? []));
+    return () => {
+      alive = false;
+    };
+  }, [cid, withFiles]);
+  return <FileList files={cid ? files : []} me={me} empty={'No files yet. Use ＋ in the message box (or drop files on it) to share one in #' + name + '.'} />;
 }

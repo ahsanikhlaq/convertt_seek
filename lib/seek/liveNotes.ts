@@ -46,7 +46,7 @@ export function openNote(n: Note, d: State, me: string | null): string {
     return ROUTES.dms;
   }
   d.cs = id;
-  d.cTab = lane === 'team' ? 'Team notes' : 'Client chat';
+  d.cTab = lane === 'team' ? 'Team notes' : lane === 'approvals' ? 'Approvals' : 'Client chat';
   return ROUTES.clients;
 }
 

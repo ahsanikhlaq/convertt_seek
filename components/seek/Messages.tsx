@@ -13,6 +13,8 @@ import { deleteMessage, removeEverywhere, setReaction } from '@/lib/seek/liveSyn
 import { decisionFrom, decisionsFor, loadDecisions, logDecision as saveDecision, undoDecision } from '@/lib/seek/liveDecisions';
 import type { LiveDecision } from '@/lib/seek/data';
 import { PromptDialog } from './Dialogs';
+import { FileCards } from './Files';
+import { approvalDraft } from '@/lib/seek/liveApprovals';
 import { usePopovers } from './Popovers';
 import { Avatar, Emoji, RichText } from './ui';
 
@@ -239,6 +241,7 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
             </div>
           </div>
         )}
+        {m.files && m.files.length > 0 && <FileCards files={m.files} />}
         {m.after && (
           <div className="tx" style={{ marginTop: 6 }}>
             <RichText text={m.after} />
@@ -372,7 +375,7 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
 /* ---------------- a saved decision under its message (backend mode) ---------------- */
 
 function LiveDecisionRow({ d }: { d: LiveDecision }) {
-  const { s } = useSeek();
+  const { s, update } = useSeek();
   const when = new Date(d.at);
   const today = when.toDateString() === new Date().toDateString();
   const label = today ? when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : when.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -389,6 +392,20 @@ function LiveDecisionRow({ d }: { d: LiveDecision }) {
       </small>
       {s.session === 'in' && (
         <div className="a">
+          {d.client && d.kind === 'decision' && d.conv.startsWith('sp:') && (
+            <button
+              type="button"
+              className="btn sm gold"
+              onClick={() => {
+                approvalDraft.current = { decision: d.id, title: d.text, space: d.conv.split(':')[1] };
+                update((x) => {
+                  x.cTab = 'Approvals';
+                });
+              }}
+            >
+              Request formal approval
+            </button>
+          )}
           <Link className="btn sm" href={ROUTES.decisions}>
             Open log
           </Link>
@@ -513,6 +530,7 @@ export function Composer({
   thread,
   autoFocus,
   style,
+  onAttach,
 }: {
   placeholder: string;
   button?: string;
@@ -523,8 +541,12 @@ export function Composer({
   thread?: boolean;
   autoFocus?: boolean;
   style?: React.CSSProperties;
+  /** backend mode: uploads files with the typed text as their caption; resolves true when sent */
+  onAttach?: (files: File[], caption: string) => Promise<boolean>;
 }) {
   const { toast } = useSeek();
+  const fileIn = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(0);
   const pop = usePopovers();
   const ta = useRef<HTMLTextAreaElement>(null);
   const [v, setV] = useState('');
@@ -579,6 +601,18 @@ export function Composer({
     });
   };
 
+  const attach = async (list: FileList | File[] | null | undefined) => {
+    const files = Array.from(list ?? []);
+    if (!files.length || !onAttach || uploading) return;
+    setUploading(files.length);
+    const ok = await onAttach(files, v.trim());
+    setUploading(0);
+    if (ok) {
+      setV('');
+      setMn(null);
+    }
+  };
+
   const send = () => {
     const text = v.trim();
     if (!text) return;
@@ -588,7 +622,20 @@ export function Composer({
   };
 
   return (
-    <div className={'comp' + (gold ? ' gold' : '')} style={{ position: 'relative', ...style }}>
+    <div
+      className={'comp' + (gold ? ' gold' : '')}
+      style={{ position: 'relative', ...style }}
+      onDragOver={onAttach ? (e) => e.preventDefault() : undefined}
+      onDrop={
+        onAttach
+          ? (e) => {
+              if (!e.dataTransfer.files.length) return;
+              e.preventDefault();
+              void attach(e.dataTransfer.files);
+            }
+          : undefined
+      }
+    >
       <textarea
         ref={ta}
         rows={1}
@@ -663,9 +710,29 @@ export function Composer({
           </label>
         ) : (
           <>
-            <button type="button" className="ic" onClick={() => toast('Attach a file')} aria-label="Attach a file">
+            <button
+              type="button"
+              className="ic"
+              onClick={() => (onAttach ? fileIn.current?.click() : toast('Attach a file'))}
+              aria-label="Attach files"
+              title="Attach files (up to 100 MB each)"
+              disabled={!!uploading}
+            >
               ＋
             </button>
+            {onAttach && (
+              <input
+                ref={fileIn}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => {
+                  void attach(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+            )}
+            {uploading > 0 && <small className="up">Uploading {uploading === 1 ? 'file' : uploading + ' files'}…</small>}
             <button type="button" className="ic" onClick={(e) => pop.openEmoji(e.currentTarget, (k) => insert(k))} aria-label="Emoji">
               ☺
             </button>
@@ -676,7 +743,7 @@ export function Composer({
           </>
         )}
         <span className="sp"></span>
-        {!thread && (
+        {!thread && !onAttach && (
           <button type="button" className="btn sm ghost" onClick={() => toast('Scheduled for tomorrow 09:00')}>
             Send later
           </button>

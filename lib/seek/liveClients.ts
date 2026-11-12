@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, inviteClient, completeStep, sb, type ClientRole } from './backend';
-import type { ChatMessage } from './data';
+import type { ChatMessage, FileRef } from './data';
 import { keyFor, learnProfiles, timeLabel, toUiId } from './live';
 import { hydrateReactions } from './liveSync';
 import { mentionIds } from './liveNotes';
@@ -35,8 +35,8 @@ export type Space = {
   steps: Step[];
 };
 
-type Row = { id: number; space_id: string | null; lane: Lane | null; user_id: string; parent_id: number | null; body: string; created_at: string };
-const COLS = 'id, space_id, lane, user_id, parent_id, body, created_at';
+type Row = { id: number; space_id: string | null; lane: Lane | null; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[] };
+const COLS = 'id, space_id, lane, user_id, parent_id, body, created_at, files';
 
 export const laneKey = (space: string, lane: Lane) => space + ':' + lane;
 /** People still to join (invited, not signed in yet). */
@@ -83,6 +83,7 @@ export function useLiveClients(): LiveClients | null {
     who: keyFor(r.user_id, me.current),
     time: timeLabel(r.created_at),
     text: r.body,
+    files: r.files?.length ? r.files : undefined,
     flash,
     client: side === 'team' && clientIds.current.has(r.user_id),
   });

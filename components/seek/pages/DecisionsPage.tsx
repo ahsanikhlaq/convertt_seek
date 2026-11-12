@@ -170,15 +170,18 @@ function LiveDecisionsPage() {
                       Source message
                     </button>
                   )}
-                  <button type="button" className="btn sm ghost" onClick={() => setEditing(d)}>
-                    Edit
-                  </button>
+                  {d.kind === 'decision' && (
+                    <button type="button" className="btn sm ghost" onClick={() => setEditing(d)}>
+                      Edit
+                    </button>
+                  )}
+                  {d.kind === 'approval' && <span className="tag gold">signed off by the client · can’t be edited</span>}
                   {hist.length > 0 && (
                     <button type="button" className="btn sm ghost" aria-expanded={ui.hist === d.id} onClick={() => setUI({ hist: ui.hist === d.id ? null : d.id })}>
                       History ({hist.length})
                     </button>
                   )}
-                  {me === d.byId && (
+                  {me === d.byId && d.kind === 'decision' && (
                     <button type="button" className="btn sm ghost" onClick={() => void remove(d)}>
                       {d.replaces != null ? 'Undo edit' : 'Remove'}
                     </button>

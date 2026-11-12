@@ -23,7 +23,7 @@ tab bar on phones, links and buttons on each screen, and the ⌘K / Ctrl+K searc
 | `/join?c=…` | Join an organization with its invite link: email → 6-digit code → profile |
 | `/channels` | Team channels, threads, reactions, mentions, tasks and decisions from messages |
 | `/dms` | Direct messages with a profile panel |
-| `/clients` | Client spaces: Client chat, Team notes, Status, Approvals, People |
+| `/clients` | Client spaces: Client chat, Team notes, Status, Approvals, Files, People |
 | `/meetings` | Schedule a call with a client (opens over the client space) |
 | `/invite` | Invite a client: send, email preview, client joins with a code |
 | `/decisions` | Decision log with filters, edit history and CSV export |
@@ -61,8 +61,8 @@ Seek runs in two modes:
   sign-in link in Supabase's default email), create a workspace and invite teammates. Signed-out visitors go to
   sign-up. **Channels** are real: messages and thread replies are saved and arrive live for everyone in the
   workspace, new channels can be created, and **＋ Invite people** emails a sign-in code/link — the invited
-  person joins the workspace the first time they sign in. DMs, Clients, Decisions, Agents and Apps are still sample
-  data.
+  person joins the workspace the first time they sign in. DMs, client spaces, decisions, approvals, files and
+  notifications are real too; AI agents, apps and meetings are still sample screens.
 
 ```bash
 cp .env.example .env.local   # then fill in from Supabase → Project Settings → API Keys
@@ -121,8 +121,17 @@ admins). New channels default to private. Invites can include private channels; 
 link see open channels only until someone adds them. The database enforces it for channels, messages and search.
 
 **Chat:** reactions are saved and live (several per person), you can delete your own messages (removed for everyone,
-live), and read positions are saved, so unread badges are right after a reload or on another device. Tasks,
-decisions, reminders and saving messages come with the Decisions milestone.
+live), and read positions are saved, so unread badges are right after a reload or on another device. Files: ＋ in
+the message box (or drop files on it) shares up to 10 files of up to 100 MB each; images show a preview. Files live in
+the private `seek-files` bucket under the conversation they were shared in, and storage only gives them (as links
+that expire after an hour) to people who can see that conversation. Channels and client spaces have a Files tab.
+
+**Decisions:** any message's More menu → Log decision (or D) saves it with who logged it, where and the source
+message; the decision card shows under the message, and Undo is offered for a few seconds. In the Decisions log you
+filter by place and type, search, jump to the source message, edit (the new wording replaces the old, which stays in
+History), remove your own, and export everything as CSV. A decision is visible to exactly the people who can see its
+conversation: one from Client chat is gold and the client sees it; one from Team notes or a channel never reaches a
+client.
 
 **Notifications:** the database writes a notification for every DM, @mention (and @everyone/@here), thread reply,
 client message and team reply in Client chat. The 🔔 shows them live with an unread count; clicking one opens the
@@ -137,10 +146,15 @@ removed or demoted. Everyone else sees it read-only.
 **Client spaces** (Clients → ＋ New): a four-step wizard (who the client is, their onboarding checklist, reply target
 and tone, review and invite) creates the space and emails each client person a Join link. Clients sign in with a
 code and see only their own project: a getting-started checklist, the Client chat and their team. The agency's team
-sees Client chat, Team notes (never shown to the client), Status (both sides' checklist), Approvals and People
-(roles, resend invite, remove). The database enforces the split: a client session never receives Team notes, team
-channels or other clients. Decisions, meetings, agents, apps, files and approvals show empty states until those
-features are built.
+sees Client chat, Team notes (never shown to the client), Status (both sides' checklist), Approvals, Files and People
+(roles, resend invite, remove). The database enforces the split: a client session never receives Team notes (or
+their files), team channels or other clients.
+
+**Approvals:** from a space's Approvals tab (or "Request formal approval" on a Client chat decision) the team asks a
+client *approver* who has joined to sign off something exact by a date. The approver gets a notification and, in
+their space, big Approve / Request changes buttons (changes need a note). Approving records their name and time and
+logs an approval in the decision log that nobody can edit or remove. The team can nudge once a day, send it again
+after changes, or withdraw an open request. Clients see their approvals and files in their own view.
 
 In backend mode the prototype's sample chats never show: the app starts empty and keeps only your own recent
 chats in the browser, so a reload shows them at once while fresh ones load.
