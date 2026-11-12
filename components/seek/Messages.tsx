@@ -9,7 +9,7 @@ import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { backendOn } from '@/lib/seek/backend';
 import { toDbId } from '@/lib/seek/live';
-import { deleteMessage, removeEverywhere, setReaction } from '@/lib/seek/liveSync';
+import { canRetry, deleteMessage, discardUnsent, removeEverywhere, retryUnsent, setReaction } from '@/lib/seek/liveSync';
 import { decisionFrom, decisionsFor, loadDecisions, logDecision as saveDecision, undoDecision } from '@/lib/seek/liveDecisions';
 import type { LiveDecision } from '@/lib/seek/data';
 import { PromptDialog } from './Dialogs';
@@ -302,9 +302,22 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
             {m.edited ? ' · edited' : ''}
           </small>
         </div>
-        <div className="tx">
+        <div className="tx" style={m.failed ? { opacity: 0.6 } : undefined}>
           <RichText text={m.text} />
         </div>
+        {m.failed && (
+          <div className="unsent" role="status">
+            <b>Not sent</b>
+            {canRetry(m.id) && (
+              <button type="button" className="linkbtn" onClick={() => void retryUnsent(update, m.id)}>
+                Retry
+              </button>
+            )}
+            <button type="button" className="linkbtn" onClick={() => discardUnsent(update, m.id)}>
+              Discard
+            </button>
+          </div>
+        )}
         {m.src && (
           <button type="button" className="src linkbtn" onClick={() => toast('Sources: 9 messages in #launch-squad')}>
             {m.src}

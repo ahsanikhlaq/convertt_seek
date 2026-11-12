@@ -675,3 +675,13 @@ html.dark .notes{background:var(--card)}
 .appr.done{box-shadow:inset 4px 0 0 var(--ok,#1f6b45)}
 .appr .big{flex:1;min-width:140px;padding:12px;font-size:14px}
 html.dark :is(.frow,.appr){background-color:var(--card)!important;border-color:var(--ln)!important}
+
+/* unsent messages and the offline banner (backend mode) */
+.unsent{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--red);margin-top:4px}
+.unsent .linkbtn{font-size:12px}
+.offline{position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:90;background:var(--gold);color:#fff;font-size:13px;font-weight:600;padding:8px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+
+.timer.late{background:var(--reds);border-color:#f1c9c9;color:var(--red)}
+.timer.late b{color:var(--red)}
+.timer.ok{background:var(--oks);border-color:#cfe8d8}
+.timer.wait{background:var(--golds);color:var(--gold)}

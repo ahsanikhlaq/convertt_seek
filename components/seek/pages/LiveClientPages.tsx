@@ -15,6 +15,7 @@ import { Avatar } from '../ui';
 import { ApprovalsTab, type Approver } from '../Approvals';
 import { ScheduleDialog } from '../Meetings';
 import { clock, dayLabel, toolName, upcomingMeetings, type Upcoming } from '@/lib/seek/liveMeetings';
+import { useSpaceWaits, waitFor, type Wait } from '@/lib/seek/liveTimer';
 import { FileList, useAttach } from '../Files';
 import { PinsList, useSchedule } from '../Extras';
 import { useApprovals } from '@/lib/seek/liveApprovals';
@@ -57,7 +58,7 @@ function progress(sp: Space, side?: 'client' | 'team') {
 }
 
 /** The Clients sidebar: every client space, newest first. */
-function ClientList({ live, current, onOpen }: { live: LiveClients; current: Space | null; onOpen: (id: string) => void }) {
+function ClientList({ live, current, onOpen, waits }: { live: LiveClients; current: Space | null; onOpen: (id: string) => void; waits?: Map<string, Wait> }) {
   return (
     <Sidebar
       title="Clients"
@@ -72,6 +73,7 @@ function ClientList({ live, current, onOpen }: { live: LiveClients; current: Spa
       {live.spaces.length ? (
         live.spaces.map((x) => {
           const p = progress(x);
+          const w = waitFor(waits?.get(x.id), x.replyTarget, undefined);
           return (
             <button key={x.id} type="button" className={'si' + (x.id === current?.id ? ' on' : '')} aria-current={x.id === current?.id ? 'page' : undefined} onClick={() => onOpen(x.id)}>
               <SpaceMark sp={x} />
@@ -79,7 +81,13 @@ function ClientList({ live, current, onOpen }: { live: LiveClients; current: Spa
                 <b>{x.name}</b>
                 <small>{x.project || 'Client space'}</small>
               </span>
-              {x.status === 'onboarding' && p.total > 0 && <span className="tag">{`${p.done}/${p.total}`}</span>}
+              {w ? (
+                <span className={'tag' + (w.over ? ' red' : '')} title={'Waiting for a reply · ' + w.label + ' of working time'}>
+                  {w.label}
+                </span>
+              ) : (
+                x.status === 'onboarding' && p.total > 0 && <span className="tag">{`${p.done}/${p.total}`}</span>
+              )}
             </button>
           );
         })
@@ -116,12 +124,23 @@ function TeamClients({ live }: { live: LiveClients }) {
 
   const appr = useApprovals(sp?.id ?? null);
   const [scheduling, setScheduling] = useState(false);
+  const clientMsgs = live.spaces.reduce((n, x) => n + (s.lc?.[laneKey(x.id, 'client')]?.length ?? 0), 0);
+  const waits = useSpaceWaits(live.orgId, clientMsgs);
+  const [nextMeeting, setNextMeeting] = useState<Upcoming | null>(null);
+  useEffect(() => {
+    if (!sp) return;
+    let alive = true;
+    void upcomingMeetings().then((l) => alive && setNextMeeting((l ?? []).find((m) => m.spaceId === sp.id) ?? null));
+    return () => {
+      alive = false;
+    };
+  }, [sp?.id, clientMsgs]); // eslint-disable-line react-hooks/exhaustive-deps
   const attachTeam = useAttach(sp ? { space: sp.id, lane: 'team' } : null);
   const attachClient = useAttach(sp ? { space: sp.id, lane: 'client' } : null);
   const peopleHere = sp ? ([...sp.people.filter((p) => p.userId).map((p) => p.userId!), ...sp.team.map((t) => t.userId)] as string[]) : [];
   const scheduleTeam = useSchedule(sp ? { space: sp.id, lane: 'team' } : null, sp ? sp.team.map((t) => t.userId) : []);
   const scheduleClient = useSchedule(sp ? { space: sp.id, lane: 'client' } : null, peopleHere);
-  const side = <ClientList live={live} current={sp} onOpen={open} />;
+  const side = <ClientList live={live} current={sp} onOpen={open} waits={waits} />;
 
   if (!sp) {
     return (
@@ -223,7 +242,30 @@ function TeamClients({ live }: { live: LiveClients }) {
       </>
     );
   } else if (tab === 'Status') {
-    body = <Checklist live={live} sp={sp} />;
+    const w = waitFor(waits.get(sp.id), sp.replyTarget, undefined);
+    const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
+    body = (
+      <>
+        <div className="pg" style={{ paddingBottom: 0 }}>
+          <div className="stats">
+            {(
+              [
+                [prog.total ? pct + '%' : '—', 'checklist complete'],
+                [nextMeeting ? dayLabel(new Date(nextMeeting.startsAt)) + ' ' + clock(new Date(nextMeeting.startsAt), null) : '—', 'next meeting'],
+                [String(waiting.length), waiting.length === 1 ? 'open approval' : 'open approvals'],
+                [w ? w.label : 'replied', w ? 'client waiting' : 'reply timer'],
+              ] as [string, string][]
+            ).map(([a, b]) => (
+              <div key={b} className="stat" style={b === 'client waiting' && w?.over ? { color: 'var(--red)' } : undefined}>
+                <b>{a}</b>
+                <span>{b}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <Checklist live={live} sp={sp} />
+      </>
+    );
   } else if (tab === 'Approvals') {
     body = (
       <ApprovalsTab
@@ -278,9 +320,20 @@ function TeamClients({ live }: { live: LiveClients }) {
           </div>
         ))}
       </div>
-      <div className="timer">
-        <b>Reply target: {sp.replyTarget}</b>Shown to {readers} in their space.
-      </div>
+      {(() => {
+        const w = waitFor(waits.get(sp.id), sp.replyTarget, undefined);
+        return w ? (
+          <div className={'timer' + (w.over ? ' late' : ' wait')}>
+            <b>Reply target: {sp.replyTarget}</b>
+            {readers} {clients.length > 1 ? 'have' : 'has'} waited {w.label} (working hours). The timer stops when anyone on the team replies in Client chat.
+          </div>
+        ) : (
+          <div className="timer ok">
+            <b>Reply target: {sp.replyTarget}</b>
+            {waits.get(sp.id)?.lastReply ? 'Replied ✓ Nobody is waiting.' : 'Nobody is waiting. Shown to ' + readers + ' in their space.'}
+          </div>
+        );
+      })()}
       <button type="button" className="btn pri" onClick={() => setScheduling(true)}>
         ▤ Schedule a call
       </button>

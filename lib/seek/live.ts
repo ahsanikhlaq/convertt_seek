@@ -5,7 +5,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, sb, sendInvite } from './backend';
 import { PEOPLE, type ChatMessage, type FeedItem, type FileRef, type PersonKey } from './data';
 import { initialsOf, channelId as toChannelName, isEmail } from './format';
-import { hydrateReactions, markRead, unreadCounts } from './liveSync';
+import { hydrateReactions, markNotSent, markRead, unreadCounts } from './liveSync';
 import { mentionIds } from './liveNotes';
 import { useSeek } from './store';
 
@@ -280,7 +280,10 @@ export function useLiveChat(): LiveChat | null {
       .select('id, channel_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at')
       .single();
     if (error) {
-      toast('Message not sent. Check your connection and try again');
+      if (parent == null) {
+        const name = channel;
+        markNotSent(update, (d) => (d.workspaces.C.msgs[name] ||= []), body, () => insert(channel, body, null));
+      } else toast('Reply not sent. Check your connection and try again');
       return;
     }
     addRow(data as Row);

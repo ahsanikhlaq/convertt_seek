@@ -34,6 +34,8 @@ export type ChatMessage = {
   pinned?: boolean;
   /** backend mode: the author changed the text after sending */
   edited?: boolean;
+  /** backend mode: your message that didn't reach the server (shown with Retry) */
+  failed?: boolean;
   after?: string;
   task?: string;
   rx?: Record<string, number>;

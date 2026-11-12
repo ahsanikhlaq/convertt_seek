@@ -18,6 +18,45 @@ function* feeds(d: State): Generator<FeedItem[]> {
   for (const list of Object.values(d.lc ?? {})) if (list) yield list;
 }
 
+// ---------------------------------------------------------------- messages that didn't send
+// A failed send stays in its conversation, marked "Not sent", with Retry; it is retried by itself when the
+// connection comes back. Local ids are negative, so they never clash with saved messages.
+const retries = new Map<number, () => Promise<void>>();
+let localId = -1;
+
+/** Shows your message as "Not sent" in the feed, with a way to send it again. */
+export function markNotSent(update: (fn: (d: State) => void) => void, list: (d: State) => FeedItem[], text: string, retry: () => Promise<void>) {
+  const id = localId--;
+  retries.set(id, retry);
+  const t = new Date();
+  const time = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
+  update((d) => {
+    list(d).push({ kind: 'msg', id, who: 'AH', time, text, failed: true });
+  });
+}
+
+function dropLocal(d: State, id: number) {
+  for (const list of feeds(d)) {
+    const i = list.findIndex((x) => x.kind === 'msg' && x.id === id);
+    if (i >= 0) list.splice(i, 1);
+  }
+}
+
+/** Sends a "Not sent" message again (it is removed first; it comes back marked if this fails too). */
+export async function retryUnsent(update: (fn: (d: State) => void) => void, id: number) {
+  const fn = retries.get(id);
+  update((d) => dropLocal(d, id));
+  retries.delete(id);
+  if (fn) await fn();
+}
+
+export const canRetry = (id: number) => retries.has(id);
+
+export function discardUnsent(update: (fn: (d: State) => void) => void, id: number) {
+  retries.delete(id);
+  update((d) => dropLocal(d, id));
+}
+
 /** Runs fn on the message with this UI id, wherever it is. */
 export function onMessage(d: State, uiId: number, fn: (m: ChatMessage, list: FeedItem[]) => void) {
   for (const list of feeds(d)) {
@@ -91,6 +130,11 @@ export function useLiveSync(me: string | null) {
   const on = backendOn && !!me && (s.session === 'in' || s.session === 'client');
   useEffect(() => {
     if (!on) return;
+    // back online: send whatever didn't go through
+    const onOnline = () => {
+      for (const id of [...retries.keys()]) void retryUnsent(update, id);
+    };
+    addEventListener('online', onOnline);
     const ch = sb()
       .channel('seek-sync:' + me)
       .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'reactions' }, (p) => {
@@ -134,6 +178,7 @@ export function useLiveSync(me: string | null) {
       })
       .subscribe();
     return () => {
+      removeEventListener('online', onOnline);
       sb().removeChannel(ch);
     };
   }, [on, me]); // eslint-disable-line react-hooks/exhaustive-deps

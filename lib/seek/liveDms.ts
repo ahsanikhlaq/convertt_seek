@@ -5,7 +5,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, sb } from './backend';
 import type { ChatMessage, FileRef, PersonKey } from './data';
 import { inviteByEmail, keyFor, learnProfiles, timeLabel, toUiId } from './live';
-import { hydrateReactions, markRead, unreadCounts } from './liveSync';
+import { hydrateReactions, markNotSent, markRead, unreadCounts } from './liveSync';
 import { useSeek } from './store';
 
 /**
@@ -213,8 +213,9 @@ export function useLiveDms(): LiveDms | null {
         t.unread = 0;
       });
     },
-    send: async (text) => {
-      const thread = threadOf.current.get(current);
+    send: async function send(text: string) {
+      const k = current;
+      const thread = threadOf.current.get(k);
       if (!thread) return;
       const { data, error } = await sb()
         .from('messages')
@@ -222,7 +223,7 @@ export function useLiveDms(): LiveDms | null {
         .select('id, dm_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at')
         .single();
       if (error) {
-        toast('Message not sent. Check your connection and try again');
+        markNotSent(update, (d) => (d.dms[k] ||= { last: '', unread: 0, msgs: [] }).msgs, text, () => send(text));
         return;
       }
       await addRow(data as Row);

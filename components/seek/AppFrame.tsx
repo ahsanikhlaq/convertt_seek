@@ -34,6 +34,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   useLiveSync(meId);
   useLiveNotes(meId);
   useLiveDecisions(meId);
+  const online = useOnline();
   useLiveSaved(meId);
   useLiveTasks(meId);
   useReminders(meId);
@@ -134,6 +135,11 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      {backendOn && !online && (
+        <div className="offline" role="status">
+          You&apos;re offline. Messages that don&apos;t send are kept and go when you&apos;re back.
+        </div>
+      )}
       {children}
       {ui.palette && <Palette />}
       {ui.profile && <ProfileDrawer />}
@@ -491,4 +497,20 @@ function ProfileDrawer() {
       )}
     </>
   );
+}
+
+/** Whether the browser is online (for the "You're offline" banner). */
+function useOnline() {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    const sync = () => setOn(navigator.onLine);
+    sync();
+    addEventListener('online', sync);
+    addEventListener('offline', sync);
+    return () => {
+      removeEventListener('online', sync);
+      removeEventListener('offline', sync);
+    };
+  }, []);
+  return on;
 }

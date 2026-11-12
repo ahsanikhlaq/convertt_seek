@@ -5,7 +5,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, inviteClient, completeStep, sb, type ClientRole } from './backend';
 import type { ChatMessage, FileRef, MeetingCard } from './data';
 import { keyFor, learnProfiles, timeLabel, toUiId } from './live';
-import { hydrateReactions } from './liveSync';
+import { hydrateReactions, markNotSent } from './liveSync';
 import { mentionIds } from './liveNotes';
 import { useSeek } from './store';
 
@@ -214,12 +214,12 @@ export function useLiveClients(): LiveClients | null {
     orgId: org.current,
     spaces,
     reload: load,
-    send: async (space, ln, text) => {
+    send: async function send(space: string, ln: Lane, text: string): Promise<void> {
       const sp = spaces.find((x) => x.id === space);
       const who = sp ? [...sp.team.map((t) => t.userId), ...(ln === 'client' ? sp.people.map((p) => p.userId).filter((v): v is string => !!v) : [])].filter((u) => u !== me.current) : [];
       const { data, error } = await sb().from('messages').insert({ space_id: space, lane: ln, body: text, mentions: mentionIds(text, who) }).select(COLS).single();
       if (error) {
-        toast('Message not sent. Check your connection and try again');
+        markNotSent(update, (d) => ((d.lc ||= {})[laneKey(space, ln)] ||= []), text, () => send(space, ln, text));
         return;
       }
       const r = data as Row;
