@@ -143,6 +143,10 @@ have Files and Pins tabs; client spaces have a Pins tab (clients see Client chat
 (DMs) open a private Seek video room (a free Jitsi Meet room with a random name, no account needed) and post a card
 others join from; the database only accepts such cards from people, so nobody can forge a meeting card or link.
 
+**Notification sounds:** in the profile (and a client's Settings): six sounds with a preview, volume, which
+notifications play it (all, only DMs/mentions/approvals, or none), and how long desktop alerts stay (4, 8, 15 seconds
+or until closed). Pause and Focus still silence the rest.
+
 **Profile and workspace:** upload a profile photo (✎ on your avatar in the profile drawer; cropped to 256px). Custom
 emoji belong to the workspace (anyone on the team adds them; everyone, clients included, sees them). Your theme and
 light/dark mode are saved to your account and follow you to other devices.
@@ -185,10 +189,12 @@ saved to your account.
 link and domain joining, change roles (Member/Admin), remove people, and resend or cancel invites. The owner can't be
 removed or demoted. Everyone else sees it read-only.
 
-**Client spaces** (Clients → ＋ New): as in the prototype, one simple invite: the client's email, the space name, an
+**Client spaces** (Clients → ＋ New opens a pop-up): one simple invite: the client's email, the space name, an
 optional welcome message, and who on your team works on this client. Send invite creates the space (the client is its
 approver) and emails them "X invited you to <space>" with the welcome message, a Join button and a 6-digit code; Copy
-invite link gives a link they open and sign in with that email. More client people can be added from People. Clients
+invite link gives a link they open and sign in with that email. In the email, Join now opens the client's join
+screen (as in the prototype): they enter the 6-digit code from the same email and land in their space, with no
+profile step. More client people can be added from People. Clients
 sign in with a code and see only their own project, starting on the conversation. The agency's team
 sees Client chat, Team notes (never shown to the client), Status (both sides' checklist), Approvals, Files and People
 (roles, resend invite, remove). The database enforces the split: a client session never receives Team notes (or

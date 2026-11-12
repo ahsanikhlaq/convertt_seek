@@ -14,6 +14,8 @@ import { ClientRail, MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
 import { ApprovalsTab, type Approver } from '../Approvals';
 import { ScheduleDialog } from '../Meetings';
+import { ClientInviteDialog } from '../ClientInviteDialog';
+import { SoundSettings } from '../SoundSettings';
 import { clock, dayLabel, downloadIcs, toolName, upcomingMeetings, type Upcoming } from '@/lib/seek/liveMeetings';
 import { saveProfile, signOut } from '@/lib/seek/backend';
 import { useSpaceWaits, waitFor, type Wait } from '@/lib/seek/liveTimer';
@@ -26,13 +28,13 @@ import { spaceFiles, type SharedFile } from '@/lib/seek/liveFiles';
  * Client spaces with a real backend. The agency's team sees every client with Client chat, Team notes, Status,
  * Approvals and People; a client (signed in from their invite) sees only their own project space.
  */
-export function LiveClientsPage({ scheduling }: { scheduling?: boolean }) {
+export function LiveClientsPage({ scheduling, inviting }: { scheduling?: boolean; inviting?: boolean }) {
   const { s } = useSeek();
   const live = useLiveClients();
   if (!live) return null;
   if (s.session === 'client') return <ClientPortal live={live} />;
   if (scheduling) return <LiveMeetings live={live} />;
-  return <TeamClients live={live} />;
+  return <TeamClients live={live} inviting={inviting} />;
 }
 
 const TABS: ClientTab[] = ['Client chat', 'Team notes', 'Status', 'Approvals', 'Files', 'Pins', 'People'];
@@ -59,16 +61,16 @@ function progress(sp: Space, side?: 'client' | 'team') {
 }
 
 /** The Clients sidebar: every client space, newest first. */
-function ClientList({ live, current, onOpen, waits }: { live: LiveClients; current: Space | null; onOpen: (id: string) => void; waits?: Map<string, Wait> }) {
+function ClientList({ live, current, onOpen, waits, onNew }: { live: LiveClients; current: Space | null; onOpen: (id: string) => void; waits?: Map<string, Wait>; onNew?: () => void }) {
   const tzLabel = useSeek().s.ws.tz;
   return (
     <Sidebar
       title="Clients"
       sub="one space per client"
       action={
-        <Link className="btn sm" href={ROUTES.invite}>
+        <NewClientButton className="btn sm" onNew={onNew}>
           ＋ New
-        </Link>
+        </NewClientButton>
       }
     >
       <div className="sg lbl">Client spaces</div>
@@ -100,16 +102,16 @@ function ClientList({ live, current, onOpen, waits }: { live: LiveClients; curre
           </span>
         </div>
       )}
-      <Link className="si" href={ROUTES.invite}>
+      <NewClientButton className="si" onNew={onNew}>
         ＋ New client
-      </Link>
+      </NewClientButton>
     </Sidebar>
   );
 }
 
 // ---------------------------------------------------------------- the agency's view
 
-function TeamClients({ live }: { live: LiveClients }) {
+function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean }) {
   const { s, ui, update, setUI, toast } = useSeek();
   const sp = live.spaces.find((x) => x.id === s.cs) ?? null;
   const tab = TABS.includes(s.cTab) ? s.cTab : 'Client chat';
@@ -126,6 +128,20 @@ function TeamClients({ live }: { live: LiveClients }) {
 
   const appr = useApprovals(sp?.id ?? null);
   const [scheduling, setScheduling] = useState(false);
+  const [newClient, setNewClient] = useState(!!inviting);
+  const router = useRouter();
+  const closeNew = (id?: string) => {
+    setNewClient(false);
+    if (id) {
+      void live.reload();
+      update((d) => {
+        d.cs = id;
+        d.cTab = 'Client chat';
+      });
+    }
+    if (inviting) router.replace(ROUTES.clients);
+  };
+  const newDialog = newClient ? <ClientInviteDialog onClose={() => closeNew()} onCreated={(id) => closeNew(id)} /> : null;
   const tzLabel = s.ws.tz;
   const clientMsgs = live.spaces.reduce((n, x) => n + (s.lc?.[laneKey(x.id, 'client')]?.length ?? 0), 0);
   const waits = useSpaceWaits(live.orgId, clientMsgs);
@@ -143,7 +159,7 @@ function TeamClients({ live }: { live: LiveClients }) {
   const peopleHere = sp ? ([...sp.people.filter((p) => p.userId).map((p) => p.userId!), ...sp.team.map((t) => t.userId)] as string[]) : [];
   const scheduleTeam = useSchedule(sp ? { space: sp.id, lane: 'team' } : null, sp ? sp.team.map((t) => t.userId) : []);
   const scheduleClient = useSchedule(sp ? { space: sp.id, lane: 'client' } : null, peopleHere);
-  const side = <ClientList live={live} current={sp} onOpen={open} waits={waits} />;
+  const side = <ClientList live={live} current={sp} onOpen={open} waits={waits} onNew={() => setNewClient(true)} />;
 
   if (!sp) {
     return (
@@ -156,15 +172,16 @@ function TeamClients({ live }: { live: LiveClients }) {
               Each client gets their own space: a Client chat they can see, Team notes they never do, and a short getting-started checklist.
               <br />
               <br />
-              <Link className="btn pri" href={ROUTES.invite}>
+              <button type="button" className="btn pri" onClick={() => setNewClient(true)}>
                 ＋ New client
-              </Link>
+              </button>
             </div>
           ) : (
             <p className="sub">Loading…</p>
           )}
           <HowSpacesWork />
         </div>
+        {newDialog}
       </Shell>
     );
   }
@@ -401,6 +418,7 @@ function TeamClients({ live }: { live: LiveClients }) {
           onScheduled={(toClient) => setTab(toClient ? 'Client chat' : 'Team notes')}
         />
       )}
+      {newDialog}
     </Shell>
   );
 }
@@ -836,6 +854,9 @@ function ClientPortal({ live }: { live: LiveClients }) {
     body = (
       <div className="pg">
         <ClientSettings agency={agency} />
+        <div className="card" style={{ maxWidth: 560 }}>
+          <SoundSettings />
+        </div>
       </div>
     );
   } else if (tab === 'pins') {
@@ -1002,8 +1023,6 @@ function ClientSettings({ agency }: { agency: string }) {
   const [title, setTitle] = useState(s.me.title);
   const [notify, setNotify] = useState<'instant' | 'daily' | 'off'>(s.me.notifyEmail ?? 'instant');
   const [busy, setBusy] = useState(false);
-  const canAlert = typeof window !== 'undefined' && 'Notification' in window;
-  const [alerts, setAlerts] = useState(canAlert ? Notification.permission : 'denied');
   return (
     <div className="card" style={{ maxWidth: 560 }}>
       <div className="ct">
@@ -1046,24 +1065,24 @@ function ClientSettings({ agency }: { agency: string }) {
         >
           {busy ? 'Saving…' : 'Save'}
         </button>
-        {canAlert && alerts !== 'granted' && (
-          <button
-            type="button"
-            className="btn"
-            onClick={async () => {
-              const r = await Notification.requestPermission();
-              setAlerts(r);
-              toast(r === 'granted' ? 'Desktop alerts are on' : 'Desktop alerts stay off (you can allow them in your browser)');
-            }}
-          >
-            Get desktop alerts
-          </button>
-        )}
         <span style={{ flex: 1 }}></span>
         <button type="button" className="btn ghost" onClick={() => void signOut().then(() => location.assign('/signup'))}>
           Sign out
         </button>
       </div>
     </div>
+  );
+}
+
+/** "＋ New client": opens the invite pop-up where it can, otherwise goes to the invite screen. */
+function NewClientButton({ className, onNew, children }: { className: string; onNew?: () => void; children: React.ReactNode }) {
+  return onNew ? (
+    <button type="button" className={className} onClick={onNew}>
+      {children}
+    </button>
+  ) : (
+    <Link className={className} href={ROUTES.invite}>
+      {children}
+    </Link>
   );
 }

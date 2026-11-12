@@ -6,6 +6,7 @@ import { PEOPLE, type Note, type PersonKey, type State } from './data';
 import { keyFor, learnProfiles } from './live';
 import { ROUTES } from './routes';
 import { useSeek } from './store';
+import { playSound, type SoundKey } from './sounds';
 
 /**
  * Notifications (backend mode). The database writes them when a message arrives (DMs, @mentions, thread replies,
@@ -62,6 +63,7 @@ export function useLiveNotes(me: string | null) {
   const on = backendOn && !!me && (s.session === 'in' || s.session === 'client');
   const paused = s.me.dnd;
   const focusOnly = s.status.k === 'fc';
+  const snd = s.me.sound ?? { key: 'chime', volume: 70, play: 'all' as const, alertSecs: 8 };
 
   useEffect(() => {
     if (!on) return;
@@ -85,12 +87,16 @@ export function useLiveNotes(me: string | null) {
           if (!list.some((x) => x.id === n.id)) list.unshift(n);
           d.notes = list.slice(0, 50);
         });
-        // a desktop alert when Seek isn't in front (paused: none; Focus: only mentions and DMs)
+        // sound (your choice and volume) and a desktop alert when Seek isn't in front (paused: none; Focus: only
+        // mentions and DMs)
+        const important = n.kind === 'mention' || n.kind === 'dm' || n.kind === 'approval' || n.kind === 'reminder';
+        if (!paused && (!focusOnly || important) && (snd.play === 'all' || (snd.play === 'important' && important))) playSound(snd.key as SoundKey, snd.volume);
         const away = typeof document !== 'undefined' && (document.hidden || !document.hasFocus());
         if (away && !paused && (!focusOnly || n.kind === 'mention' || n.kind === 'dm') && 'Notification' in window && Notification.permission === 'granted') {
           try {
-            const alert = new Notification(n.title, { body: n.body, tag: 'seek-' + n.id });
+            const alert = new Notification(n.title, { body: n.body, tag: 'seek-' + n.id, requireInteraction: snd.alertSecs === 0, silent: true });
             alert.onclick = () => window.focus();
+            if (snd.alertSecs > 0) setTimeout(() => alert.close(), snd.alertSecs * 1000);
           } catch {}
         }
       })
@@ -99,5 +105,5 @@ export function useLiveNotes(me: string | null) {
       alive = false;
       sb().removeChannel(ch);
     };
-  }, [on, me, paused, focusOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [on, me, paused, focusOnly, snd.key, snd.volume, snd.play, snd.alertSecs]); // eslint-disable-line react-hooks/exhaustive-deps
 }

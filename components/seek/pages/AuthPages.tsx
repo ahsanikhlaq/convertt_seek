@@ -888,6 +888,8 @@ export function WelcomePage() {
   const [wait, setWait] = useCountdown();
   const token = useRef<string | null>(null);
   const formRef = useRef<HTMLDivElement>(null);
+  // a client's invite email: Join now opens this code screen (as in the prototype)
+  const [clientJoin, setClientJoin] = useState(false);
 
   /** Signed in: set up the profile, or carry on if that's already done. */
   const toProfile = async (acc: Account) => {
@@ -900,11 +902,17 @@ export function WelcomePage() {
       return;
     }
     const client = !acc.workspace ? acc.clientSpaces[0] : undefined;
-    setHasWorkspace(!!acc.workspace || !!client);
     if (client) {
-      // a client invited to their project space by an agency
-      setInvite({ workspace: client.name, invitedBy: client.invitedBy + " at " + client.agency, logo: client.agencyLogo, client: true });
-    } else if (acc.workspace) {
+      // clients go straight into their space (no profile step); they can add their name in Settings
+      await saveProfile({ name: acc.name.trim() || acc.email.split('@')[0], title: acc.title, timeZone: acc.timeZone || undefined });
+      const fresh = await currentAccount(true);
+      if (fresh) update((d) => applyAccount(d, fresh));
+      toast('Welcome to ' + client.name + ' 👋');
+      router.replace(ROUTES.clients);
+      return;
+    }
+    setHasWorkspace(!!acc.workspace);
+    if (acc.workspace) {
       const inv = await myInvite().catch(() => null);
       // joined with an invite link (no email invite): just the organization
       setInvite({ workspace: inv?.workspace ?? acc.workspace.name, invitedBy: inv?.invitedBy ?? '', logo: acc.workspace.logo });
@@ -934,6 +942,15 @@ export function WelcomePage() {
       if (org) preferOrg(org);
       setEmail(q.get('email') ?? '');
       const th = q.get('token_hash');
+      if (q.get('client') && !th) {
+        const signedInAlready = await currentAccount().catch(() => null);
+        if (!signedInAlready) {
+          history.replaceState(null, '', location.pathname);
+          setClientJoin(true);
+          setPhase('code');
+          return;
+        }
+      }
       if (th) {
         // keep the one-time link out of the address bar and history
         token.current = th;
@@ -1056,7 +1073,9 @@ export function WelcomePage() {
             ? invite.invitedBy
               ? `${invite.invitedBy} invited you. Tell the team who you are, then you're in.`
               : `Tell the ${invite.workspace} team who you are, then you're in.`
-            : phase === 'join' || phase === 'code'
+            : clientJoin
+              ? 'Your agency set up a private space for you: chat with the team, follow progress and approve work in one place.'
+              : phase === 'join' || phase === 'code'
               ? 'Your team invited you to Seek: messages, decisions and client work in one tidy workspace.'
               : 'Tell your team who you are. You can change this any time from your profile.'}
         </p>
@@ -1109,7 +1128,34 @@ export function WelcomePage() {
             </>
           )}
 
-          {phase === 'code' && (
+          {phase === 'code' && clientJoin && (
+            <div className="cjoin">
+              <span className="av" style={{ width: 52, height: 52, background: 'var(--gold)', borderRadius: 14, fontSize: 20 }}>
+                ✦
+              </span>
+              <div>
+                <b style={{ fontSize: 13, color: 'var(--sb)' }}>Your project space</b>
+                <h1 style={{ margin: '4px 0 0' }}>Welcome</h1>
+              </div>
+              <p className="sub" style={{ margin: 0 }}>
+                Enter the 6-digit code we just emailed you{isEmail(email) ? ' at ' + email : ''}.
+              </p>
+              {!isEmail(email) && (
+                <div className="fld" style={{ width: '100%', textAlign: 'left' }}>
+                  <label htmlFor="wem2">Your email</label>
+                  <input id="wem2" className="inp" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+              )}
+              <CodeInput onComplete={(c) => void verify(c)} label="Sign-in code" />
+              <button type="button" className="btn lg gold" style={{ width: '100%' }} onClick={() => void verify()} disabled={busy}>
+                {busy ? 'Opening…' : 'Open my space'}
+              </button>
+              {isEmail(email) && <Resend email={email} wait={wait} setWait={setWait} />}
+              <p className="fine">No password. The code is in the same email as the Join button.</p>
+            </div>
+          )}
+
+          {phase === 'code' && !clientJoin && (
             <>
               <div>
                 <h1>Enter your code</h1>

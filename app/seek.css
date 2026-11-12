@@ -707,3 +707,8 @@ html.dark :is(.frow,.appr){background-color:var(--card)!important;border-color:v
   .slots{grid-template-columns:1fr}
   .mb .chips{flex-wrap:wrap}
 }
+
+/* a client's join screen (Join now → code), as in the prototype */
+.cjoin{display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px}
+.cjoin .codes{justify-content:center}
+.sndset{display:flex;flex-direction:column;gap:10px}

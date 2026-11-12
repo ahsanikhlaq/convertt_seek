@@ -195,7 +195,7 @@ export type State = {
   seenNew: boolean;
   notif: string;
   status: { k: StatusKey; t: string };
-  me: { name: string; title: string; tz: string; email: string; dnd: boolean; pronouns?: string; workHours?: string; notifyEmail?: 'instant' | 'daily' | 'off' };
+  me: { name: string; title: string; tz: string; email: string; dnd: boolean; pronouns?: string; workHours?: string; notifyEmail?: 'instant' | 'daily' | 'off'; sound?: { key: string; volume: number; play: 'all' | 'important' | 'off'; alertSecs: number } };
   theme: Theme;
   mode: Mode;
   custom: CustomEmoji[];

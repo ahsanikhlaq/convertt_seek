@@ -55,6 +55,8 @@ export type Account = {
   workHours: string;
   /** how often you want email notifications (used once Seek sends them) */
   notifyEmail: 'instant' | 'daily' | 'off';
+  /** notification sound, volume (0–100), what plays it, and how long desktop alerts stay (0 = until closed) */
+  sound: { key: string; volume: number; play: 'all' | 'important' | 'off'; alertSecs: number };
 };
 
 /** A client space you belong to as a client. */
@@ -147,7 +149,7 @@ async function loadAccount(id: string, email: string): Promise<Account> {
   // anyone invited by email joins those workspaces the first time we see them signed in
   await sb().rpc('accept_my_invites');
   const [{ data: profile }, { data: memberships }, { data: spaces }] = await Promise.all([
-    sb().from('profiles').select('name, title, time_zone, onboarded_at, status, dnd_until, avatar_url, theme, pronouns, work_hours, notify_email').eq('id', id).maybeSingle(),
+    sb().from('profiles').select('name, title, time_zone, onboarded_at, status, dnd_until, avatar_url, theme, pronouns, work_hours, notify_email, notify_sound, notify_volume, notify_play, notify_alert_secs').eq('id', id).maybeSingle(),
     sb()
       .from('workspace_members')
       .select('role, joined_at, workspaces ( id, name, slug, logo_url, join_code, brand_accent, time_zone )')
@@ -175,7 +177,7 @@ async function loadAccount(id: string, email: string): Promise<Account> {
   } catch {}
   const m = rows.find((r) => r.workspaces?.id === pref) ?? rows.find((r) => r.workspaces);
   const w = m?.workspaces;
-  const p = (profile ?? {}) as { name?: string; title?: string; time_zone?: string; onboarded_at?: string | null; status?: string; dnd_until?: string | null; avatar_url?: string | null; theme?: Account['look']; pronouns?: string; work_hours?: string; notify_email?: Account['notifyEmail'] };
+  const p = (profile ?? {}) as { name?: string; title?: string; time_zone?: string; onboarded_at?: string | null; status?: string; dnd_until?: string | null; avatar_url?: string | null; theme?: Account['look']; pronouns?: string; work_hours?: string; notify_email?: Account['notifyEmail']; notify_sound?: string; notify_volume?: number; notify_play?: 'all' | 'important' | 'off'; notify_alert_secs?: number };
   return {
     id,
     email,
@@ -188,6 +190,7 @@ async function loadAccount(id: string, email: string): Promise<Account> {
     pronouns: p.pronouns ?? '',
     workHours: p.work_hours ?? '09:00–18:00',
     notifyEmail: p.notify_email ?? 'instant',
+    sound: { key: p.notify_sound ?? 'chime', volume: p.notify_volume ?? 70, play: p.notify_play ?? 'all', alertSecs: p.notify_alert_secs ?? 8 },
     look: p.theme ?? null,
     onboarded: Boolean(p.onboarded_at),
     workspace: w ? { id: w.id, name: w.name, slug: w.slug, role: m!.role, logo: w.logo_url, joinCode: w.join_code, accent: w.brand_accent, tz: w.time_zone } : null,
@@ -271,6 +274,16 @@ export async function removeAvatar(): Promise<string | null> {
   const uid = data.session?.user.id;
   if (!uid) return 'Sign in again';
   const { error } = await sb().from('profiles').update({ avatar_url: null }).eq('id', uid);
+  forgetAccount();
+  return error ? friendly(error.message) : null;
+}
+
+/** Saves your notification sound settings. */
+export async function saveSound(x: { key: string; volume: number; play: string; alertSecs: number }) {
+  const { data } = await sb().auth.getSession();
+  const uid = data.session?.user.id;
+  if (!uid) return 'Sign in again';
+  const { error } = await sb().from('profiles').update({ notify_sound: x.key, notify_volume: x.volume, notify_play: x.play, notify_alert_secs: x.alertSecs }).eq('id', uid);
   forgetAccount();
   return error ? friendly(error.message) : null;
 }

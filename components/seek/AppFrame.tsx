@@ -19,6 +19,7 @@ import { toUiId } from '@/lib/seek/live';
 import { useOpenFile } from './Files';
 import { ConfirmDialog, Modal } from './Dialogs';
 import { WorkspaceSettings } from './WorkspaceSettings';
+import { SoundSettings } from './SoundSettings';
 import { usePopovers } from './Popovers';
 import { Avatar, ModeSeg, OrgMark, Switch } from './ui';
 
@@ -544,6 +545,7 @@ function ProfileDrawer() {
               }}
             />
           </div>
+          {backendOn && <SoundSettings />}
           <div className="pf-ac">
             <button type="button" className="btn" onClick={(e) => pop.toggleTheme(e.currentTarget)}>
               🎨 Theme & branding
