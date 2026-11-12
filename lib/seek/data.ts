@@ -75,6 +75,10 @@ export type State = {
   version: number;
   session: 'out' | 'setup' | 'in';
   email: string;
+  /** The Google account last used to sign in (null for email sign-in). */
+  google: { sub: string; picture: string } | null;
+  /** True once workspace setup has been finished, so a returning account skips it. */
+  setupDone: boolean;
   ws: { name: string; tz: string; size: string; use: string[]; invites: string[] };
   wsId: WorkspaceId;
   workspaces: Record<WorkspaceId, Workspace>;
@@ -149,6 +153,8 @@ export function initialState(): State {
     version: STATE_VERSION,
     session: 'out',
     email: 'ahsan@convertt.co',
+    google: null,
+    setupDone: false,
     ws: { name: 'Convertt', tz: 'Lahore (GMT+5)', size: '1–10', use: ['Team chat', 'Client work'], invites: ['syed@convertt.co', 'momina@convertt.co'] },
     wsId: 'C',
     workspaces: {

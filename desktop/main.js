@@ -143,9 +143,13 @@ async function smokeTest(win) {
   };
   await new Promise(r => wc.once('did-finish-load', r));
   const steps = [];
-  // a new install opens on sign-up; sign in with Google, then finish workspace setup
+  // a new install opens on sign-up; sign in with email and a code, then finish workspace setup
   steps.push({ step: 'signup', ok: await waitFor(`location.pathname.startsWith('/signup')`) });
-  await clickText('Continue with Google');
+  await waitFor(`!!document.querySelector('.auth form button[type=submit]')`);
+  await js(`document.querySelector('.auth form button[type=submit]').click()`);
+  await waitFor(`document.querySelectorAll('.codes input').length === 6`);
+  await wait(200); // the first box takes focus; each digit moves it to the next
+  for (let i = 0; i < 6; i++) await wc.insertText('1');
   steps.push({ step: 'setup', ok: await waitFor(`location.pathname.startsWith('/setup')`) });
   await clickText('Continue to #general');
   steps.push({ step: 'channels', ok: await waitFor(`location.pathname.startsWith('/channels') && !!document.querySelector('.feed')`) });
