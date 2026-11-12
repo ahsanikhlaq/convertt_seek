@@ -12,6 +12,11 @@ import { useLiveNotes } from '@/lib/seek/liveNotes';
 import { useLiveDecisions } from '@/lib/seek/liveDecisions';
 import { useLiveSaved, useLiveTasks, useReminders } from '@/lib/seek/liveExtras';
 import { useWorkspaceEmoji } from '@/lib/seek/liveEmoji';
+import { SEARCH_KINDS, searchSeek, type Found, type SearchKind } from '@/lib/seek/liveSearch';
+import { dmThreadWith, openConversation } from '@/lib/seek/liveExtras';
+import { flashMessage } from '@/lib/seek/liveDecisions';
+import { toUiId } from '@/lib/seek/live';
+import { useOpenFile } from './Files';
 import { ConfirmDialog, Modal } from './Dialogs';
 import { WorkspaceSettings } from './WorkspaceSettings';
 import { usePopovers } from './Popovers';
@@ -152,7 +157,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
 /* ---------------- ⌘K palette ---------------- */
 
-type Hit = { label: string; kind: string; go: () => void };
+type Hit = { label: string; kind: string; go: () => void; sub?: string; key?: string };
 
 function Palette() {
   const { s, update, setUI } = useSeek();
@@ -160,6 +165,43 @@ function Palette() {
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  // backend mode: real search over messages, files, decisions, people and client spaces
+  const [kind, setKind] = useState<SearchKind>('all');
+  const [found, setFound] = useState<Found[] | null>(null);
+  const toast = useSeek().toast;
+  const openFile = useOpenFile();
+  const searching = backendOn && q.trim().length >= 2;
+  useEffect(() => {
+    if (!searching) {
+      setFound(null);
+      return;
+    }
+    let alive = true;
+    const id = setTimeout(() => {
+      void searchSeek(q.trim(), s.session === 'in' ? (s.orgId ?? null) : null, kind).then((r) => alive && setFound(r ?? []));
+    }, 220);
+    return () => {
+      alive = false;
+      clearTimeout(id);
+    };
+  }, [q, kind, searching]); // eslint-disable-line react-hooks/exhaustive-deps
+  const openFound = async (f: Found) => {
+    setUI({ palette: false, thread: null, chTab: 'Messages' });
+    if (f.kind === 'file') {
+      void openFile({ path: f.ref, name: f.title, size: 0, type: '' });
+      return;
+    }
+    if (f.kind === 'person') {
+      if (!f.userId) return;
+      const thread = await dmThreadWith(f.userId);
+      if (!thread) return toast('You can message people on your team');
+      router.push(await openConversation('dm:' + thread, update, s.meId ?? null));
+      return;
+    }
+    if (!f.conv) return;
+    router.push(await openConversation(f.conv, update, s.meId ?? null));
+    if (f.messageId != null) flashMessage(toUiId(f.messageId));
+  };
 
   const hits = useMemo<Hit[]>(() => {
     // with a backend only your real team's channels are listed (the sample workspace and client spaces are not)
@@ -211,8 +253,21 @@ function Palette() {
       { label: 'Sign up screen', kind: 'signup', go: to('signup') },
     ];
     const ql = q.trim().toLowerCase();
-    return ql ? all.filter((h) => h.label.toLowerCase().includes(ql)) : all;
-  }, [q, s, update, setUI, router]);
+    // a client only ever gets their own space, so the team's screens aren't offered
+    const base = s.session === 'client' ? [] : ql ? all.filter((h) => h.label.toLowerCase().includes(ql)) : all;
+    const KIND: Record<Found['kind'], string> = { message: 'message', file: 'file', decision: 'decision', person: 'person', space: 'client' };
+    const live: Hit[] = (found ?? []).map((f) => ({
+      key: f.kind + ':' + f.ref,
+      label: f.kind === 'message' ? (f.snippet ?? '') : f.title,
+      sub:
+        f.kind === 'message'
+          ? (PEOPLE[f.userId === s.meId ? 'AH' : (f.userId ?? '')]?.name ?? 'Someone') + ' · ' + (f.conv?.startsWith('ch:') ? '#' : '') + f.title + (f.at ? ' · ' + new Date(f.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '')
+          : (f.snippet ?? undefined),
+      kind: KIND[f.kind],
+      go: () => void openFound(f),
+    }));
+    return kind === 'all' ? [...base, ...live] : live;
+  }, [q, s, update, setUI, router, found, kind]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => setSel(0), [q]);
   useEffect(() => {
@@ -224,7 +279,7 @@ function Palette() {
       <div className="mhd">
         <input
           className="inp"
-          placeholder="Jump to a channel, person or screen…"
+          placeholder={backendOn ? 'Search messages, files, decisions, people…' : 'Jump to a channel, person or screen…'}
           aria-label="Search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -241,18 +296,28 @@ function Palette() {
         />
         <kbd className="hide-m">esc</kbd>
       </div>
+      {searching && (
+        <div className="chips" style={{ padding: '0 12px 6px', flexWrap: 'wrap' }}>
+          {SEARCH_KINDS.filter(([k]) => s.session !== 'client' || (k !== 'person' && k !== 'space')).map(([k, l]) => (
+            <button key={k} type="button" className={'chip' + (kind === k ? ' on' : '')} aria-pressed={kind === k} onClick={() => setKind(k)}>
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="mb" style={{ gap: 2, padding: 8 }} ref={listRef} role="listbox" aria-label="Results">
         {hits.length ? (
           hits.map((h, i) => (
-            <button key={h.label} type="button" role="option" aria-selected={i === sel} className={'si' + (i === sel ? ' on' : '')} onMouseEnter={() => setSel(i)} onClick={h.go}>
+            <button key={h.key ?? h.label} type="button" role="option" aria-selected={i === sel} className={'si' + (i === sel ? ' on' : '')} onMouseEnter={() => setSel(i)} onClick={h.go}>
               <span className="x">
-                <b>{h.label}</b>
+                <b style={h.sub ? { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' } : undefined}>{h.label}</b>
+                {h.sub && <small>{h.sub}</small>}
               </span>
               <span className="tag">{h.kind}</span>
             </button>
           ))
         ) : (
-          <div className="empty">No results</div>
+          <div className="empty">{searching && !found ? 'Searching…' : searching ? 'No results for “' + q.trim() + '”' + (kind !== 'all' ? ' in ' + SEARCH_KINDS.find((x) => x[0] === kind)![1].toLowerCase() : '') : 'No results'}</div>
         )}
       </div>
     </Modal>
