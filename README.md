@@ -172,6 +172,11 @@ out). The reply timer uses the workspace's time zone.
 notes, files, search, approvals, decisions history, agents, outsiders). Paste it into the SQL Editor and run it after any
 database change; it rolls everything back and prints e.g. "RESULT: 35 passed, 0 failed".
 
+**Voice and video messages:** the 🎤 and 🎥 buttons in the message box (next to ＋, ☺ and @, which are now larger)
+record in the browser: a voice note (up to 5 minutes; Cancel or Send) or a video message (camera preview, record up to
+2 minutes, watch it back, Retake or Send). They are sent like files, stay private to the conversation, and play
+right in the chat. The browser asks for microphone/camera permission the first time.
+
 **Decisions:** any message's More menu → Log decision (or D) saves it with who logged it, where and the source
 message; the decision card shows under the message, and Undo is offered for a few seconds. In the Decisions log you
 filter by place and type, search, jump to the source message, edit (the new wording replaces the old, which stays in

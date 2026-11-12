@@ -22,6 +22,8 @@ export function sizeLabel(n: number) {
 
 export const extOf = (name: string) => (name.includes('.') ? name.split('.').pop()!.slice(0, 4).toUpperCase() : 'FILE');
 export const isImage = (f: FileRef) => /^image\/(png|jpe?g|gif|webp)$/.test(f.type);
+export const isAudio = (f: FileRef) => /^audio\//.test(f.type);
+export const isVideo = (f: FileRef) => /^video\/(webm|mp4|quicktime|ogg)$/.test(f.type);
 
 /** A reason the files can't be sent, or null. */
 export function checkFiles(files: File[]) {

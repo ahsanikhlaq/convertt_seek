@@ -14,6 +14,7 @@ import { decisionFrom, decisionsFor, loadDecisions, logDecision as saveDecision,
 import type { LiveDecision } from '@/lib/seek/data';
 import { PromptDialog } from './Dialogs';
 import { FileCards } from './Files';
+import { canRecord, clockOf, VideoRecorder, VoiceRecorder } from './Recorder';
 import { HuddleCardView, MeetingCardView } from './Meetings';
 import { dueText, RemindDialog, SendLaterDialog, TaskDialog } from './Extras';
 import { editMessage, messageLink, pinMessage, saveMessage } from '@/lib/seek/liveExtras';
@@ -716,6 +717,20 @@ export function Composer({
   const fileIn = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(0);
   const [later, setLater] = useState(false);
+  const [recording, setRecording] = useState<null | 'voice' | 'video'>(null);
+  const recordable = !!onAttach && canRecord();
+  /** Sends a recorded voice or video message (the typed text, if any, is its caption). */
+  const sendRecorded = async (file: File, label: string) => {
+    setRecording(null);
+    if (!onAttach) return;
+    setUploading(1);
+    const ok = await onAttach([file], v.trim() || label);
+    setUploading(0);
+    if (ok) {
+      setV('');
+      setMn(null);
+    }
+  };
   const pop = usePopovers();
   const ta = useRef<HTMLTextAreaElement>(null);
   const [v, setV] = useState('');
@@ -872,6 +887,11 @@ export function Composer({
           ))}
         </div>
       )}
+      {recording === 'voice' && (
+        <VoiceRecorder onCancel={() => setRecording(null)} onSend={(f, secs) => void sendRecorded(f, '🎤 Voice message · ' + clockOf(secs))} />
+      )}
+      {recording === 'video' &&
+        createPortal(<VideoRecorder onClose={() => setRecording(null)} onSend={(f, secs) => void sendRecorded(f, '🎥 Video message · ' + clockOf(secs))} />, document.body)}
       <div className="cr">
         {thread ? (
           <label style={{ fontSize: 12, color: 'var(--sb)', display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -908,6 +928,22 @@ export function Composer({
             <button type="button" className="ic" onClick={() => insert('', true)} aria-label="Mention someone">
               @
             </button>
+            {recordable && (
+              <button type="button" className="ic" aria-label="Record a voice message" title="Voice message" disabled={!!uploading || !!recording} onClick={() => setRecording('voice')}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="9" y="2" width="6" height="12" rx="3" />
+                  <path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8" />
+                </svg>
+              </button>
+            )}
+            {recordable && (
+              <button type="button" className="ic" aria-label="Record a video message" title="Video message" disabled={!!uploading || !!recording} onClick={() => setRecording('video')}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="2" y="6" width="14" height="12" rx="2" />
+                  <path d="M16 10l6-3v10l-6-3z" />
+                </svg>
+              </button>
+            )}
             {note && <small>{note}</small>}
           </>
         )}

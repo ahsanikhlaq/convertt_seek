@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { PEOPLE, type FileRef } from '@/lib/seek/data';
-import { extOf, fileUrl, isImage, sendFiles, sizeLabel, type FileTarget, type SharedFile } from '@/lib/seek/liveFiles';
+import { extOf, fileUrl, isAudio, isImage, isVideo, sendFiles, sizeLabel, type FileTarget, type SharedFile } from '@/lib/seek/liveFiles';
 import { useSeek } from '@/lib/seek/store';
 
 /** The composer's attach handler for a conversation (null target: attaching isn't available there). */
@@ -45,13 +45,36 @@ function Thumb({ f }: { f: FileRef }) {
   return src ? <img src={src} alt={f.name} loading="lazy" className="fimg" /> : <span className="fimg ph" aria-hidden="true" />;
 }
 
+/** A voice or video message, played in the chat. */
+function Media({ f }: { f: FileRef }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void fileUrl(f.path).then((u) => alive && setSrc(u));
+    return () => {
+      alive = false;
+    };
+  }, [f.path]);
+  const video = isVideo(f);
+  return (
+    <div className="fmedia">
+      {src ? video ? <video src={src} controls playsInline preload="metadata" /> : <audio src={src} controls preload="metadata" /> : <small>Loading…</small>}
+      <small>
+        {video ? '🎥 Video message' : '🎤 Voice message'} · {sizeLabel(f.size)}
+      </small>
+    </div>
+  );
+}
+
 /** The files on a message: image previews and file cards. */
 export function FileCards({ files }: { files: FileRef[] }) {
   const open = useOpenFile();
   return (
     <div className="files">
       {files.map((f) =>
-        isImage(f) ? (
+        isAudio(f) || isVideo(f) ? (
+          <Media key={f.path} f={f} />
+        ) : isImage(f) ? (
           <button key={f.path} type="button" className="fpic" onClick={() => void open(f)} title={f.name} aria-label={'Open ' + f.name}>
             <Thumb f={f} />
           </button>
