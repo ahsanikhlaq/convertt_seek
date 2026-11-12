@@ -28,6 +28,8 @@ export type ChatMessage = {
   file?: [string, string];
   /** backend mode: files attached to the message (in private storage) */
   files?: FileRef[];
+  /** backend mode: a card the message carries (a scheduled meeting) */
+  card?: MeetingCard;
   after?: string;
   task?: string;
   rx?: Record<string, number>;
@@ -69,6 +71,8 @@ export type Decision = {
   /** History lines shown on a replaced decision ("Fri 15:02 · … logged by Ahsan"). */
   hist?: string[];
 };
+/** A meeting posted in a client space (the MEETING card). */
+export type MeetingCard = { type: 'meeting'; id: number; title: string; starts_at: string; duration: number; tool: 'meet' | 'zoom' | 'seek' | 'person'; link: string; agenda: string; record: boolean; cancelled: boolean };
 /** A file attached to a message: where it is stored, its name, size in bytes and type. */
 export type FileRef = { path: string; name: string; size: number; type: string };
 /** A formal approval in a client space (backend mode). */

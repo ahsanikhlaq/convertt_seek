@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { ClientRole } from '@/lib/seek/backend';
 import { PEOPLE, type ClientTab, type PersonKey } from '@/lib/seek/data';
@@ -12,6 +13,8 @@ import { Composer, Feed, type FeedRef } from '../Messages';
 import { ClientRail, MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
 import { ApprovalsTab, type Approver } from '../Approvals';
+import { ScheduleDialog } from '../Meetings';
+import { clock, dayLabel, toolName, upcomingMeetings, type Upcoming } from '@/lib/seek/liveMeetings';
 import { FileList, useAttach } from '../Files';
 import { useApprovals } from '@/lib/seek/liveApprovals';
 import { spaceFiles, type SharedFile } from '@/lib/seek/liveFiles';
@@ -25,7 +28,7 @@ export function LiveClientsPage({ scheduling }: { scheduling?: boolean }) {
   const live = useLiveClients();
   if (!live) return null;
   if (s.session === 'client') return <ClientPortal live={live} />;
-  if (scheduling) return <MeetingsEmpty live={live} />;
+  if (scheduling) return <LiveMeetings live={live} />;
   return <TeamClients live={live} />;
 }
 
@@ -111,6 +114,7 @@ function TeamClients({ live }: { live: LiveClients }) {
   };
 
   const appr = useApprovals(sp?.id ?? null);
+  const [scheduling, setScheduling] = useState(false);
   const attachTeam = useAttach(sp ? { space: sp.id, lane: 'team' } : null);
   const attachClient = useAttach(sp ? { space: sp.id, lane: 'client' } : null);
   const side = <ClientList live={live} current={sp} onOpen={open} />;
@@ -265,6 +269,9 @@ function TeamClients({ live }: { live: LiveClients }) {
       <div className="timer">
         <b>Reply target: {sp.replyTarget}</b>Shown to {readers} in their space.
       </div>
+      <button type="button" className="btn pri" onClick={() => setScheduling(true)}>
+        ▤ Schedule a call
+      </button>
       {waiting.length > 0 && (
         <div className="card">
           <div className="ct">
@@ -307,6 +314,9 @@ function TeamClients({ live }: { live: LiveClients }) {
                 <Avatar key={k} k={k} size={26} />
               ))}
             </span>
+            <button type="button" className="btn sm" onClick={() => setScheduling(true)} title="Schedule a call">
+              ▤ <span className="hide-m">Schedule</span>
+            </button>
             <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Space details" aria-pressed={ui.paneOpen}>
               ⓘ
             </button>
@@ -315,6 +325,14 @@ function TeamClients({ live }: { live: LiveClients }) {
         below={tabs}
       />
       {body}
+      {scheduling && (
+        <ScheduleDialog
+          sp={sp}
+          me={live.me}
+          onClose={() => setScheduling(false)}
+          onScheduled={(toClient) => setTab(toClient ? 'Client chat' : 'Team notes')}
+        />
+      )}
     </Shell>
   );
 }
@@ -513,9 +531,27 @@ function PeopleTab({ live, sp }: { live: LiveClients; sp: Space }) {
   );
 }
 
-function MeetingsEmpty({ live }: { live: LiveClients }) {
+function LiveMeetings({ live }: { live: LiveClients }) {
   const { s, update, setUI } = useSeek();
-  const sp = live.spaces.find((x) => x.id === s.cs) ?? null;
+  const router = useRouter();
+  const sp = live.spaces.find((x) => x.id === s.cs) ?? live.spaces[0] ?? null;
+  const [list, setList] = useState<Upcoming[] | null>(null);
+  const [scheduling, setScheduling] = useState(false);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    void upcomingMeetings().then((l) => alive && setList(l ?? []));
+    return () => {
+      alive = false;
+    };
+  }, [tick]);
+  const openSpace = (id: string, toClient: boolean) => {
+    update((d) => {
+      d.cs = id;
+      d.cTab = toClient ? 'Client chat' : 'Team notes';
+    });
+    router.push(ROUTES.clients);
+  };
   return (
     <Shell
       active="meetings"
@@ -532,15 +568,64 @@ function MeetingsEmpty({ live }: { live: LiveClients }) {
         />
       }
     >
-      <MainHeader title="Meetings" sub="calls with clients and the team" />
+      <MainHeader
+        title="Meetings"
+        sub="calls with your clients, in your time"
+        right={
+          sp ? (
+            <button type="button" className="btn sm pri" onClick={() => setScheduling(true)}>
+              ▤ Schedule with {sp.name}
+            </button>
+          ) : undefined
+        }
+      />
       <div className="pg">
-        <div className="empty">
-          <b style={{ display: 'block', fontSize: 16, color: 'var(--ink)' }}>No meetings yet</b>
-          Calls you schedule with clients or the team show here, in everyone’s time zone.
-          <br />
-          Scheduling arrives in a later update.
-        </div>
+        {!list ? (
+          <p className="sub">Loading…</p>
+        ) : !list.length ? (
+          <div className="empty">
+            <b style={{ display: 'block', fontSize: 16, color: 'var(--ink)' }}>No meetings coming up</b>
+            {sp ? 'Pick a client on the left and schedule a call. The invite is posted in their Client chat with a calendar file.' : 'Add a client first, then schedule calls with them here.'}
+          </div>
+        ) : (
+          <div className="flist">
+            {list.map((m) => {
+              const d = new Date(m.startsAt);
+              const end = new Date(d.getTime() + m.minutes * 60e3);
+              return (
+                <div key={m.id} className="frow">
+                  <span className="av" style={{ width: 36, height: 36, borderRadius: 9, background: m.color, fontSize: 12, flex: 'none' }}>
+                    {m.code}
+                  </span>
+                  <span className="x">
+                    <b>{m.title}</b>
+                    <small>
+                      {dayLabel(d)} {clock(d, null)}–{clock(end, null)} · {m.space} · {toolName(m.tool)}
+                      {m.toClient ? '' : ' · team only'}
+                    </small>
+                  </span>
+                  {m.link.startsWith('https://') && (
+                    <a className="btn sm pri" href={m.link} target="_blank" rel="noopener noreferrer">
+                      Join
+                    </a>
+                  )}
+                  <button type="button" className="btn sm" onClick={() => openSpace(m.spaceId, m.toClient)}>
+                    Open
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+      {scheduling && sp && (
+        <ScheduleDialog
+          sp={sp}
+          me={live.me}
+          onClose={() => setScheduling(false)}
+          onScheduled={() => setTick((t) => t + 1)}
+        />
+      )}
     </Shell>
   );
 }

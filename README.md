@@ -62,7 +62,7 @@ Seek runs in two modes:
   sign-up. **Channels** are real: messages and thread replies are saved and arrive live for everyone in the
   workspace, new channels can be created, and **＋ Invite people** emails a sign-in code/link — the invited
   person joins the workspace the first time they sign in. DMs, client spaces, decisions, approvals, files and
-  notifications are real too; AI agents, apps and meetings are still sample screens.
+  notifications and meetings are real too; AI agents and apps are still sample screens.
 
 ```bash
 cp .env.example .env.local   # then fill in from Supabase → Project Settings → API Keys
@@ -155,6 +155,14 @@ client *approver* who has joined to sign off something exact by a date. The appr
 their space, big Approve / Request changes buttons (changes need a note). Approving records their name and time and
 logs an approval in the decision log that nobody can edit or remove. The team can nudge once a day, send it again
 after changes, or withdraw an open request. Clients see their approvals and files in their own view.
+
+**Meetings:** ▤ Schedule (in a client space, or on the Meetings screen) books a call: who (the space's teammates
+and joined client people), three suggested times inside everyone's working hours (Mon–Fri 09:00–17:30, shown in your
+time and the client's, from their profile time zone) or any other time, length, Google Meet / Zoom (paste the link),
+Seek video (a private Jitsi room is created) or in person, agenda, and whether to record. Sent to the client, it posts
+a MEETING card in Client chat (they are notified); otherwise only in Team notes. The card has Join, Add to calendar
+(an .ics file) and, for the team, Cancel. The Meetings screen lists what's coming up across all clients. Clients only
+ever see meetings sent to them. Google Calendar availability and automatic Meet/Zoom links need the Apps integrations.
 
 In backend mode the prototype's sample chats never show: the app starts empty and keeps only your own recent
 chats in the browser, so a reload shows them at once while fresh ones load.

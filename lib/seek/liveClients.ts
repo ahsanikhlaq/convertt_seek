@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, inviteClient, completeStep, sb, type ClientRole } from './backend';
-import type { ChatMessage, FileRef } from './data';
+import type { ChatMessage, FileRef, MeetingCard } from './data';
 import { keyFor, learnProfiles, timeLabel, toUiId } from './live';
 import { hydrateReactions } from './liveSync';
 import { mentionIds } from './liveNotes';
@@ -35,8 +35,8 @@ export type Space = {
   steps: Step[];
 };
 
-type Row = { id: number; space_id: string | null; lane: Lane | null; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[] };
-const COLS = 'id, space_id, lane, user_id, parent_id, body, created_at, files';
+type Row = { id: number; space_id: string | null; lane: Lane | null; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; card?: MeetingCard | null };
+const COLS = 'id, space_id, lane, user_id, parent_id, body, created_at, files, card';
 
 export const laneKey = (space: string, lane: Lane) => space + ':' + lane;
 /** People still to join (invited, not signed in yet). */
@@ -84,6 +84,7 @@ export function useLiveClients(): LiveClients | null {
     time: timeLabel(r.created_at),
     text: r.body,
     files: r.files?.length ? r.files : undefined,
+    card: r.card ?? undefined,
     flash,
     client: side === 'team' && clientIds.current.has(r.user_id),
   });
@@ -156,6 +157,15 @@ export function useLiveClients(): LiveClients | null {
             const k = laneKey(r.space_id!, r.lane!);
             const list = ((d.lc ||= {})[k] ||= []);
             if (!list.some((m) => m.id === toUiId(r.id))) list.push(toMsg(r, r.user_id === me.current));
+          });
+        })
+        // a meeting card changes when the meeting is cancelled
+        .on('postgres_changes', { event: 'UPDATE', schema: DB_SCHEMA, table: 'messages', ...(filter ? { filter } : {}) }, (p) => {
+          const r = p.new as Row;
+          if (!r.space_id || !r.lane || !r.card) return;
+          update((d) => {
+            const m = (d.lc?.[laneKey(r.space_id!, r.lane!)] ?? []).find((x) => x.kind === 'msg' && x.id === toUiId(r.id));
+            if (m && m.kind === 'msg') m.card = r.card ?? undefined;
           });
         })
         .on('postgres_changes', { event: '*', schema: DB_SCHEMA, table: 'client_steps' }, reloadSoon)

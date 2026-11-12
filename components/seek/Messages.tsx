@@ -14,6 +14,7 @@ import { decisionFrom, decisionsFor, loadDecisions, logDecision as saveDecision,
 import type { LiveDecision } from '@/lib/seek/data';
 import { PromptDialog } from './Dialogs';
 import { FileCards } from './Files';
+import { MeetingCardView } from './Meetings';
 import { approvalDraft } from '@/lib/seek/liveApprovals';
 import { usePopovers } from './Popovers';
 import { Avatar, Emoji, RichText } from './ui';
@@ -242,6 +243,7 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
           </div>
         )}
         {m.files && m.files.length > 0 && <FileCards files={m.files} />}
+        {m.card?.type === 'meeting' && <MeetingCardView c={m.card} />}
         {m.after && (
           <div className="tx" style={{ marginTop: 6 }}>
             <RichText text={m.after} />
