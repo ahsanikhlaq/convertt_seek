@@ -43,7 +43,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const home = { in: ROUTES.channels, profile: ROUTES.welcome, setup: ROUTES.setup, out: ROUTES.signup, client: ROUTES.clients }[s.session];
   const ok = allowed[s.session];
   const target: string | null =
-    !backendOn || route === 'welcome' || route === 'join'
+    !backendOn || route === 'welcome' || route === 'join' || route === 'privacy' || route === 'terms'
       ? null
       : ok
         ? route && ok.includes(route)

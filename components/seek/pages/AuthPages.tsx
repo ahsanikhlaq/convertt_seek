@@ -264,7 +264,7 @@ export function SignupPage() {
                 ✉ <span>We'll email you a 6-digit code. There is no password to remember.</span>
               </div>
               <p className="fine">
-                By continuing, you agree to the <a href="#terms">Terms</a> and <a href="#privacy">Privacy policy</a>.
+                By continuing, you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy policy</a>.
               </p>
             </>
           ) : (

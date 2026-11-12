@@ -4,6 +4,8 @@ export const ROUTES = {
   setup: '/setup',
   welcome: '/welcome',
   join: '/join',
+  privacy: '/privacy',
+  terms: '/terms',
   channels: '/channels',
   dms: '/dms',
   clients: '/clients',
