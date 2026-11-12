@@ -17,7 +17,7 @@ import {
   type OrgPerson,
   type PendingInvite,
 } from '@/lib/seek/backend';
-import { STATUSES, THEMES } from '@/lib/seek/data';
+import { STATUSES } from '@/lib/seek/data';
 import { useSeek } from '@/lib/seek/store';
 import { Modal } from './Dialogs';
 import { InviteLink } from './InviteDialog';
@@ -31,7 +31,6 @@ export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('General');
   const [org, setOrg] = useState<{ id: string; role: string; joinCode: string; me: string } | null>(null);
   const [name, setName] = useState(s.ws.name);
-  const [accent, setAccent] = useState<string>(THEMES.acc[0][1]);
   const [domain, setDomain] = useState<{ on: boolean; mine: string | null }>({ on: false, mine: null });
   const [people, setPeople] = useState<OrgPerson[] | null>(null);
   const [invites, setInvites] = useState<PendingInvite[] | null>(null);
@@ -56,7 +55,6 @@ export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
       const st = await orgSettings(w.id);
       if (st) {
         setName(st.name);
-        if (st.accent) setAccent(st.accent);
         setDomain({ on: st.allowDomain, mine: companyDomain(acc.email) });
       }
       await loadPeople(w.id, isAdmin);
@@ -66,7 +64,7 @@ export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
   const saveGeneral = async () => {
     if (!org) return;
     setBusy(true);
-    const err = await updateOrg(org.id, { name, accent });
+    const err = await updateOrg(org.id, { name });
     setBusy(false);
     if (err) {
       toast(err);
@@ -74,7 +72,6 @@ export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
     }
     update((d) => {
       d.ws.name = name.trim();
-      d.theme = { ...d.theme, acc: accent };
       const o = d.orgs?.find((x) => x.id === org.id);
       if (o) o.name = name.trim();
     });
@@ -135,7 +132,7 @@ export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
           <>
             {!admin && <em>Only owners and admins can change these settings.</em>}
             <div className="logopick">
-              <OrgMark name={name} logo={s.ws.logo} size={52} color={accent} />
+              <OrgMark name={name} logo={s.ws.logo} size={52} />
               {admin && (
                 <div className="acts">
                   <button type="button" className="btn sm" disabled={busy} onClick={() => logoIn.current?.click()}>
@@ -158,24 +155,6 @@ export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
             <div className="fld">
               <label htmlFor="wsname">Organisation name</label>
               <input id="wsname" className="inp" value={name} disabled={!admin} maxLength={50} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="fld">
-              <label>Brand colour</label>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {THEMES.acc.map(([nm, c]) => (
-                  <button
-                    key={c}
-                    type="button"
-                    title={nm}
-                    aria-label={'Brand colour ' + nm}
-                    aria-pressed={accent === c}
-                    disabled={!admin}
-                    onClick={() => setAccent(c)}
-                    style={{ width: 26, height: 26, borderRadius: 8, background: c, border: 0, cursor: admin ? 'pointer' : 'default', boxShadow: accent === c ? '0 0 0 2px #fff, 0 0 0 4px ' + c : 'none' }}
-                  />
-                ))}
-              </div>
-              <em>Everyone&apos;s default accent. People can still pick their own theme.</em>
             </div>
             {admin && (
               <button type="button" className="btn pri" style={{ alignSelf: 'flex-start' }} disabled={busy || !name.trim()} onClick={saveGeneral}>

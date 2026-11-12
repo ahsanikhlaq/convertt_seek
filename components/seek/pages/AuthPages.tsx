@@ -30,7 +30,7 @@ import { ROUTES } from '@/lib/seek/routes';
 import { applyAccount, setMe, useSeek } from '@/lib/seek/store';
 import { CodeInput, codeComplete } from '../CodeInput';
 import { InviteLink } from '../InviteDialog';
-import { Avatar, Logo, OrgMark, Switch } from '../ui';
+import { Avatar, Logo, OrgMark } from '../ui';
 import { THEMES } from '@/lib/seek/data';
 
 function Brand({ children }: { children?: React.ReactNode }) {
@@ -297,7 +297,7 @@ const USES = ['Team chat', 'Client work', 'Tasks and decisions'];
 
 /**
  * Organisation setup (build spec 5.4), in three short steps after sign-up and profile:
- * 3) Organisation: logo, name, workspace address (checked on the server), brand colour, time zone, website;
+ * 3) Organisation: logo, name, workspace address (checked on the server), time zone, website;
  * 4) How your team works: team size and use, which decide what we create (this step creates the organisation);
  * 5) Invite your team: emails with a role each, the shareable link, and "anyone at @company can join".
  * The panel on the left is a live preview in the chosen colours. A reload resumes at the same step.
@@ -305,12 +305,6 @@ const USES = ['Team chat', 'Client work', 'Tasks and decisions'];
 const ACCENTS = THEMES.acc;
 const DEFAULT_ACCENT = ACCENTS[0][1];
 
-/** WCAG contrast of white text on a colour (≥ 4.5 reads well). */
-function whiteContrast(hex: string) {
-  const ch = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  const lum = 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
-  return 1.05 / (lum + 0.05);
-}
 /** A colour k of the way to black (for the preview's rail). */
 function darken(hex: string, k: number) {
   return '#' + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, '0')).join('');
@@ -332,7 +326,6 @@ export function SetupPage() {
   const [saving, setSaving] = useState(false);
   const [free, setFree] = useState<boolean | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const colorRef = useRef<HTMLInputElement>(null);
   const logo = preview ?? w.logo ?? null;
   const domain = backendOn ? companyDomain(s.email) : 'convertt.co';
   const ws = (fn: (x: typeof w) => void) =>
@@ -356,7 +349,7 @@ export function SetupPage() {
       x.invites = [];
       x.roles = {};
       x.slug = undefined;
-      x.allowDomain = !!domain;
+      x.allowDomain = false;
       x.tz = guessZone();
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -509,7 +502,7 @@ export function SetupPage() {
       const id = acc?.workspace?.id;
       if (id && domain && w.allowDomain) await setDomainJoin(id, true);
       for (const e of id && !skip ? w.invites : []) {
-        if ((await sendInvite(id!, e, { role: w.roles?.[e] ?? 'member' })).ok) sent++;
+        if ((await sendInvite(id!, e, { role: 'member' })).ok) sent++;
         else failed++;
       }
       setSaving(false);
@@ -558,7 +551,6 @@ export function SetupPage() {
   );
 
   const rail = darken(accent, 0.28);
-  const lowContrast = whiteContrast(accent) < 4.5;
 
   return (
     <main className="auth">
@@ -753,44 +745,6 @@ export function SetupPage() {
                 </em>
               </div>
               <div className="fld">
-                <label>Brand colour</label>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                  {ACCENTS.map(([nm, c]) => (
-                    <button
-                      key={c}
-                      type="button"
-                      title={nm}
-                      aria-label={'Brand colour ' + nm}
-                      aria-pressed={accent === c}
-                      onClick={() =>
-                        ws((x) => {
-                          x.accent = c;
-                        })
-                      }
-                      style={{ width: 28, height: 28, borderRadius: 8, background: c, border: 0, cursor: 'pointer', boxShadow: accent === c ? '0 0 0 2px #fff, 0 0 0 4px ' + c : 'none' }}
-                    />
-                  ))}
-                  <button type="button" className="btn sm" onClick={() => colorRef.current?.click()}>
-                    Custom
-                  </button>
-                  <input
-                    ref={colorRef}
-                    type="color"
-                    value={accent}
-                    aria-label="Custom brand colour"
-                    style={{ width: 0, height: 0, opacity: 0, border: 0, padding: 0 }}
-                    onChange={(e) =>
-                      ws((x) => {
-                        x.accent = e.target.value;
-                      })
-                    }
-                  />
-                </div>
-                <em style={{ color: lowContrast ? 'var(--red)' : undefined }}>
-                  {lowContrast ? 'White text is hard to read on this colour. Pick a darker one.' : 'Becomes the app’s accent for everyone. People can still pick their own theme.'}
-                </em>
-              </div>
-              <div className="fld">
                 <label htmlFor="wtz">Time zone</label>
                 <select
                   id="wtz"
@@ -839,26 +793,13 @@ export function SetupPage() {
               <div>
                 <h1>Invite your team</h1>
               </div>
-              <p className="sub">They get an email with a Join button. You can choose which channels each person sees from ＋ Invite people.</p>
+              <p className="sub">They get an email with a Join button and a sign-in code. Or share the invite link.</p>
               <div className="fld">
                 <label htmlFor="invIn">Emails</label>
                 <div className="tagin">
                   {w.invites.map((e, i) => (
                     <span key={e}>
                       {e}
-                      <select
-                        aria-label={'Role for ' + e}
-                        value={w.roles?.[e] ?? 'member'}
-                        onChange={(ev) =>
-                          ws((x) => {
-                            x.roles = { ...(x.roles ?? {}), [e]: ev.target.value as 'member' | 'admin' };
-                          })
-                        }
-                        style={{ border: 0, background: 'transparent', font: 'inherit', fontSize: 12, color: 'inherit', cursor: 'pointer' }}
-                      >
-                        <option value="member">Member</option>
-                        <option value="admin">Admin</option>
-                      </select>
                       <button
                         type="button"
                         aria-label={'Remove ' + e}
@@ -894,25 +835,8 @@ export function SetupPage() {
                     onBlur={() => invite.trim() && addInvites(invite)}
                   />
                 </div>
-                <em>Paste a list to add several at once. Admins can manage people, channels and settings.</em>
+                <em>Paste a list to add several at once.</em>
               </div>
-              {domain && (
-                <div className="trow">
-                  <div>
-                    <b>Anyone with an @{domain} email can join</b>
-                    <small>They join as members after confirming their email.</small>
-                  </div>
-                  <Switch
-                    on={!!w.allowDomain}
-                    label={'Anyone with an @' + domain + ' email can join'}
-                    onClick={() =>
-                      ws((x) => {
-                        x.allowDomain = !x.allowDomain;
-                      })
-                    }
-                  />
-                </div>
-              )}
               <InviteLink code={code ?? (backendOn ? null : 'demo-link')} onCode={setCode} />
               <button type="button" className="btn lg pri" onClick={() => void finish()} disabled={saving}>
                 {saving ? 'Sending invites…' : w.invites.length ? `Send ${w.invites.length} invite${w.invites.length === 1 ? '' : 's'} and open #general` : 'Continue to #general'}

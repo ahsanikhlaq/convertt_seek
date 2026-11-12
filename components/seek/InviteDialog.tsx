@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from 'react';
 import { backendOn, currentAccount, joinLink, resetJoinCode } from '@/lib/seek/backend';
+import { isEmail } from '@/lib/seek/format';
 import { useSeek } from '@/lib/seek/store';
 import { Modal } from './Dialogs';
 import { OrgMark } from './ui';
@@ -22,6 +23,59 @@ export async function copyText(text: string): Promise<boolean> {
     t.remove();
     return ok;
   }
+}
+
+/** Emails as tags: type or paste addresses, press Enter (or a comma) to add one; × removes it. */
+export function EmailTags({ emails, onChange, placeholder = 'Add email, press Enter', id }: { emails: string[]; onChange: (e: string[]) => void; placeholder?: string; id?: string }) {
+  const [v, setV] = useState('');
+  const { toast } = useSeek();
+  const add = (raw: string) => {
+    const parts = raw.split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter(Boolean);
+    if (!parts.length) return;
+    const bad = parts.filter((x) => !isEmail(x));
+    const good = parts.filter((x) => isEmail(x) && !emails.includes(x));
+    if (good.length) onChange([...emails, ...good]);
+    if (bad.length) toast(bad[0] + ' isn’t a valid email');
+    setV(bad.join(' '));
+  };
+  return (
+    <div className="tagin">
+      {emails.map((e) => (
+        <span key={e}>
+          {e}
+          <button type="button" aria-label={'Remove ' + e} onClick={() => onChange(emails.filter((x) => x !== e))}>
+            ×
+          </button>
+        </span>
+      ))}
+      <input
+        id={id}
+        type="email"
+        placeholder={emails.length ? '' : placeholder}
+        aria-label="Add email"
+        value={v}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (/[,;\s]$/.test(val)) add(val);
+          else setV(val);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            add(v);
+          } else if (e.key === 'Backspace' && !v && emails.length) onChange(emails.slice(0, -1));
+        }}
+        onPaste={(e) => {
+          const t = e.clipboardData.getData('text');
+          if (/[\s,;]/.test(t.trim())) {
+            e.preventDefault();
+            add(t);
+          }
+        }}
+        onBlur={() => v.trim() && add(v)}
+      />
+    </div>
+  );
 }
 
 /** The organization's shareable invite link, with Copy (and, for admins, Reset). */
@@ -77,20 +131,18 @@ export function InviteDialog({
   onClose,
   invite,
   channels = [],
-  admin = false,
 }: {
   onClose: () => void;
   invite: (email: string, opts?: { role?: 'member' | 'admin'; channels?: string[] }) => Promise<string>;
-  /** private channels you can give the new person (open channels everyone sees anyway) */
+  /** private channels you can give the new people (open channels everyone sees anyway) */
   channels?: { id: string; name: string }[];
-  /** admins can invite admins */
+  /** kept for callers; roles are changed in Workspace settings */
   admin?: boolean;
 }) {
-  const [role, setRole] = useState<'member' | 'admin'>('member');
   const [picked, setPicked] = useState<string[]>([]);
   const { s, toast } = useSeek();
   const [code, setCode] = useState<string | null>(null);
-  const [email, setEmail] = useState('');
+  const [emails, setEmails] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const id = useId();
 
@@ -103,12 +155,18 @@ export function InviteDialog({
   }, []);
 
   const send = async () => {
-    if (busy || !email.trim()) return;
+    if (busy || !emails.length) return;
     setBusy(true);
-    const msg = await invite(email, { role, channels: picked });
+    const failed: string[] = [];
+    let last = '';
+    for (const e of emails) {
+      last = await invite(e, { role: 'member', channels: picked });
+      if (!/^Invite sent|already has a Seek account/.test(last)) failed.push(e);
+    }
     setBusy(false);
-    toast(msg);
-    if (msg !== 'Enter a valid email') setEmail('');
+    if (emails.length === 1) toast(last);
+    else toast(failed.length ? `${emails.length - failed.length} invites sent. Couldn’t invite ${failed.join(', ')}` : `${emails.length} invites sent`);
+    setEmails(failed);
   };
 
   return (
@@ -136,23 +194,9 @@ export function InviteDialog({
             void send();
           }}
         >
-          <label htmlFor={id}>Or send an invite by email</label>
-          <div className="copyrow">
-            <input id={id} className="inp" type="email" placeholder="name@company.com" value={email} onChange={(e) => setEmail(e.target.value)} style={{ fontFamily: 'inherit', fontSize: 14, color: 'var(--ink)' }} />
-            <button type="submit" className="btn" disabled={busy || !email.trim()}>
-              {busy ? 'Sending…' : 'Send'}
-            </button>
-          </div>
+          <label htmlFor={id}>Invite teammates by email</label>
+          <EmailTags id={id} emails={emails} onChange={setEmails} />
           <em>They get an email with a Join button and a 6-digit code.</em>
-          {admin && (
-            <div className="chips" style={{ marginTop: 6 }}>
-              {(['member', 'admin'] as const).map((r) => (
-                <button key={r} type="button" className={'chip' + (role === r ? ' on' : '')} aria-pressed={role === r} onClick={() => setRole(r)}>
-                  {r === 'member' ? 'Member' : 'Admin'}
-                </button>
-              ))}
-            </div>
-          )}
           {channels.length > 0 && (
             <div className="fld" style={{ marginTop: 6 }}>
               <label>Private channels they can see</label>
@@ -170,6 +214,9 @@ export function InviteDialog({
               <em>Open (#) channels are visible to everyone on the team. Pick the private ones this person should see.</em>
             </div>
           )}
+          <button type="submit" className="btn pri" style={{ marginTop: 8 }} disabled={busy || !emails.length}>
+            {busy ? 'Sending…' : emails.length > 1 ? `Send ${emails.length} invites` : 'Send invite'}
+          </button>
         </form>
       </div>
     </Modal>

@@ -8,11 +8,11 @@ import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { CodeInput } from '../CodeInput';
 import { backendOn } from '@/lib/seek/backend';
-import { NewClientPage } from './NewClientPage';
+import { LiveInvitePage } from './LiveInvitePage';
 
 export function InvitePage() {
-  // with a backend this is the real New client wizard; the demo keeps the prototype's walkthrough
-  return backendOn ? <NewClientPage /> : <DemoInvitePage />;
+  // with a backend this sends a real invite; the demo keeps the prototype's walkthrough (same layout)
+  return backendOn ? <LiveInvitePage /> : <DemoInvitePage />;
 }
 
 function DemoInvitePage() {

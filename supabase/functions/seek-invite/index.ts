@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
   const user = who?.user;
   if (!user) return json({ error: 'Please sign in again' }, 401);
 
-  let body: { workspace_id?: string; space_id?: string; email?: string; redirect_to?: string; role?: string; channels?: unknown[] };
+  let body: { workspace_id?: string; space_id?: string; email?: string; redirect_to?: string; role?: string; channels?: unknown[]; message?: string };
   try {
     body = await req.json();
   } catch {
@@ -56,12 +56,14 @@ Deno.serve(async (req) => {
     const agency = (sp?.workspaces as { name?: string } | null)?.name ?? 'your agency';
     data = {
       invited_by: inviter,
-      workspace: `${sp?.name ?? 'your'}’s project space`,
+      workspace: sp?.name ?? 'your project space',
       space: sp?.name ?? '',
       project: sp?.project ?? '',
       agency,
       reply_target: sp?.reply_target ?? '',
       name: person.name ?? '',
+      // the welcome message from the invite form (plain text; the email shows it instead of the default line)
+      message: String(body.message ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 500),
     };
   } else {
     // a teammate: saved as an invite with their role and the private channels they'll see (row-level security

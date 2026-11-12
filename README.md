@@ -105,9 +105,8 @@ invite link (`/join?c=<code>`, shown under ＋ Invite people; admins can reset i
 button and a 6-digit code, so if the button fails the person types the code instead of waiting for a new email.
 
 **Organisation setup:** a new owner goes from the email code straight to two screens: (1) the organisation:
-name, logo (cropped to a square), workspace address (checked on the server), brand colour, time zone and team size;
-(2) invite the team: emails with Member/Admin each, the invite link, and "anyone with an @company email can
-join" (never offered for personal email providers). Then #general. The owner's name starts from their email and can
+name, logo (cropped to a square), workspace address (checked on the server), time zone and team size; (2) invite
+the team: type or paste emails, or share the invite link. Then #general. The owner's name starts from their email and can
 be changed in the profile. Invited teammates and clients still set up their profile first. The brand colour becomes
 everyone's accent. If the person's company domain already has a workspace that allows it, setup offers to join it.
 People in several organisations switch between them from the rail.
@@ -186,9 +185,11 @@ saved to your account.
 link and domain joining, change roles (Member/Admin), remove people, and resend or cancel invites. The owner can't be
 removed or demoted. Everyone else sees it read-only.
 
-**Client spaces** (Clients → ＋ New): a four-step wizard (who the client is, their onboarding checklist, reply target
-and tone, review and invite) creates the space and emails each client person a Join link. Clients sign in with a
-code and see only their own project: a getting-started checklist, the Client chat and their team. The agency's team
+**Client spaces** (Clients → ＋ New): as in the prototype, one simple invite: the client's email, the space name, an
+optional welcome message, and who on your team works on this client. Send invite creates the space (the client is its
+approver) and emails them "X invited you to <space>" with the welcome message, a Join button and a 6-digit code; Copy
+invite link gives a link they open and sign in with that email. More client people can be added from People. Clients
+sign in with a code and see only their own project, starting on the conversation. The agency's team
 sees Client chat, Team notes (never shown to the client), Status (both sides' checklist), Approvals, Files and People
 (roles, resend invite, remove). The database enforces the split: a client session never receives Team notes (or
 their files), team channels or other clients.

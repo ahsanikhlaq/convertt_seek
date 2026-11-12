@@ -335,11 +335,11 @@ export async function sendInvite(workspaceId: string, email: string, opts: { rol
 }
 
 /** Emails a client their invite to a client space (they must already be listed in its people). */
-export async function inviteClient(spaceId: string, email: string): Promise<{ ok: boolean; message: string }> {
-  return invite({ space_id: spaceId, email });
+export async function inviteClient(spaceId: string, email: string, message = ''): Promise<{ ok: boolean; message: string }> {
+  return invite({ space_id: spaceId, email, message });
 }
 
-async function invite(body: { workspace_id?: string; space_id?: string; email: string; role?: string; channels?: string[] }): Promise<{ ok: boolean; message: string }> {
+async function invite(body: { workspace_id?: string; space_id?: string; email: string; role?: string; channels?: string[]; message?: string }): Promise<{ ok: boolean; message: string }> {
   const email = body.email;
   const { data, error } = await sb().functions.invoke('seek-invite', {
     body: { ...body, redirect_to: `${location.origin}/welcome` },

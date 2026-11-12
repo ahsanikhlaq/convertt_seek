@@ -733,6 +733,11 @@ function ClientPortal({ live }: { live: LiveClients }) {
     setUI({ sideOpen: false });
   };
   const prog = sp ? progress(sp, 'client') : { done: 0, total: 0 };
+  // a simple invite has no getting-started checklist: open straight on the conversation
+  const noSteps = !!sp && live.ready && prog.total === 0;
+  useEffect(() => {
+    if (noSteps && tab === 'start') setTab('chat');
+  }, [noSteps, tab]);
 
   const side = (
     <Sidebar title={sp?.name ?? 'Your project'} sub={sp ? `with ${agency}${sp.project ? ' · ' + sp.project : ''}` : ''}>
@@ -762,7 +767,7 @@ function ClientPortal({ live }: { live: LiveClients }) {
       <div className="sg lbl">Your space</div>
       {(
         [
-          ['start', 'Getting started', prog.total ? `${prog.done}/${prog.total}` : ''],
+          ...(noSteps ? [] : ([['start', 'Getting started', prog.total ? `${prog.done}/${prog.total}` : '']] as [PortalTab, string, string][])),
           ['chat', 'Conversation', ''],
           ['status', 'Project status', ''],
           ['approvals', 'Approvals', mineWaiting ? String(mineWaiting) : ''],
