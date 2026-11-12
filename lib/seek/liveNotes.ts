@@ -45,6 +45,7 @@ export function openNote(n: Note, d: State, me: string | null): string {
     if (n.actor) d.dm = keyFor(n.actor, me) as PersonKey;
     return ROUTES.dms;
   }
+  if (kind !== 'sp') return ROUTES.channels;
   d.cs = id;
   d.cTab = lane === 'team' ? 'Team notes' : lane === 'approvals' ? 'Approvals' : 'Client chat';
   return ROUTES.clients;

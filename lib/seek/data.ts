@@ -30,6 +30,8 @@ export type ChatMessage = {
   files?: FileRef[];
   /** backend mode: a card the message carries (a scheduled meeting) */
   card?: MeetingCard;
+  /** backend mode: pinned in its conversation */
+  pinned?: boolean;
   after?: string;
   task?: string;
   rx?: Record<string, number>;
@@ -55,7 +57,7 @@ export type FeedItem = ChatMessage | DecisionCard | NewMarker;
 export type Channel = { id: string; unread: number; desc: string; tier?: string; private?: boolean; /** backend: the channel's database id */ cid?: string };
 
 /** A notification (backend mode): a DM, a mention, a thread reply or a client message. */
-export type Note = { id: number; kind: 'dm' | 'mention' | 'reply' | 'client' | 'team' | 'approval'; title: string; body: string; conv: string; actor: string | null; at: string; read: boolean };
+export type Note = { id: number; kind: 'dm' | 'mention' | 'reply' | 'client' | 'team' | 'approval' | 'task' | 'reminder'; title: string; body: string; conv: string; actor: string | null; at: string; read: boolean };
 export type DmThread = { last: string; unread: number; msgs: FeedItem[] };
 export type Space = { id: string; name: string; desc: string; wait: string; color: string };
 export type Decision = {
@@ -71,6 +73,8 @@ export type Decision = {
   /** History lines shown on a replaced decision ("Fri 15:02 · … logged by Ahsan"). */
   hist?: string[];
 };
+/** A task made from a message (backend mode; team only). */
+export type LiveTask = { id: number; title: string; owner: string; due: string | null; source: number | null; status: 'open' | 'done'; by: string; at: string; doneAt: string | null; conv: string | null; place: string | null };
 /** A meeting posted in a client space (the MEETING card). */
 export type MeetingCard = { type: 'meeting'; id: number; title: string; starts_at: string; duration: number; tool: 'meet' | 'zoom' | 'seek' | 'person'; link: string; agenda: string; record: boolean; cancelled: boolean };
 /** A file attached to a message: where it is stored, its name, size in bytes and type. */
@@ -154,6 +158,12 @@ export type State = {
   notes?: Note[];
   /** backend mode: the decision log you can see (newest first, replaced versions included) */
   ldecs?: LiveDecision[];
+  /** backend mode: your user id */
+  meId?: string;
+  /** backend mode: ids of the messages you saved */
+  lsaved?: number[];
+  /** backend mode: the team's tasks (open, and done in the last two weeks) */
+  ltasks?: LiveTask[];
   wsId: WorkspaceId;
   workspaces: Record<WorkspaceId, Workspace>;
   dm: PersonKey;

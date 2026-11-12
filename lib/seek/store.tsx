@@ -77,6 +77,8 @@ export function applyAccount(d: State, acc: Account | null) {
     d.lc = {};
     d.cs = '';
     d.ldecs = [];
+    d.lsaved = [];
+    d.ltasks = [];
     d.notes = [];
   }
   if (acc && !acc.workspace && acc.clientSpaces[0]) {
@@ -88,6 +90,7 @@ export function applyAccount(d: State, acc: Account | null) {
   if (!acc) return;
   d.orgs = acc.orgs.map((o) => ({ id: o.id, name: o.name, logo: o.logo ?? undefined }));
   d.orgId = acc.workspace?.id;
+  d.meId = acc.id;
   d.email = acc.email;
   // your real profile replaces the prototype's sample person
   d.me = { ...d.me, email: acc.email, name: acc.name.trim() || acc.email.split('@')[0] || 'You', title: acc.title, tz: acc.timeZone || d.me.tz, dnd: !!acc.dndUntil && new Date(acc.dndUntil) > new Date() };

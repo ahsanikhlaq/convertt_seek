@@ -13,6 +13,7 @@ import { Composer, Feed, ThreadPane, useSendTo, type FeedRef } from '../Messages
 import { MainHeader, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
 import { FileList, useAttach } from '../Files';
+import { CanvasEditor, PinsList, SavedDialog, TasksDialog } from '../Extras';
 import { channelFiles, type SharedFile } from '@/lib/seek/liveFiles';
 
 const TEAM: PersonKey[] = ['AH', 'SY', 'MO', 'ZA'];
@@ -23,6 +24,8 @@ export function ChannelsPage() {
   const [creating, setCreating] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [membersOf, setMembersOf] = useState<string | null>(null);
+  const [listing, setListing] = useState<null | 'saved' | 'tasks'>(null);
+  const myOpenTasks = (s.ltasks ?? []).filter((t) => t.status === 'open' && t.owner === s.meId).length;
   // with a backend: real channels and messages, live (lib/seek/live.ts); in demo mode this is null
   const live = useLiveChat();
   const team: PersonKey[] = live ? live.people : TEAM;
@@ -79,6 +82,25 @@ export function ChannelsPage() {
           ＋ Invite people
         </button>
       )}
+      {live && <div className="sg lbl">You</div>}
+      {live && (
+        <button type="button" className="si" onClick={() => setListing('tasks')}>
+          <span className="h">☐</span>
+          <span className="x">
+            <b>Tasks</b>
+          </span>
+          {myOpenTasks > 0 && <span className="tag">{myOpenTasks}</span>}
+        </button>
+      )}
+      {live && (
+        <button type="button" className="si" onClick={() => setListing('saved')}>
+          <span className="h">★</span>
+          <span className="x">
+            <b>Saved</b>
+          </span>
+          {(s.lsaved?.length ?? 0) > 0 && <span className="tag">{s.lsaved!.length}</span>}
+        </button>
+      )}
       {!live && <div className="sg lbl">Starred</div>}
       {!live && (
         <button type="button" className="si" onClick={() => open(ws.channels[0].id)}>
@@ -133,14 +155,9 @@ export function ChannelsPage() {
       </div>
     );
   } else if (live) {
-    // with a backend, files, canvases and pins aren't saved yet, so a real channel shows empty tabs, not samples
     body = (
       <div className="pg">
-        <div className="empty">
-          {ui.chTab === 'Canvas'
-              ? "No canvas yet. A canvas keeps the channel's brief, owners and key dates in one place. Canvases arrive in a later update."
-              : 'Nothing pinned yet. Pinned messages stay here so everyone in #' + ch + ' can find them. Pinning arrives in a later update.'}
-        </div>
+        {ui.chTab === 'Canvas' ? <CanvasEditor key={c.cid} channel={c.cid ?? null} me={live.me} name={ch} /> : <PinsList key={c.cid} channel={c.cid ?? null} me={live.me} name={ch} />}
       </div>
     );
   } else if (ui.chTab === 'Files') {
@@ -239,6 +256,8 @@ export function ChannelsPage() {
         below={tabs}
       />
       {body}
+      {listing === 'saved' && <SavedDialog me={live?.me ?? null} onClose={() => setListing(null)} />}
+      {listing === 'tasks' && <TasksDialog me={live?.me ?? null} onClose={() => setListing(null)} />}
       {creating && live && (
         <NewChannelDialog
           live={live}

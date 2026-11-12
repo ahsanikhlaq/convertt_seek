@@ -126,6 +126,15 @@ the message box (or drop files on it) shares up to 10 files of up to 100 MB each
 the private `seek-files` bucket under the conversation they were shared in, and storage only gives them (as links
 that expire after an hour) to people who can see that conversation. Channels and client spaces have a Files tab.
 
+**Message menu:** More (or a key while the menu is open) on any saved message: ☐ Make task (T: title, owner, due
+date; the owner is notified and a task chip shows under the message), ◇ Log decision (D), ⏰ Remind me (R: in 20
+minutes, 1 or 3 hours, tomorrow or next Monday at 09:00, or any time; it arrives in your 🔔 while Seek is open, or the
+next time you open it), 📌 Pin (P, for everyone in the conversation; in client spaces only the team pins), ★ Save (S,
+just for you), Copy text (L). The channels sidebar has **Tasks** (Mine, All open, Done; tick to finish, remind, open
+the source message) and **Saved**. Channels also have a **Pins** tab and a **Canvas** tab: one shared page per channel
+(brief, owners, key dates); if someone saved it while you were editing, your save stops and shows their version
+instead of overwriting it. Tasks are team-only: clients never see them.
+
 **Decisions:** any message's More menu → Log decision (or D) saves it with who logged it, where and the source
 message; the decision card shows under the message, and Undo is offered for a few seconds. In the Decisions log you
 filter by place and type, search, jump to the source message, edit (the new wording replaces the old, which stays in

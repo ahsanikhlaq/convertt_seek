@@ -15,6 +15,8 @@ import type { LiveDecision } from '@/lib/seek/data';
 import { PromptDialog } from './Dialogs';
 import { FileCards } from './Files';
 import { MeetingCardView } from './Meetings';
+import { dueText, RemindDialog, TaskDialog } from './Extras';
+import { pinMessage, saveMessage } from '@/lib/seek/liveExtras';
 import { approvalDraft } from '@/lib/seek/liveApprovals';
 import { usePopovers } from './Popovers';
 import { Avatar, Emoji, RichText } from './ui';
@@ -40,6 +42,39 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
   const [logging, setLogging] = useState(false);
   // the agency's team logs decisions; clients see the ones from their Client chat
   const canLog = s.session === 'in';
+  const meId = s.meId ?? null;
+  const [dialog, setDialog] = useState<null | 'task' | 'remind'>(null);
+  const dbId = toDbId(m.id);
+  const isSaved = backendOn ? dbId != null && (s.lsaved ?? []).includes(dbId) : !!m.saved;
+  const myTasks = backendOn && dbId != null ? (s.ltasks ?? []).filter((t) => t.source === dbId) : [];
+
+  /** Backend mode: save for yourself (★ Saved). */
+  const toggleSave = async () => {
+    setUI({ menu: null });
+    if (dbId == null) return;
+    const on = !isSaved;
+    update((d) => {
+      d.lsaved = on ? [...(d.lsaved ?? []), dbId] : (d.lsaved ?? []).filter((x) => x !== dbId);
+    });
+    const err = await saveMessage(m.id, on);
+    if (err) {
+      update((d) => {
+        d.lsaved = !on ? [...(d.lsaved ?? []), dbId] : (d.lsaved ?? []).filter((x) => x !== dbId);
+      });
+      toast(err);
+    } else toast(on ? 'Saved for later' : 'Removed from saved');
+  };
+  /** Backend mode: pin for everyone in the conversation. */
+  const togglePin = async () => {
+    setUI({ menu: null });
+    const on = !m.pinned;
+    const err = await pinMessage(m.id, on);
+    if (err) return toast(err);
+    edit((x) => {
+      x.pinned = on;
+    });
+    toast(on ? 'Pinned for everyone here' : 'Unpinned');
+  };
   const rx = m.rx || {};
   const p = PEOPLE[m.who] ?? { name: 'Someone', color: '#7a6179', role: '' };
 
@@ -194,7 +229,21 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
       const k = e.key.toLowerCase();
       if (backendOn) {
         if (k === 'l') void copyText();
-        else if (k === 'd' && live && canLog) {
+        else if (k === 's' && live) {
+          e.preventDefault();
+          void toggleSave();
+        } else if (k === 'p' && live && canLog) {
+          e.preventDefault();
+          void togglePin();
+        } else if (k === 't' && live && canLog) {
+          e.preventDefault();
+          setUI({ menu: null });
+          setDialog('task');
+        } else if (k === 'r' && live) {
+          e.preventDefault();
+          setUI({ menu: null });
+          setDialog('remind');
+        } else if (k === 'd' && live && canLog) {
           e.preventDefault();
           setUI({ menu: null });
           setLogging(true);
@@ -249,6 +298,12 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
             <RichText text={m.after} />
           </div>
         )}
+        {myTasks.map((t) => (
+          <div key={t.id} className="task" style={t.status === 'done' ? { opacity: 0.6 } : undefined}>
+            <i></i>
+            <span style={t.status === 'done' ? { textDecoration: 'line-through' } : undefined}>{t.title}</span> · {t.owner === meId ? 'you' : (PEOPLE[t.owner]?.name ?? 'teammate')} · {t.status === 'done' ? 'done' : dueText(t.due)} <span className="tag v">task</span>
+          </div>
+        ))}
         {m.task && (
           <div className="task">
             <i></i>
@@ -272,7 +327,12 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
             {m.thread.length} {m.thread.length === 1 ? 'reply' : 'replies'} <small>last {m.thread[m.thread.length - 1].time}</small>
           </button>
         )}
-        {m.saved && <div style={{ fontSize: 11.5, color: 'var(--v)', marginTop: 4, fontWeight: 600 }}>★ Saved</div>}
+        {(isSaved || (backendOn && m.pinned)) && (
+          <div style={{ fontSize: 11.5, color: 'var(--v)', marginTop: 4, fontWeight: 600, display: 'flex', gap: 10 }}>
+            {backendOn && m.pinned && <span>📌 Pinned</span>}
+            {isSaved && <span>★ Saved</span>}
+          </div>
+        )}
       </div>
       {!inThread && (
         <div className="mt">
@@ -284,6 +344,11 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
           <button type="button" onClick={(ev) => pop.openEmoji(ev.currentTarget, react)}>
             React
           </button>
+          {live && (
+            <button type="button" className={isSaved ? 'on' : ''} onClick={() => void toggleSave()}>
+              {isSaved ? 'Saved' : 'Save'}
+            </button>
+          )}
           {!backendOn && (
             <button
               type="button"
@@ -311,10 +376,44 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
               role="menuitem"
               onClick={() => {
                 setUI({ menu: null });
+                setDialog('task');
+              }}
+            >
+              ☐ Make task <kbd>T</kbd>
+            </button>
+          )}
+          {live && canLog && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setUI({ menu: null });
                 setLogging(true);
               }}
             >
               ◇ Log decision <kbd>D</kbd>
+            </button>
+          )}
+          {live && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setUI({ menu: null });
+                setDialog('remind');
+              }}
+            >
+              ⏰ Remind me <kbd>R</kbd>
+            </button>
+          )}
+          {live && canLog && (
+            <button type="button" role="menuitem" onClick={() => void togglePin()}>
+              📌 {m.pinned ? 'Unpin' : 'Pin'} <kbd>P</kbd>
+            </button>
+          )}
+          {live && (
+            <button type="button" role="menuitem" onClick={() => void toggleSave()}>
+              ★ {isSaved ? 'Remove from saved' : 'Save'} <kbd>S</kbd>
             </button>
           )}
           <button type="button" role="menuitem" onClick={() => void copyText()}>
@@ -357,6 +456,8 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
           </button>
         </div>
       )}
+      {dialog === 'task' && createPortal(<TaskDialog initial={m.text.replace(/\s+/g, ' ').trim()} sourceUiId={m.id} me={meId} onClose={() => setDialog(null)} />, document.body)}
+      {dialog === 'remind' && createPortal(<RemindDialog target={{ uiId: m.id }} onClose={() => setDialog(null)} />, document.body)}
       {logging &&
         createPortal(
         <PromptDialog
