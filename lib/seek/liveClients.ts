@@ -6,6 +6,7 @@ import { backendOn, currentAccount, DB_SCHEMA, inviteClient, completeStep, sb, t
 import type { ChatMessage } from './data';
 import { keyFor, learnProfiles, timeLabel, toUiId } from './live';
 import { hydrateReactions } from './liveSync';
+import { mentionIds } from './liveNotes';
 import { useSeek } from './store';
 
 /**
@@ -201,7 +202,9 @@ export function useLiveClients(): LiveClients | null {
     spaces,
     reload: load,
     send: async (space, ln, text) => {
-      const { data, error } = await sb().from('messages').insert({ space_id: space, lane: ln, body: text }).select(COLS).single();
+      const sp = spaces.find((x) => x.id === space);
+      const who = sp ? [...sp.team.map((t) => t.userId), ...(ln === 'client' ? sp.people.map((p) => p.userId).filter((v): v is string => !!v) : [])].filter((u) => u !== me.current) : [];
+      const { data, error } = await sb().from('messages').insert({ space_id: space, lane: ln, body: text, mentions: mentionIds(text, who) }).select(COLS).single();
       if (error) {
         toast('Message not sent. Check your connection and try again');
         return;

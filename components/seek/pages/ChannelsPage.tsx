@@ -199,7 +199,16 @@ export function ChannelsPage() {
             <button
               type="button"
               className="btn sm hide-m"
-              onClick={() => {
+              title={live ? 'Normal: mentions and replies notify · Digest: waits for the summary · Mute: only mentions' : undefined}
+              onClick={async () => {
+                if (live) {
+                  // your level for this channel: Normal → Digest → Mute
+                  const cur = c.tier === 'Digest' ? 'digest' : c.tier === 'Muted' ? 'mute' : 'normal';
+                  const next = cur === 'normal' ? 'digest' : cur === 'digest' ? 'mute' : 'normal';
+                  const err = await live.setLevel(ch, next);
+                  toast(err ?? (next === 'mute' ? '#' + ch + ' muted. Mentions still reach you' : next === 'digest' ? '#' + ch + ' set to Digest' : '#' + ch + ' notifies as normal'));
+                  return;
+                }
                 const o = ['Normal', 'Digest', 'Mute'];
                 const n = o[(o.indexOf(s.notif) + 1) % o.length];
                 update((d) => {
@@ -208,7 +217,7 @@ export function ChannelsPage() {
                 toast('Notifications: ' + n);
               }}
             >
-              🔔 {s.notif}
+              🔔 {live ? (c.tier === 'Muted' ? 'Mute' : c.tier ?? 'Normal') : s.notif}
             </button>
             {live && c.private && (
               <button type="button" className="btn sm" onClick={() => setMembersOf(ch)} aria-label={'Members of #' + ch}>

@@ -124,6 +124,16 @@ link see open channels only until someone adds them. The database enforces it fo
 live), and read positions are saved, so unread badges are right after a reload or on another device. Tasks,
 decisions, reminders and saving messages come with the Decisions milestone.
 
+**Notifications:** the database writes a notification for every DM, @mention (and @everyone/@here), thread reply,
+client message and team reply in Client chat. The 🔔 shows them live with an unread count; clicking one opens the
+conversation. Desktop alerts (when Seek is not in front) can be switched on from the list. Each channel can be Normal,
+Digest or Mute (from its header; muted channels only notify mentions). Your status and "Pause notifications" are
+saved to your account.
+
+**Workspace settings** (profile → ⚙ Workspace settings): owners and admins change the name, logo, brand colour, invite
+link and domain joining, change roles (Member/Admin), remove people, and resend or cancel invites. The owner can't be
+removed or demoted. Everyone else sees it read-only.
+
 **Client spaces** (Clients → ＋ New): a four-step wizard (who the client is, their onboarding checklist, reply target
 and tone, review and invite) creates the space and emails each client person a Join link. Clients sign in with a
 code and see only their own project: a getting-started checklist, the Client chat and their team. The agency's team

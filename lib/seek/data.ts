@@ -48,7 +48,10 @@ export type DecisionCard = {
 export type NewMarker = { kind: 'new'; id: number };
 export type FeedItem = ChatMessage | DecisionCard | NewMarker;
 
-export type Channel = { id: string; unread: number; desc: string; tier?: string; private?: boolean };
+export type Channel = { id: string; unread: number; desc: string; tier?: string; private?: boolean; /** backend: the channel's database id */ cid?: string };
+
+/** A notification (backend mode): a DM, a mention, a thread reply or a client message. */
+export type Note = { id: number; kind: 'dm' | 'mention' | 'reply' | 'client' | 'team'; title: string; body: string; conv: string; actor: string | null; at: string; read: boolean };
 export type DmThread = { last: string; unread: number; msgs: FeedItem[] };
 export type Space = { id: string; name: string; desc: string; wait: string; color: string };
 export type Decision = {
@@ -104,6 +107,8 @@ export type State = {
   /** backend mode: every organisation you belong to, and the open one */
   orgs?: { id: string; name: string; logo?: string }[];
   orgId?: string;
+  /** backend mode: your latest notifications */
+  notes?: Note[];
   wsId: WorkspaceId;
   workspaces: Record<WorkspaceId, Workspace>;
   dm: PersonKey;

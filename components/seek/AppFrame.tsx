@@ -4,11 +4,13 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PEOPLE, STATUSES, WORKSPACES, type PersonKey } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
-import { backendOn, currentAccount, saveProfile, signOut, uploadLogo } from '@/lib/seek/backend';
+import { backendOn, currentAccount, saveProfile, saveStatus, signOut, uploadLogo } from '@/lib/seek/backend';
 import { prototypeName, ROUTES, routeFromPrototype, routeOf, type RouteKey } from '@/lib/seek/routes';
 import { setMe, useSeek } from '@/lib/seek/store';
 import { useLiveSync } from '@/lib/seek/liveSync';
+import { useLiveNotes } from '@/lib/seek/liveNotes';
 import { ConfirmDialog, Modal } from './Dialogs';
+import { WorkspaceSettings } from './WorkspaceSettings';
 import { usePopovers } from './Popovers';
 import { Avatar, ModeSeg, OrgMark, Switch } from './ui';
 
@@ -28,6 +30,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     if (backendOn && (s.session === 'in' || s.session === 'client')) void currentAccount().then((a) => setMeId(a?.id ?? null));
   }, [s.session]);
   useLiveSync(meId);
+  useLiveNotes(meId);
 
   // with a real backend, screens need a signed-in account with a profile; demo mode keeps every screen open like
   // the prototype. The welcome and join screens are always open: invite emails and invite links land there,
@@ -255,6 +258,7 @@ function ProfileDrawer() {
   // admins can change the organization's logo from here
   const [org, setOrg] = useState<{ id: string; admin: boolean } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [wsOpen, setWsOpen] = useState(false);
   const logoIn = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!backendOn) return;
@@ -318,6 +322,7 @@ function ProfileDrawer() {
                     update((d) => {
                       d.status = { k, t };
                     });
+                    if (backendOn) void saveStatus({ status: k });
                     toast('Status: ' + t);
                   }}
                 >
@@ -392,6 +397,8 @@ function ProfileDrawer() {
                 update((d) => {
                   d.me.dnd = !d.me.dnd;
                 });
+                // paused for an hour; saved so it follows you to other devices
+                if (backendOn) void saveStatus({ dndUntil: s.me.dnd ? null : new Date(Date.now() + 3600_000).toISOString() });
                 toast(s.me.dnd ? 'Notifications on' : 'Notifications paused for 1 hour');
               }}
             />
@@ -400,12 +407,22 @@ function ProfileDrawer() {
             <button type="button" className="btn" onClick={(e) => pop.toggleTheme(e.currentTarget)}>
               🎨 Theme & branding
             </button>
-            <button type="button" className="btn" onClick={() => toast('Preferences saved')}>
-              ⚙ Preferences
-            </button>
-            <button type="button" className="btn ghost" onClick={() => setConfirmReset(true)}>
-              ↺ Reset workspace data
-            </button>
+            {backendOn ? (
+              org && (
+                <button type="button" className="btn" onClick={() => setWsOpen(true)}>
+                  ⚙ Workspace settings
+                </button>
+              )
+            ) : (
+              <>
+                <button type="button" className="btn" onClick={() => toast('Preferences saved')}>
+                  ⚙ Preferences
+                </button>
+                <button type="button" className="btn ghost" onClick={() => setConfirmReset(true)}>
+                  ↺ Reset workspace data
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="mf" style={{ display: 'flex', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--ln)' }}>
@@ -451,6 +468,7 @@ function ProfileDrawer() {
           </button>
         </div>
       </aside>
+      {wsOpen && <WorkspaceSettings onClose={() => setWsOpen(false)} />}
       {confirmReset && (
         <ConfirmDialog
           title="Reset workspace data?"

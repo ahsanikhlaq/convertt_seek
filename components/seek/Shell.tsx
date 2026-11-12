@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { WORKSPACES, type WorkspaceId } from '@/lib/seek/data';
 import { ROUTES, type RouteKey } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
+import { NotesBell } from './NotesBell';
 import { usePopovers } from './Popovers';
 import { Avatar, Icon, Logo, ModeSeg, OrgMark, StatusDot, type IconName } from './ui';
 
@@ -142,9 +143,13 @@ function TopBar() {
         <button type="button" className="btn sm ghost" onClick={() => toast('Help centre opens in a new tab')}>
           ? Help
         </button>
-        <button type="button" className="btn sm ghost" onClick={() => toast(backendOn ? 'No new notifications' : '3 new notifications')} aria-label={backendOn ? 'Notifications, none new' : 'Notifications, 3 new'}>
-          🔔{!backendOn && <span className="badge" style={{ marginLeft: 2 }}>3</span>}
-        </button>
+        {backendOn ? (
+          <NotesBell />
+        ) : (
+          <button type="button" className="btn sm ghost" onClick={() => toast('3 new notifications')} aria-label="Notifications, 3 new">
+            🔔<span className="badge" style={{ marginLeft: 2 }}>3</span>
+          </button>
+        )}
         <button type="button" className="tme" onClick={() => setUI((u) => ({ profile: !u.profile }))} aria-label="Your profile">
           <Avatar k="AH" size={30} />
           <StatusDot />
@@ -217,6 +222,11 @@ export function MainHeader({ title, sub, right, below }: { title: React.ReactNod
           <small>{sub}</small>
         </div>
         {right}
+        {backendOn && (
+          <span className="mbell">
+            <NotesBell />
+          </span>
+        )}
         <button type="button" className="mprof" onClick={() => setUI((u) => ({ profile: !u.profile }))} aria-label="Your profile">
           <Avatar k="AH" size={32} />
           <StatusDot />

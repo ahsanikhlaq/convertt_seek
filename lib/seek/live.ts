@@ -6,6 +6,7 @@ import { backendOn, currentAccount, DB_SCHEMA, sb, sendInvite } from './backend'
 import { PEOPLE, type ChatMessage, type FeedItem, type PersonKey } from './data';
 import { initialsOf, channelId as toChannelName, isEmail } from './format';
 import { hydrateReactions, markRead, unreadCounts } from './liveSync';
+import { mentionIds } from './liveNotes';
 import { useSeek } from './store';
 
 /**
@@ -83,6 +84,8 @@ export type LiveChat = {
   members: (channel: string) => Promise<string[]>;
   addMember: (channel: string, userId: string) => Promise<string | null>;
   removeMember: (channel: string, userId: string) => Promise<string | null>;
+  /** your notification level for a channel */
+  setLevel: (channel: string, level: 'normal' | 'digest' | 'mute') => Promise<string | null>;
 };
 
 export function useLiveChat(): LiveChat | null {
@@ -158,16 +161,23 @@ export function useLiveChat(): LiveChat | null {
   const loadChannels = useCallback(async () => {
     const ws = wsRef.current;
     if (!ws) return;
-    const [{ data: channels }, counts] = await Promise.all([
+    const [{ data: channels }, counts, { data: prefs }] = await Promise.all([
       sb().from('channels').select('id, name, description, private, created_by').eq('workspace_id', ws).order('created_at'),
       unreadCounts(ws).catch(() => new Map<string, number>()),
+      sb().from('channel_prefs').select('channel_id, level, muted_until'),
     ]);
+    // your notification level per channel: Digest or Muted show as a tag
+    const tierOf = new Map(
+      ((prefs ?? []) as { channel_id: string; level: string; muted_until: string | null }[])
+        .filter((p) => p.level !== 'mute' || !p.muted_until || new Date(p.muted_until) > new Date())
+        .map((p) => [p.channel_id, p.level === 'digest' ? 'Digest' : p.level === 'mute' ? 'Muted' : undefined]),
+    );
     const list = (channels ?? []) as ChannelRow[];
     chans.current = new Map(list.map((c) => [c.name, c.id]));
     setInfo(new Map(list.map((c) => [c.name, { id: c.id, name: c.name, private: !!c.private, createdBy: c.created_by ?? null }])));
     update((d) => {
       const w = d.workspaces.C;
-      w.channels = list.map((c) => ({ id: c.name, unread: c.name === w.ch ? 0 : counts.get('ch:' + c.id) ?? 0, desc: c.description, private: !!c.private }));
+      w.channels = list.map((c) => ({ id: c.name, cid: c.id, unread: c.name === w.ch ? 0 : counts.get('ch:' + c.id) ?? 0, desc: c.description, private: !!c.private, tier: tierOf.get(c.id) }));
       for (const k of Object.keys(w.msgs)) if (!chans.current.has(k)) delete w.msgs[k];
       if (!chans.current.has(w.ch)) w.ch = chans.current.has('general') ? 'general' : list[0]?.name ?? 'general';
     });
@@ -266,7 +276,7 @@ export function useLiveChat(): LiveChat | null {
     if (!channel_id) return;
     const { data, error } = await sb()
       .from('messages')
-      .insert({ channel_id, body, parent_id: parent })
+      .insert({ channel_id, body, parent_id: parent, mentions: mentionIds(body, people.filter((k) => k !== 'AH')) })
       .select('id, channel_id, user_id, parent_id, body, created_at')
       .single();
     if (error) {
@@ -328,6 +338,17 @@ export function useLiveChat(): LiveChat | null {
       if (!id) return 'Channel not found';
       const { error } = await sb().from('channel_members').insert({ channel_id: id, user_id: userId, added_by: meRef.current });
       return error && error.code !== '23505' ? 'Only admins, the channel’s creator and its members can add people' : null;
+    },
+    setLevel: async (channel, level) => {
+      const id = idOf(channel);
+      if (!id) return 'Channel not found';
+      const { error } = await sb().from('channel_prefs').upsert({ channel_id: id, level, muted_until: null }, { onConflict: 'user_id,channel_id' });
+      if (error) return 'Couldn’t save that. Try again';
+      update((d) => {
+        const c = d.workspaces.C.channels.find((x) => x.id === channel);
+        if (c) c.tier = level === 'digest' ? 'Digest' : level === 'mute' ? 'Muted' : undefined;
+      });
+      return null;
     },
     removeMember: async (channel, userId) => {
       const id = idOf(channel);

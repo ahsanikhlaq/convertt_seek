@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { backendOn, currentAccount, forgetAccount, sb, type Account } from './backend';
-import { DEFAULT_THEME, initialState, PEOPLE, STATE_VERSION, type State } from './data';
+import { DEFAULT_THEME, initialState, PEOPLE, STATE_VERSION, STATUSES, type State } from './data';
 import { initialsOf } from './format';
 import { applyTheme } from './theme';
 
@@ -88,7 +88,9 @@ export function applyAccount(d: State, acc: Account | null) {
   d.orgId = acc.workspace?.id;
   d.email = acc.email;
   // your real profile replaces the prototype's sample person
-  d.me = { ...d.me, email: acc.email, name: acc.name.trim() || acc.email.split('@')[0] || 'You', title: acc.title, tz: acc.timeZone || d.me.tz };
+  d.me = { ...d.me, email: acc.email, name: acc.name.trim() || acc.email.split('@')[0] || 'You', title: acc.title, tz: acc.timeZone || d.me.tz, dnd: !!acc.dndUntil && new Date(acc.dndUntil) > new Date() };
+  const st = STATUSES.find((x) => x[0] === acc.status);
+  if (st) d.status = { k: st[0], t: st[1] };
   setMe(d.me.name);
   if (acc.workspace) {
     d.ws.name = acc.workspace.name;

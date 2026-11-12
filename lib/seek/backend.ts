@@ -36,6 +36,9 @@ export type Account = {
   name: string;
   title: string;
   timeZone: string;
+  /** Available, In a meeting, Focus time or Away (on, mt, fc, aw), and notifications paused until */
+  status: string;
+  dndUntil: string | null;
   /** false until they've set up their profile (the welcome screen), once, after their first sign-in */
   onboarded: boolean;
   /** null until the person has set up (or been invited to) a workspace */
@@ -136,7 +139,7 @@ async function loadAccount(id: string, email: string): Promise<Account> {
   // anyone invited by email joins those workspaces the first time we see them signed in
   await sb().rpc('accept_my_invites');
   const [{ data: profile }, { data: memberships }, { data: spaces }] = await Promise.all([
-    sb().from('profiles').select('name, title, time_zone, onboarded_at').eq('id', id).maybeSingle(),
+    sb().from('profiles').select('name, title, time_zone, onboarded_at, status, dnd_until').eq('id', id).maybeSingle(),
     sb()
       .from('workspace_members')
       .select('role, joined_at, workspaces ( id, name, slug, logo_url, join_code, brand_accent )')
@@ -164,13 +167,15 @@ async function loadAccount(id: string, email: string): Promise<Account> {
   } catch {}
   const m = rows.find((r) => r.workspaces?.id === pref) ?? rows.find((r) => r.workspaces);
   const w = m?.workspaces;
-  const p = (profile ?? {}) as { name?: string; title?: string; time_zone?: string; onboarded_at?: string | null };
+  const p = (profile ?? {}) as { name?: string; title?: string; time_zone?: string; onboarded_at?: string | null; status?: string; dnd_until?: string | null };
   return {
     id,
     email,
     name: p.name ?? '',
     title: p.title ?? '',
     timeZone: p.time_zone ?? '',
+    status: p.status ?? 'on',
+    dndUntil: p.dnd_until ?? null,
     onboarded: Boolean(p.onboarded_at),
     workspace: w ? { id: w.id, name: w.name, slug: w.slug, role: m!.role, logo: w.logo_url, joinCode: w.join_code, accent: w.brand_accent } : null,
     clientSpaces,
@@ -423,7 +428,70 @@ export async function completeStep(stepId: string, done = true): Promise<string 
   return error ? friendly(error.message) : null;
 }
 
+/** Saves your status, and pauses notifications until a time (or resumes them with null). */
+export async function saveStatus(s: { status?: string; dndUntil?: string | null }): Promise<string | null> {
+  const { data } = await sb().auth.getUser();
+  if (!data.user) return 'Not signed in';
+  const row: Record<string, string | null> = {};
+  if (s.status) row.status = s.status;
+  if (s.dndUntil !== undefined) row.dnd_until = s.dndUntil;
+  const { error } = await sb().from('profiles').update(row).eq('id', data.user.id);
+  forgetAccount();
+  return error ? friendly(error.message) : null;
+}
+
 export async function signOut(): Promise<void> {
   forgetAccount();
   await sb().auth.signOut();
+}
+
+// ---------------------------------------------------------------- workspace settings (owners and admins)
+
+export type OrgPerson = { userId: string; name: string; email: string; title: string; role: string; joinedAt: string; status: string };
+export type PendingInvite = { id: string; email: string; role: string; at: string };
+
+/** Everyone in the organisation, with their role. */
+export async function orgPeople(orgId: string): Promise<OrgPerson[]> {
+  const { data } = await sb().rpc('org_people', { p_ws: orgId });
+  type R = { user_id: string; name: string; email: string; title: string; role: string; joined_at: string; status: string };
+  return ((data ?? []) as R[]).map((r) => ({ userId: r.user_id, name: r.name, email: r.email, title: r.title, role: r.role, joinedAt: r.joined_at, status: r.status }));
+}
+
+/** Invites not accepted yet (admins). */
+export async function pendingInvites(orgId: string): Promise<PendingInvite[]> {
+  const { data } = await sb().from('workspace_invites').select('id, email, role, created_at').eq('workspace_id', orgId).is('accepted_at', null).order('created_at', { ascending: false });
+  return ((data ?? []) as { id: string; email: string; role: string; created_at: string }[]).map((r) => ({ id: r.id, email: r.email, role: r.role, at: r.created_at }));
+}
+
+export async function setMemberRole(orgId: string, userId: string, role: 'admin' | 'member'): Promise<string | null> {
+  const { error } = await sb().rpc('set_member_role', { p_ws: orgId, p_user: userId, p_role: role });
+  return error ? friendly(error.message) : null;
+}
+
+/** Removes someone from the organisation (admins; the owner can't be removed). Their messages stay. */
+export async function removeFromOrg(orgId: string, userId: string): Promise<string | null> {
+  const { error } = await sb().from('workspace_members').delete().eq('workspace_id', orgId).eq('user_id', userId);
+  return error ? (/owner/i.test(error.message) ? 'The owner can’t be removed' : 'Only admins can remove people') : null;
+}
+
+export async function cancelInvite(id: string): Promise<string | null> {
+  const { error } = await sb().from('workspace_invites').delete().eq('id', id);
+  return error ? 'Only admins can cancel invites' : null;
+}
+
+/** The organisation's editable settings. */
+export async function orgSettings(orgId: string): Promise<{ name: string; accent: string | null; allowDomain: boolean; domain: string | null } | null> {
+  const { data } = await sb().from('workspaces').select('name, brand_accent, allow_domain, allowed_domain').eq('id', orgId).maybeSingle();
+  const r = data as { name: string; brand_accent: string | null; allow_domain: boolean; allowed_domain: string | null } | null;
+  return r ? { name: r.name, accent: r.brand_accent, allowDomain: r.allow_domain, domain: r.allowed_domain } : null;
+}
+
+/** Admins: renames the organisation and/or changes its brand colour. */
+export async function updateOrg(orgId: string, patch: { name?: string; accent?: string }): Promise<string | null> {
+  const row: Record<string, string> = {};
+  if (patch.name !== undefined) row.name = patch.name.trim();
+  if (patch.accent !== undefined) row.brand_accent = patch.accent;
+  const { error } = await sb().from('workspaces').update(row).eq('id', orgId);
+  forgetAccount();
+  return error ? (/name/.test(error.message) ? 'The name must be 1 to 80 characters' : 'Only admins can change this') : null;
 }
