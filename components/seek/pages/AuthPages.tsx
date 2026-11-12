@@ -18,7 +18,6 @@ import {
   saveProfile,
   sendCode,
   sendInvite,
-  setDomainJoin,
   slugAvailable,
   uploadLogo,
   verifyCode,
@@ -29,7 +28,6 @@ import { initialsOf, isEmail, slugify } from '@/lib/seek/format';
 import { ROUTES } from '@/lib/seek/routes';
 import { applyAccount, setMe, useSeek } from '@/lib/seek/store';
 import { CodeInput, codeComplete } from '../CodeInput';
-import { InviteLink } from '../InviteDialog';
 import { Avatar, Logo, OrgMark } from '../ui';
 import { THEMES } from '@/lib/seek/data';
 
@@ -293,14 +291,11 @@ export function SignupPage() {
 
 const ZONES = ['Lahore (GMT+5)', 'London (GMT+1)', 'Dubai (GMT+4)', 'New York (GMT-4)'];
 const SIZES = ['1–10', '11–50', '51–200', '200+'];
-const USES = ['Team chat', 'Client work', 'Tasks and decisions'];
 
 /**
- * Organisation setup (build spec 5.4), in three short steps after sign-up and profile:
- * 3) Organisation: logo, name, workspace address (checked on the server), time zone, website;
- * 4) How your team works: team size and use, which decide what we create (this step creates the organisation);
- * 5) Invite your team: emails with a role each, the shareable link, and "anyone at @company can join".
- * The panel on the left is a live preview in the chosen colours. A reload resumes at the same step.
+ * Workspace setup (build spec 5.4), one screen as in the prototype: logo, workspace name and address (checked on the
+ * server), time zone, team size and teammates to invite. Continue creates the workspace, sends the invites and opens
+ * #general. The panel on the left previews the workspace.
  */
 const ACCENTS = THEMES.acc;
 const DEFAULT_ACCENT = ACCENTS[0][1];
@@ -314,15 +309,15 @@ export function SetupPage() {
   const { s, update, toast } = useSeek();
   const router = useRouter();
   const w = s.ws;
-  // two screens: the organisation (name, logo, colour, team), then invites
-  const phase = w.step === 'invite' ? 'invite' : 'org';
+  // one screen, as in the prototype; 'invite' only means a reload came back after the workspace was created
+  const created = w.step === 'invite';
   const accent = w.accent ?? DEFAULT_ACCENT;
   const autoSlug = slugify(w.name);
-  const slug = (w.slug ?? autoSlug).slice(0, 40);
+  // the address follows the name, as in the prototype
+  const slug = autoSlug.slice(0, 40);
   const [invite, setInvite] = useState('');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [code, setCode] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [free, setFree] = useState<boolean | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -331,10 +326,6 @@ export function SetupPage() {
   const ws = (fn: (x: typeof w) => void) =>
     update((d) => {
       fn(d.ws);
-    });
-  const go = (step: 'org' | 'team' | 'invite') =>
-    ws((x) => {
-      x.step = step;
     });
 
   // a fresh form for a real account (not the prototype's sample answers)
@@ -386,7 +377,7 @@ export function SetupPage() {
 
   // is the address free? (checked on the server, 400ms after typing stops)
   useEffect(() => {
-    if (!backendOn || phase !== 'org') return;
+    if (!backendOn || created) return;
     if (!/^[a-z0-9]{2,40}$/.test(slug)) {
       setFree(null);
       return;
@@ -401,7 +392,7 @@ export function SetupPage() {
       alive = false;
       clearTimeout(t);
     };
-  }, [slug, phase]);
+  }, [slug, created]);
 
   const creates: [string, string][] = [
     ['general', 'everyone'],
@@ -437,43 +428,55 @@ export function SetupPage() {
     if (bad.length) toast(`${bad.length === 1 ? bad[0] + ' isn’t' : bad.length + ' of those aren’t'} a valid email`);
   };
 
-  const toTeam = () => {
+  /** One step, as in the prototype: create the workspace (unless a reload resumed after that), send the invites, open #general. */
+  const submit = async () => {
     const n = w.name.trim();
-    if (n.length < 2 || n.length > 50) {
-      toast('Enter your organisation’s name (2 to 50 characters)');
-      return;
+    if (!created) {
+      if (n.length < 2 || n.length > 50) {
+        toast('Enter your workspace name (2 to 50 characters)');
+        return;
+      }
+      if (backendOn && !/^[a-z0-9]{2,40}$/.test(slug)) {
+        toast('Use at least 2 letters or numbers in the name');
+        return;
+      }
+      if (backendOn && free === false) {
+        toast(slug + '.seek.app is taken. Try another name');
+        return;
+      }
     }
-    if (backendOn && !/^[a-z0-9]{2,40}$/.test(slug)) {
-      toast('The address can use lowercase letters and numbers (2 to 40)');
-      return;
-    }
-    if (backendOn && free === false) {
-      toast('That address is taken. Try ' + slug + 'studio');
-      return;
-    }
-    void createOrg();
-  };
-
-  const createOrg = async () => {
+    // an email still being typed counts too
+    const typed = invite.split(/[s,;]+/).map((x) => x.trim().toLowerCase()).filter(isEmail);
+    const list = [...new Set([...w.invites, ...typed])];
     if (!backendOn) {
-      setCode('demo-link');
-      go('invite');
+      update((d) => {
+        d.session = 'in';
+        d.workspaces.C.ch = 'general';
+        d.ws.step = undefined;
+      });
+      toast(`Workspace ${n || 'ready'}${list.length ? ` · ${list.length} invites sent` : ''}`);
+      router.push(ROUTES.channels);
       return;
     }
     if (saving) return;
     setSaving(true);
-    const { error: err, id } = await createOrganisation({ name: w.name, slug, tz: w.tz, size: w.size, use: w.use, accent, website: w.website ?? '', allowDomain: false });
-    if (err || !id) {
-      setSaving(false);
-      toast(err || 'Couldn’t create the organisation. Try again');
-      if (err?.includes('address')) go('org');
-      return;
-    }
     let url: string | null = null;
-    if (logoFile) {
-      const r = await uploadLogo(id, logoFile);
-      if (r.error) toast(r.error + '. You can add it later from your profile');
-      url = r.url;
+    if (!created) {
+      const { error: err, id } = await createOrganisation({ name: w.name, slug, tz: w.tz, size: w.size, use: w.use, accent, website: w.website ?? '', allowDomain: false });
+      if (err || !id) {
+        setSaving(false);
+        toast(err || 'Couldn’t create the workspace. Try again');
+        return;
+      }
+      // if anything below fails, a retry only sends the invites
+      ws((x) => {
+        x.step = 'invite';
+      });
+      if (logoFile) {
+        const r = await uploadLogo(id, logoFile);
+        if (r.error) toast(r.error + '. You can add it later from Workspace settings');
+        url = r.url;
+      }
     }
     // the owner's profile starts from their email; they can change it any time from their profile
     let acc = await currentAccount(true);
@@ -481,74 +484,28 @@ export function SetupPage() {
       await saveProfile({ name: acc.name.trim() || acc.email.split('@')[0], title: '' });
       acc = await currentAccount(true);
     }
-    setSaving(false);
-    setCode(acc?.workspace?.joinCode ?? null);
-    update((d) => {
-      d.ws.logo = url ?? undefined;
-      if (acc?.workspace) d.ws.name = acc.workspace.name;
-      d.ws.step = 'invite';
-      // the brand colour becomes the app's accent
-      d.theme = { ...d.theme, acc: accent };
-    });
-  };
-
-  const finish = async (skip = false) => {
-    let failed = 0;
+    const id = acc?.workspace?.id;
     let sent = 0;
-    if (backendOn) {
-      if (saving) return;
-      setSaving(true);
-      const acc = await currentAccount();
-      const id = acc?.workspace?.id;
-      if (id && domain && w.allowDomain) await setDomainJoin(id, true);
-      for (const e of id && !skip ? w.invites : []) {
-        if ((await sendInvite(id!, e, { role: 'member' })).ok) sent++;
-        else failed++;
-      }
-      setSaving(false);
-      update((d) => {
-        if (acc) applyAccount(d, acc);
-        d.workspaces.C.ch = 'general';
-        d.ws.step = undefined;
-        d.ws.invites = [];
-      });
-    } else {
-      sent = skip ? 0 : w.invites.length;
-      update((d) => {
-        d.session = 'in';
-        d.workspaces.C.ch = 'general';
-        d.ws.step = undefined;
-      });
+    let failed = 0;
+    for (const e of id ? list : []) {
+      if ((await sendInvite(id!, e, { role: 'member' })).ok) sent++;
+      else failed++;
     }
+    setSaving(false);
+    update((d) => {
+      if (acc) applyAccount(d, acc);
+      if (url) d.ws.logo = url;
+      d.workspaces.C.ch = 'general';
+      d.ws.step = undefined;
+      d.ws.invites = [];
+    });
     toast(
       failed
-        ? `${w.name} is ready. ${failed} invite email${failed === 1 ? '' : 's'} couldn’t be sent; share the invite link instead`
-        : `Workspace ${w.name} is ready${sent ? ` · ${sent} invite${sent === 1 ? '' : 's'} sent` : ''}`,
+        ? `${n} is ready. ${failed} invite email${failed === 1 ? '' : 's'} couldn’t be sent; use ＋ Invite people to try again`
+        : `Workspace ${n} is ready${sent ? ` · ${sent} invite${sent === 1 ? '' : 's'} sent` : ''}`,
     );
     router.push(ROUTES.channels);
   };
-
-  const n = phase === 'org' ? 2 : 3;
-  // five steps don't fit the card: only the current one shows its name (the others on hover)
-  const steps = (
-    <div className="steps compact" aria-label={'Step ' + n + ' of 3'}>
-      {(
-        [
-          ['Account', 1],
-          ['Organisation', 2],
-          ['Invite', 3],
-        ] as [string, number][]
-      ).map(([t, i], k) => (
-        <span key={t} style={{ display: 'contents' }}>
-          {k > 0 && <hr />}
-          <span className={i < n ? 'd' : i === n ? 'c' : ''} title={t} aria-current={i === n ? 'step' : undefined}>
-            <i>{i < n ? '✓' : i}</i>
-            {t}
-          </span>
-        </span>
-      ))}
-    </div>
-  );
 
   const rail = darken(accent, 0.28);
 
@@ -557,21 +514,9 @@ export function SetupPage() {
       <div className="art">
         <Brand />
         <h2>
-          {phase === 'invite' ? (
-            <>
-              Bring <em>your team</em> in.
-            </>
-          ) : (
-            <>
-              Set up for how <em>your team works.</em>
-            </>
-          )}
+          Set up for how <em>your team works.</em>
         </h2>
-        <p>
-          {phase === 'org'
-            ? 'Give your workspace its own identity. The preview updates as you type.'
-            : 'Invite by email, or share one link in your team chat. You can choose who sees which channels later.'}
-        </p>
+        <p>Your answers decide which channels and spaces we create, and your notification defaults.</p>
         <div className="pc" style={{ maxWidth: 420, padding: 0, overflow: 'hidden', display: 'flex' }}>
           <div style={{ background: rail, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
             <span style={{ borderRadius: 10, boxShadow: '0 0 0 2px #fff' }}>
@@ -579,18 +524,9 @@ export function SetupPage() {
             </span>
           </div>
           <div style={{ padding: '12px 14px', flex: 1, minWidth: 0 }}>
-            <b style={{ display: 'block' }}>{w.name.trim() || 'Your organisation'}</b>
+            <b style={{ display: 'block' }}>{w.name.trim() || 'Your workspace'}</b>
             <div style={{ color: 'var(--sb)', fontSize: 12 }} className="mono">
               {slug || 'your-team'}.seek.app
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 10, fontSize: 13 }}>
-              {creates
-                .filter(([a]) => a !== 'Clients' && a !== 'Decisions')
-                .map(([a], i) => (
-                  <span key={a} style={{ padding: '3px 8px', borderRadius: 6, background: i === 0 ? accent : 'transparent', color: i === 0 ? '#fff' : 'var(--mu)', fontWeight: i === 0 ? 600 : 400 }}>
-                    # {a}
-                  </span>
-                ))}
             </div>
           </div>
         </div>
@@ -617,9 +553,21 @@ export function SetupPage() {
         </div>
         <div className="top">Signed in as {s.email}</div>
         <div className="in">
-          {steps}
+          <div className="steps">
+            <span className="d">
+              <i>✓</i>Account
+            </span>
+            <hr />
+            <span className="d">
+              <i>✓</i>Verify
+            </span>
+            <hr />
+            <span className="c">
+              <i>3</i>Workspace
+            </span>
+          </div>
 
-          {phase === 'org' && orgs.length > 0 && (
+          {!created && orgs.length > 0 && (
             <div className="card">
               <div className="ct">
                 <b>Your team is already on Seek</b>
@@ -644,12 +592,13 @@ export function SetupPage() {
             </div>
           )}
 
-          {phase === 'org' && (
+          <div>
+            <h1>Set up your workspace</h1>
+          </div>
+          <p className="sub">A few questions so it is set up for how your team works.</p>
+
+          {!created && (
             <>
-              <div>
-                <h1>Set up your organisation</h1>
-              </div>
-              <p className="sub">Your team and clients see this name, logo and colour everywhere in Seek.</p>
               <div className="fld">
                 <label>
                   Logo <span style={{ color: 'var(--sb)', fontWeight: 400 }}>(optional)</span>
@@ -698,68 +647,45 @@ export function SetupPage() {
                   />
                 </div>
               </div>
-              <div className="fld">
-                <label htmlFor="wsn">Organisation name</label>
-                <input
-                  className="inp"
-                  id="wsn"
-                  placeholder="e.g. Convertt"
-                  autoComplete="organization"
-                  maxLength={50}
-                  value={w.name}
-                  onChange={(e) =>
-                    ws((x) => {
-                      x.name = e.target.value;
-                    })
-                  }
-                />
-              </div>
-              <div className="fld">
-                <label htmlFor="wsa">Workspace address</label>
-                <div className="copyrow">
+              <div className="grid2">
+                <div className="fld">
+                  <label htmlFor="wsn">Workspace name</label>
                   <input
-                    className="inp mono"
-                    id="wsa"
-                    placeholder="convertt"
-                    value={slug}
+                    className="inp"
+                    id="wsn"
+                    placeholder="e.g. Convertt"
+                    autoComplete="organization"
+                    maxLength={50}
+                    value={w.name}
                     onChange={(e) =>
                       ws((x) => {
-                        x.slug = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
+                        x.name = e.target.value;
                       })
                     }
                   />
-                  <span className="mono" style={{ color: 'var(--sb)', fontSize: 13 }}>
-                    .seek.app
-                  </span>
+                  <em className="mono" style={{ color: free === false ? 'var(--red)' : free ? 'var(--ok)' : undefined }}>
+                    {slug || 'your-team'}.seek.app
+                    {backendOn && slug ? (!/^[a-z0-9]{2,40}$/.test(slug) ? ' · use at least 2 letters' : free === null ? ' · checking…' : free ? ' ✓' : ' · taken, try another name') : ''}
+                  </em>
                 </div>
-                <em style={{ color: free === false ? 'var(--red)' : free ? 'var(--ok)' : undefined }}>
-                  {!backendOn || !slug
-                    ? 'Filled in from the name. Lowercase letters and numbers.'
-                    : !/^[a-z0-9]{2,40}$/.test(slug)
-                      ? 'At least 2 letters or numbers'
-                      : free === null
-                        ? 'Checking…'
-                        : free
-                          ? '✓ Available'
-                          : `✗ Taken, try ${slug}studio`}
-                </em>
-              </div>
-              <div className="fld">
-                <label htmlFor="wtz">Time zone</label>
-                <select
-                  id="wtz"
-                  className="inp"
-                  value={w.tz}
-                  onChange={(e) =>
-                    ws((x) => {
-                      x.tz = e.target.value;
-                    })
-                  }
-                >
-                  {[...new Set([w.tz, ...ZONES])].map((z) => (
-                    <option key={z}>{z}</option>
-                  ))}
-                </select>
+                <div className="fld">
+                  <label htmlFor="wtz">Time zone</label>
+                  <select
+                    id="wtz"
+                    className="inp"
+                    value={w.tz}
+                    onChange={(e) =>
+                      ws((x) => {
+                        x.tz = e.target.value;
+                      })
+                    }
+                  >
+                    {[...new Set([w.tz, ...ZONES])].map((z) => (
+                      <option key={z}>{z}</option>
+                    ))}
+                  </select>
+                  <em>For working hours and Focus.</em>
+                </div>
               </div>
               <div className="fld">
                 <label>Team size</label>
@@ -781,74 +707,57 @@ export function SetupPage() {
                   ))}
                 </div>
               </div>
-              <button type="button" className="btn lg pri" onClick={toTeam} disabled={saving}>
-                {saving ? 'Creating your workspace…' : 'Continue'}
-              </button>
-              <p className="fine">You can change all of this later.</p>
             </>
           )}
 
-          {phase === 'invite' && (
-            <>
-              <div>
-                <h1>Invite your team</h1>
-              </div>
-              <p className="sub">They get an email with a Join button and a sign-in code. Or share the invite link.</p>
-              <div className="fld">
-                <label htmlFor="invIn">Emails</label>
-                <div className="tagin">
-                  {w.invites.map((e, i) => (
-                    <span key={e}>
-                      {e}
-                      <button
-                        type="button"
-                        aria-label={'Remove ' + e}
-                        onClick={() =>
-                          ws((x) => {
-                            x.invites.splice(i, 1);
-                          })
-                        }
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                  <input
-                    id="invIn"
-                    type="email"
-                    placeholder="Add emails, press Enter"
-                    value={invite}
-                    onChange={(e) => setInvite(e.target.value)}
-                    onPaste={(e) => {
-                      const t = e.clipboardData.getData('text');
-                      if (/[\s,;]/.test(t.trim())) {
-                        e.preventDefault();
-                        addInvites(t);
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ',') {
-                        e.preventDefault();
-                        addInvites(invite);
-                      }
-                    }}
-                    onBlur={() => invite.trim() && addInvites(invite)}
-                  />
-                </div>
-                <em>Paste a list to add several at once.</em>
-              </div>
-              <InviteLink code={code ?? (backendOn ? null : 'demo-link')} onCode={setCode} />
-              <button type="button" className="btn lg pri" onClick={() => void finish()} disabled={saving}>
-                {saving ? 'Sending invites…' : w.invites.length ? `Send ${w.invites.length} invite${w.invites.length === 1 ? '' : 's'} and open #general` : 'Continue to #general'}
-              </button>
-              <p className="fine">
-                <button type="button" className="linkbtn" onClick={() => void finish(true)} disabled={saving}>
-                  Skip, I'll invite later
-                </button>{' '}
-                · 🔒 Secure sign-in · Your data is encrypted
-              </p>
-            </>
-          )}
+          <div className="fld">
+            <label htmlFor="invIn">
+              Invite teammates <span style={{ color: 'var(--sb)', fontWeight: 400 }}>(optional)</span>
+            </label>
+            <div className="tagin">
+              {w.invites.map((e, i) => (
+                <span key={e}>
+                  {e}
+                  <button
+                    type="button"
+                    aria-label={'Remove ' + e}
+                    onClick={() =>
+                      ws((x) => {
+                        x.invites.splice(i, 1);
+                      })
+                    }
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <input
+                id="invIn"
+                type="email"
+                placeholder="Add email, press Enter"
+                value={invite}
+                onChange={(e) => setInvite(e.target.value)}
+                onPaste={(e) => {
+                  const t = e.clipboardData.getData('text');
+                  if (/[\s,;]/.test(t.trim())) {
+                    e.preventDefault();
+                    addInvites(t);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault();
+                    addInvites(invite);
+                  }
+                }}
+                onBlur={() => invite.trim() && addInvites(invite)}
+              />
+            </div>
+          </div>
+          <button type="button" className="btn lg pri" onClick={() => void submit()} disabled={saving}>
+            {saving ? 'Setting up your workspace…' : 'Continue to #general'}
+          </button>
+          <p className="fine">🔒 Secure sign-in · Your data is encrypted</p>
         </div>
       </div>
     </main>

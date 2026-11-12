@@ -18,7 +18,7 @@ tab bar on phones, links and buttons on each screen, and the ⌘K / Ctrl+K searc
 | URL | Screen |
 | --- | --- |
 | `/signup` | Create an account (Google, or work email + 6-digit code) |
-| `/setup` | Organization setup: name, logo, time zone, team size, use; then invite the team by link or email |
+| `/setup` | Workspace setup on one screen: logo, name, time zone, team size, invite teammates |
 | `/welcome` | Profile setup after first sign-in; where invite emails' Join button lands |
 | `/join?c=…` | Join an organization with its invite link: email → 6-digit code → profile |
 | `/channels` | Team channels, threads, reactions, mentions, tasks and decisions from messages |
@@ -104,12 +104,12 @@ Each organization has a logo (stored in the public `seek-logos` bucket; only its
 invite link (`/join?c=<code>`, shown under ＋ Invite people; admins can reset it). Invite emails carry both a Join
 button and a 6-digit code, so if the button fails the person types the code instead of waiting for a new email.
 
-**Organisation setup:** a new owner goes from the email code straight to two screens: (1) the organisation:
-name, logo (cropped to a square), workspace address (checked on the server), time zone and team size; (2) invite
-the team: type or paste emails, or share the invite link. Then #general. The owner's name starts from their email and can
-be changed in the profile. Invited teammates and clients still set up their profile first. The brand colour becomes
-everyone's accent. If the person's company domain already has a workspace that allows it, setup offers to join it.
-People in several organisations switch between them from the rail.
+**Workspace setup:** after the email code, a new owner gets one screen, as in the prototype: logo (optional, cropped
+to a square), workspace name (its .seek.app address follows the name and is checked on the server), time zone, team
+size and teammates to invite (type or paste emails). Continue to #general creates the workspace, sends the invites and
+opens #general. The owner's name starts from their email and can be changed in the profile. If the person's company
+domain already has a workspace that allows it, setup offers to join it. People in several organisations switch between
+them from the rail.
 
 **Invites to existing accounts:** someone who already has a Seek account gets an invite email too ("X invited you
 to Y on Seek", with a Join button), not a bare sign-in code. The invite function marks the account with the invite
