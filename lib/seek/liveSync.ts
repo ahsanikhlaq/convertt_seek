@@ -115,7 +115,13 @@ export function markRead(conv: string) {
   const t = Date.now();
   if (t - (lastMark.get(conv) ?? 0) < 3000) return;
   lastMark.set(conv, t);
-  void sb().from('reads').upsert({ conv, last_read_at: new Date().toISOString() }, { onConflict: 'user_id,conv' });
+  // supabase-js only sends a query once it is awaited (or then-ed)
+  void sb()
+    .from('reads')
+    .upsert({ conv, last_read_at: new Date().toISOString() }, { onConflict: 'user_id,conv' })
+    .then(({ error }) => {
+      if (error) lastMark.delete(conv);
+    });
 }
 
 /** Unread counts per conversation in this organisation (channels and DMs). */

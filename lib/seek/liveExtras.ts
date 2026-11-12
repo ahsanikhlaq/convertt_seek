@@ -235,8 +235,9 @@ export function useReminders(me: string | null) {
     if (!on) return;
     // due reminders become notifications; due Send-later messages are sent
     const fire = () => {
-      void sb().rpc('fire_my_reminders');
-      void sb().rpc('send_my_scheduled');
+      // supabase-js only sends a query once it is awaited (or then-ed)
+      void sb().rpc('fire_my_reminders').then(() => {});
+      void sb().rpc('send_my_scheduled').then(() => {});
     };
     fire();
     const id = setInterval(fire, 60e3);
