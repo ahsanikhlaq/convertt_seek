@@ -38,17 +38,38 @@ export function timeLabel(iso: string) {
 export const keyFor = (userId: string, me: string | null): PersonKey => (userId === me ? 'AH' : userId);
 
 const learned = new Set<string>();
+
+// Names and photos of people you've seen, remembered on this device so saved chats show who wrote what at once
+// (they're refreshed from the server once per visit).
+const PEOPLE_KEY = 'seek:people';
+type KnownPerson = { name: string; email: string; photo?: string };
+function knownPeople(): Record<string, KnownPerson> {
+  try {
+    return JSON.parse(localStorage.getItem(PEOPLE_KEY) || '{}') as Record<string, KnownPerson>;
+  } catch {
+    return {};
+  }
+}
+if (typeof window !== 'undefined')
+  for (const [id, p] of Object.entries(knownPeople()))
+    if (!PEOPLE[id]) PEOPLE[id] = { name: p.name, color: colorFor(id), role: p.email, initials: initialsOf(p.name), photo: p.photo };
+
 /** Makes sure these people have a name, colour and initials before their messages render (shared by every screen). */
 export async function learnProfiles(ids: string[], me: string | null) {
   const missing = [...new Set(ids)].filter((id) => !learned.has(id));
   if (!missing.length) return;
   const { data } = await sb().from('profiles').select('id, name, email, avatar_url').in('id', missing);
+  const known = knownPeople();
   for (const p of (data ?? []) as { id: string; name: string; email: string; avatar_url: string | null }[]) {
     const name = displayName(p.name, p.email);
     const key = keyFor(p.id, me);
     PEOPLE[key] = { name, color: key === 'AH' ? PEOPLE.AH?.color ?? colorFor(p.id) : colorFor(p.id), role: key === 'AH' ? 'You' : p.email, initials: initialsOf(name), photo: key === 'AH' ? PEOPLE.AH?.photo : (p.avatar_url ?? undefined) };
+    if (key !== 'AH') known[p.id] = { name, email: p.email, photo: p.avatar_url ?? undefined };
     learned.add(p.id);
   }
+  try {
+    localStorage.setItem(PEOPLE_KEY, JSON.stringify(known));
+  } catch {}
 }
 
 /** Saves an invite and emails the person a "Join" link (see sendInvite). Returns a message to show. */
@@ -256,15 +277,15 @@ export function useLiveChat(): LiveChat | null {
         return;
       }
       const rows = ((data ?? []) as Row[]).reverse();
-      await learnPeople(rows.map((r) => r.user_id));
-      if (!alive) return;
       const feed = toFeed(rows);
       update((d) => {
         d.workspaces.C.msgs[current] = feed;
         const c = d.workspaces.C.channels.find((x) => x.id === current);
         if (c) c.unread = 0;
       });
-      await hydrateReactions(update, feed.map((m) => m.id), meRef.current);
+      // names and reactions load together, after the messages are on screen
+      await Promise.all([learnPeople(rows.map((r) => r.user_id)), hydrateReactions(update, feed.map((m) => m.id), meRef.current)]);
+      if (alive) update(() => {});
     })();
     return () => {
       alive = false;

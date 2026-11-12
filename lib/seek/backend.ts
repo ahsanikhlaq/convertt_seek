@@ -126,6 +126,33 @@ export function forgetAccount() {
   cached = null;
 }
 
+// The last account loaded on this device, so Seek opens at once (with your saved chats) and refreshes it in the
+// background. Only used while the same person is still signed in here; removed when they sign out.
+const SNAP = 'seek:account';
+function keepSnapshot(acc: Account) {
+  try {
+    localStorage.setItem(SNAP, JSON.stringify(acc));
+  } catch {}
+}
+export function dropAccountSnapshot() {
+  try {
+    localStorage.removeItem(SNAP);
+    localStorage.removeItem('seek:people');
+  } catch {}
+}
+/** The last-known account for whoever is signed in on this device (no network), or null. */
+export async function quickAccount(): Promise<Account | null> {
+  try {
+    const raw = localStorage.getItem(SNAP);
+    if (!raw) return null;
+    const acc = JSON.parse(raw) as Account;
+    const { data } = await sb().auth.getSession();
+    return data.session?.user?.id === acc.id ? acc : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Who is signed in, and their organization. null when signed out. Pass fresh=true after changing either. */
 export async function currentAccount(fresh = false): Promise<Account | null> {
   const { data } = await sb().auth.getSession();
@@ -137,6 +164,7 @@ export async function currentAccount(fresh = false): Promise<Account | null> {
   if (!fresh && cached?.uid === user.id) return cached.p;
   const p = loadAccount(user.id, user.email ?? '');
   cached = { uid: user.id, p };
+  void p.then(keepSnapshot, () => {});
   p.catch(() => {
     if (cached?.p === p) cached = null;
   });
@@ -146,9 +174,10 @@ export async function currentAccount(fresh = false): Promise<Account | null> {
 type OrgRow = { id: string; name: string; slug: string; logo_url: string | null; join_code: string; brand_accent: string | null; time_zone?: string };
 
 async function loadAccount(id: string, email: string): Promise<Account> {
-  // anyone invited by email joins those workspaces the first time we see them signed in
-  await sb().rpc('accept_my_invites');
-  const [{ data: profile }, { data: memberships }, { data: spaces }] = await Promise.all([
+  // anyone invited by email joins those workspaces the first time we see them signed in. That runs alongside the
+  // account queries (not before them); only when it actually joined something are they asked again.
+  const parts = () =>
+    Promise.all([
     sb().from('profiles').select('name, title, time_zone, onboarded_at, status, dnd_until, avatar_url, theme, pronouns, work_hours, notify_email, notify_sound, notify_volume, notify_play, notify_alert_secs').eq('id', id).maybeSingle(),
     sb()
       .from('workspace_members')
@@ -158,6 +187,8 @@ async function loadAccount(id: string, email: string): Promise<Account> {
       .limit(20),
     sb().rpc('my_client_spaces'),
   ]);
+  const [{ data: joined }, first] = await Promise.all([sb().rpc('accept_my_invites'), parts()]);
+  const [{ data: profile }, { data: memberships }, { data: spaces }] = (Number(joined) || 0) > 0 ? await parts() : first;
   type SpaceRow = { space_id: string; name: string; project: string; code: string; color: string; agency: string; agency_logo: string | null; role: string; invited_by: string };
   const clientSpaces = ((spaces ?? []) as SpaceRow[]).map((r) => ({
     id: r.space_id,
@@ -510,6 +541,7 @@ export async function saveStatus(s: { status?: string; dndUntil?: string | null 
 
 export async function signOut(): Promise<void> {
   forgetAccount();
+  dropAccountSnapshot();
   await sb().auth.signOut();
 }
 

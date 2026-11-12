@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { backendOn, currentAccount, forgetAccount, sb, type Account } from './backend';
+import { backendOn, currentAccount, dropAccountSnapshot, forgetAccount, quickAccount, sb, type Account } from './backend';
 import { DEFAULT_THEME, initialState, PEOPLE, STATE_VERSION, STATUSES, type State } from './data';
 import { initialsOf } from './format';
 import { applyTheme } from './theme';
@@ -144,6 +144,23 @@ export function SeekProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const st = load();
       if (backendOn) {
+        // open at once with the last-known account and your saved chats, then refresh from the server
+        const quick = await quickAccount();
+        if (quick) {
+          applyAccount(st, quick);
+          if (!alive) return;
+          uidRef.current = st.uid;
+          setS(st);
+          const fresh = await currentAccount().catch(() => undefined);
+          if (!alive || fresh === undefined) return; // offline: keep what's shown
+          setS((p) => {
+            if (!p) return p;
+            const d: State = typeof structuredClone === 'function' ? structuredClone(p) : JSON.parse(JSON.stringify(p));
+            applyAccount(d, fresh);
+            return d;
+          });
+          return;
+        }
         const acc = await currentAccount().catch(() => null);
         applyAccount(st, acc);
       }
@@ -155,6 +172,7 @@ export function SeekProvider({ children }: { children: React.ReactNode }) {
       ? sb().auth.onAuthStateChange((event) => {
           if (event === 'SIGNED_OUT') {
             forgetAccount();
+            dropAccountSnapshot();
             setS((p) => (p ? { ...p, session: 'out' } : p));
           }
         }).data.subscription
