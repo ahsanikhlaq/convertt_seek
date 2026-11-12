@@ -14,6 +14,7 @@ export const ROUTES = {
   decisions: '/decisions',
   agents: '/agents',
   apps: '/apps',
+  open: '/open',
 } as const;
 
 export type RouteKey = keyof typeof ROUTES;

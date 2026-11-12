@@ -32,6 +32,8 @@ export type ChatMessage = {
   card?: MeetingCard;
   /** backend mode: pinned in its conversation */
   pinned?: boolean;
+  /** backend mode: the author changed the text after sending */
+  edited?: boolean;
   after?: string;
   task?: string;
   rx?: Record<string, number>;
@@ -122,7 +124,7 @@ export type Mode = 'light' | 'dark' | 'system';
 export type StatusKey = 'on' | 'mt' | 'fc' | 'aw';
 export type CustomEmoji = { n: string; src: string };
 export type WorkspaceId = 'C' | 'K';
-export type ClientTab = 'Client chat' | 'Team notes' | 'Status' | 'Approvals' | 'Files' | 'People';
+export type ClientTab = 'Client chat' | 'Team notes' | 'Status' | 'Approvals' | 'Files' | 'Pins' | 'People';
 
 export type Workspace = { ch: string; channels: Channel[]; msgs: Record<string, FeedItem[]> };
 

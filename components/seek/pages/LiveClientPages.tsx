@@ -16,6 +16,7 @@ import { ApprovalsTab, type Approver } from '../Approvals';
 import { ScheduleDialog } from '../Meetings';
 import { clock, dayLabel, toolName, upcomingMeetings, type Upcoming } from '@/lib/seek/liveMeetings';
 import { FileList, useAttach } from '../Files';
+import { PinsList, useSchedule } from '../Extras';
 import { useApprovals } from '@/lib/seek/liveApprovals';
 import { spaceFiles, type SharedFile } from '@/lib/seek/liveFiles';
 
@@ -32,7 +33,7 @@ export function LiveClientsPage({ scheduling }: { scheduling?: boolean }) {
   return <TeamClients live={live} />;
 }
 
-const TABS: ClientTab[] = ['Client chat', 'Team notes', 'Status', 'Approvals', 'Files', 'People'];
+const TABS: ClientTab[] = ['Client chat', 'Team notes', 'Status', 'Approvals', 'Files', 'Pins', 'People'];
 const ROLES: [ClientRole, string][] = [
   ['approver', 'Approver'],
   ['contributor', 'Contributor'],
@@ -117,6 +118,9 @@ function TeamClients({ live }: { live: LiveClients }) {
   const [scheduling, setScheduling] = useState(false);
   const attachTeam = useAttach(sp ? { space: sp.id, lane: 'team' } : null);
   const attachClient = useAttach(sp ? { space: sp.id, lane: 'client' } : null);
+  const peopleHere = sp ? ([...sp.people.filter((p) => p.userId).map((p) => p.userId!), ...sp.team.map((t) => t.userId)] as string[]) : [];
+  const scheduleTeam = useSchedule(sp ? { space: sp.id, lane: 'team' } : null, sp ? sp.team.map((t) => t.userId) : []);
+  const scheduleClient = useSchedule(sp ? { space: sp.id, lane: 'client' } : null, peopleHere);
   const side = <ClientList live={live} current={sp} onOpen={open} />;
 
   if (!sp) {
@@ -199,7 +203,7 @@ function TeamClients({ live }: { live: LiveClients }) {
           }
         />
         {team ? (
-          <Composer key={'team' + sp.id} placeholder="Note for the team…" people={teamKeys} onSend={(t) => void live.send(sp.id, 'team', t)} onAttach={attachTeam} />
+          <Composer key={'team' + sp.id} placeholder="Note for the team…" people={teamKeys} onSend={(t) => void live.send(sp.id, 'team', t)} onAttach={attachTeam} onSchedule={scheduleTeam} />
         ) : (
           <Composer
             key={'client' + sp.id}
@@ -213,6 +217,7 @@ function TeamClients({ live }: { live: LiveClients }) {
               toast('Sent to ' + readers);
             }}
             onAttach={attachClient}
+            onSchedule={scheduleClient}
           />
         )}
       </>
@@ -235,6 +240,13 @@ function TeamClients({ live }: { live: LiveClients }) {
     body = (
       <div className="pg">
         <SpaceFiles space={sp.id} me={live.me} lanes />
+      </div>
+    );
+  } else if (tab === 'Pins') {
+    const pinnedHere = (['client', 'team'] as const).reduce((n, l) => n + (s.lc?.[laneKey(sp.id, l)] ?? []).filter((m) => m.kind === 'msg' && m.pinned).length, 0);
+    body = (
+      <div className="pg">
+        <PinsList target={{ space: sp.id }} me={live.me} where={'this space'} reloadKey={pinnedHere} />
       </div>
     );
   } else {
@@ -632,7 +644,7 @@ function LiveMeetings({ live }: { live: LiveClients }) {
 
 // ---------------------------------------------------------------- the client's own view
 
-type PortalTab = 'start' | 'chat' | 'status' | 'approvals' | 'files';
+type PortalTab = 'start' | 'chat' | 'status' | 'approvals' | 'files' | 'pins';
 
 function ClientPortal({ live }: { live: LiveClients }) {
   const { s, update, setUI } = useSeek();
@@ -699,6 +711,7 @@ function ClientPortal({ live }: { live: LiveClients }) {
           ['status', 'Project status', ''],
           ['approvals', 'Approvals', mineWaiting ? String(mineWaiting) : ''],
           ['files', 'Files', ''],
+          ['pins', 'Pinned', ''],
         ] as [PortalTab, string, string][]
       ).map(([k, l, b]) => (
         <button key={k} type="button" className={'si' + (tab === k ? ' on' : '')} aria-current={tab === k ? 'page' : undefined} onClick={() => open(k)}>
@@ -750,6 +763,12 @@ function ClientPortal({ live }: { live: LiveClients }) {
     );
   } else if (tab === 'approvals') {
     body = <ApprovalsTab space={sp.id} list={appr.list} reload={appr.reload} me={live.me} team={false} approvers={[]} />;
+  } else if (tab === 'pins') {
+    body = (
+      <div className="pg">
+        <PinsList target={{ space: sp.id, lane: 'client' }} me={live.me} where={'your conversation'} canUnpin={false} />
+      </div>
+    );
   } else if (tab === 'files') {
     body = (
       <div className="pg">
@@ -814,7 +833,7 @@ function ClientPortal({ live }: { live: LiveClients }) {
   return (
     <Shell active="clients" side={side} rail={<ClientRail />}>
       <MainHeader
-        title={tab === 'chat' ? 'Conversation' : tab === 'status' ? 'Project status' : tab === 'approvals' ? 'Approvals' : tab === 'files' ? 'Files' : sp.name}
+        title={tab === 'chat' ? 'Conversation' : tab === 'status' ? 'Project status' : tab === 'approvals' ? 'Approvals' : tab === 'files' ? 'Files' : tab === 'pins' ? 'Pinned' : sp.name}
         sub={tab === 'chat' ? `You${others.length ? ', ' + others.map((k) => nameOf(k).split(' ')[0]).join(', ') : ''} and the ${agency} team` : `${sp.project || 'Project space'} · with ${agency}`}
         right={
           <span className="stack hide-m">

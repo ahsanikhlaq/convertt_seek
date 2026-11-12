@@ -13,7 +13,7 @@ import { Composer, Feed, ThreadPane, useSendTo, type FeedRef } from '../Messages
 import { MainHeader, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
 import { FileList, useAttach } from '../Files';
-import { CanvasEditor, PinsList, SavedDialog, TasksDialog } from '../Extras';
+import { CanvasEditor, PinsList, SavedDialog, ScheduledDialog, TasksDialog, useSchedule } from '../Extras';
 import { channelFiles, type SharedFile } from '@/lib/seek/liveFiles';
 
 const TEAM: PersonKey[] = ['AH', 'SY', 'MO', 'ZA'];
@@ -24,7 +24,7 @@ export function ChannelsPage() {
   const [creating, setCreating] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [membersOf, setMembersOf] = useState<string | null>(null);
-  const [listing, setListing] = useState<null | 'saved' | 'tasks'>(null);
+  const [listing, setListing] = useState<null | 'saved' | 'tasks' | 'scheduled'>(null);
   const myOpenTasks = (s.ltasks ?? []).filter((t) => t.status === 'open' && t.owner === s.meId).length;
   // with a backend: real channels and messages, live (lib/seek/live.ts); in demo mode this is null
   const live = useLiveChat();
@@ -36,6 +36,7 @@ export function ChannelsPage() {
   const feed: FeedRef = { get: (d) => (d.workspaces[wsId].msgs[ch] ||= []), where: ch, threads: true };
   const send = useSendTo(feed);
   const attach = useAttach(live && c.cid ? { channel: c.cid } : null);
+  const schedule = useSchedule(live && c.cid ? { channel: c.cid } : null, team);
 
   const open = (id: string) => {
     update((d) => {
@@ -101,6 +102,14 @@ export function ChannelsPage() {
           {(s.lsaved?.length ?? 0) > 0 && <span className="tag">{s.lsaved!.length}</span>}
         </button>
       )}
+      {live && (
+        <button type="button" className="si" onClick={() => setListing('scheduled')}>
+          <span className="h">⏱</span>
+          <span className="x">
+            <b>Scheduled</b>
+          </span>
+        </button>
+      )}
       {!live && <div className="sg lbl">Starred</div>}
       {!live && (
         <button type="button" className="si" onClick={() => open(ws.channels[0].id)}>
@@ -145,7 +154,7 @@ export function ChannelsPage() {
             ↓ 2 new messages
           </button>
         )}
-        <Composer key={wsId + ch} placeholder={'Message #' + ch} people={team} onSend={(t) => (live ? void live.send(ch, t) : send(t))} onAttach={attach} />
+        <Composer key={wsId + ch} placeholder={'Message #' + ch} people={team} onSend={(t) => (live ? void live.send(ch, t) : send(t))} onAttach={attach} onSchedule={schedule} />
       </>
     );
   } else if (live && ui.chTab === 'Files') {
@@ -157,7 +166,7 @@ export function ChannelsPage() {
   } else if (live) {
     body = (
       <div className="pg">
-        {ui.chTab === 'Canvas' ? <CanvasEditor key={c.cid} channel={c.cid ?? null} me={live.me} name={ch} /> : <PinsList key={c.cid} channel={c.cid ?? null} me={live.me} name={ch} />}
+        {ui.chTab === 'Canvas' ? <CanvasEditor key={c.cid} channel={c.cid ?? null} me={live.me} name={ch} /> : <PinsList key={c.cid} target={c.cid ? { channel: c.cid } : null} me={live.me} where={'#' + ch} reloadKey={(s.workspaces.C.msgs[ch] ?? []).filter((m) => m.kind === 'msg' && m.pinned).length} />}
       </div>
     );
   } else if (ui.chTab === 'Files') {
@@ -258,6 +267,7 @@ export function ChannelsPage() {
       {body}
       {listing === 'saved' && <SavedDialog me={live?.me ?? null} onClose={() => setListing(null)} />}
       {listing === 'tasks' && <TasksDialog me={live?.me ?? null} onClose={() => setListing(null)} />}
+      {listing === 'scheduled' && <ScheduledDialog onClose={() => setListing(null)} />}
       {creating && live && (
         <NewChannelDialog
           live={live}

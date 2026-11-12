@@ -35,8 +35,8 @@ export type Space = {
   steps: Step[];
 };
 
-type Row = { id: number; space_id: string | null; lane: Lane | null; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; card?: MeetingCard | null; pinned_at?: string | null };
-const COLS = 'id, space_id, lane, user_id, parent_id, body, created_at, files, card, pinned_at';
+type Row = { id: number; space_id: string | null; lane: Lane | null; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; card?: MeetingCard | null; pinned_at?: string | null; edited_at?: string | null };
+const COLS = 'id, space_id, lane, user_id, parent_id, body, created_at, files, card, pinned_at, edited_at';
 
 export const laneKey = (space: string, lane: Lane) => space + ':' + lane;
 /** People still to join (invited, not signed in yet). */
@@ -86,6 +86,7 @@ export function useLiveClients(): LiveClients | null {
     files: r.files?.length ? r.files : undefined,
     card: r.card ?? undefined,
     pinned: !!r.pinned_at,
+    edited: !!r.edited_at,
     flash,
     client: side === 'team' && clientIds.current.has(r.user_id),
   });

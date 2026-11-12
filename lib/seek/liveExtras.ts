@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { backendOn, DB_SCHEMA, sb } from './backend';
 import type { FileRef, LiveTask, PersonKey, State } from './data';
+import type { FileTarget } from './liveFiles';
 import { keyFor, toDbId } from './live';
 import { ROUTES } from './routes';
 import { useSeek } from './store';
@@ -20,19 +21,46 @@ export async function pinMessage(uiId: number, on: boolean) {
   return error ? 'Couldn’t change the pin. Check your connection' : null;
 }
 
-export type PinnedMessage = { id: number; userId: string; body: string; at: string; pinnedAt: string; pinnedBy: string | null; files: FileRef[] };
+export type PinnedMessage = { id: number; userId: string; body: string; at: string; pinnedAt: string; pinnedBy: string | null; files: FileRef[]; conv: string; lane: string | null };
 
-export async function channelPins(channel: string): Promise<PinnedMessage[] | null> {
-  const { data, error } = await sb()
+/** A conversation: a channel, a DM (by the other person) or a client space (one lane, or both for the team). */
+export type ConvTarget = { channel: string } | { dmWith: string } | { space: string; lane?: 'client' | 'team' };
+
+/** The thread id of your DM with someone (started if needed). */
+export async function dmThreadWith(other: string): Promise<string | null> {
+  const { data, error } = await sb().rpc('open_dm', { p_other: other });
+  return error || !data ? null : (data as string);
+}
+
+/** Pinned messages in a conversation, newest pin first. */
+export async function pinsIn(t: ConvTarget): Promise<PinnedMessage[] | null> {
+  let q = sb()
     .from('messages')
-    .select('id, user_id, body, created_at, pinned_at, pinned_by, files')
-    .eq('channel_id', channel)
-    .not('pinned_at', 'is', null)
-    .order('pinned_at', { ascending: false })
-    .limit(100);
+    .select('id, user_id, body, created_at, pinned_at, pinned_by, files, channel_id, dm_id, space_id, lane')
+    .not('pinned_at', 'is', null);
+  if ('channel' in t) q = q.eq('channel_id', t.channel);
+  else if ('space' in t) {
+    q = q.eq('space_id', t.space);
+    if (t.lane) q = q.eq('lane', t.lane);
+  } else {
+    const thread = await dmThreadWith(t.dmWith);
+    if (!thread) return null;
+    q = q.eq('dm_id', thread);
+  }
+  const { data, error } = await q.order('pinned_at', { ascending: false }).limit(100);
   if (error) return null;
-  type R = { id: number; user_id: string; body: string; created_at: string; pinned_at: string; pinned_by: string | null; files: FileRef[] | null };
-  return ((data ?? []) as R[]).map((r) => ({ id: r.id, userId: r.user_id, body: r.body, at: r.created_at, pinnedAt: r.pinned_at, pinnedBy: r.pinned_by, files: r.files ?? [] }));
+  type R = { id: number; user_id: string; body: string; created_at: string; pinned_at: string; pinned_by: string | null; files: FileRef[] | null; channel_id: string | null; dm_id: string | null; space_id: string | null; lane: string | null };
+  return ((data ?? []) as R[]).map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    body: r.body,
+    at: r.created_at,
+    pinnedAt: r.pinned_at,
+    pinnedBy: r.pinned_by,
+    files: r.files ?? [],
+    conv: r.channel_id ? 'ch:' + r.channel_id : r.dm_id ? 'dm:' + r.dm_id : 'sp:' + r.space_id + ':' + r.lane,
+    lane: r.lane,
+  }));
 }
 
 // ---------------------------------------------------------------- saved
@@ -205,7 +233,11 @@ export function useReminders(me: string | null) {
   const on = backendOn && !!me && (s.session === 'in' || s.session === 'client');
   useEffect(() => {
     if (!on) return;
-    const fire = () => void sb().rpc('fire_my_reminders');
+    // due reminders become notifications; due Send-later messages are sent
+    const fire = () => {
+      void sb().rpc('fire_my_reminders');
+      void sb().rpc('send_my_scheduled');
+    };
     fire();
     const id = setInterval(fire, 60e3);
     return () => clearInterval(id);
@@ -298,4 +330,66 @@ export async function openConversation(conv: string, update: (fn: (d: State) => 
       d.cTab = lane === 'team' ? 'Team notes' : 'Client chat';
     });
   return ROUTES.clients;
+}
+
+// ---------------------------------------------------------------- send later
+
+/** Queues a message to send later (delivered by your app at that time). */
+export async function scheduleMessage(target: FileTarget, body: string, at: Date, mentions: string[] = []) {
+  let where: Record<string, string>;
+  if ('channel' in target) where = { channel_id: target.channel };
+  else if ('space' in target) where = { space_id: target.space, lane: target.lane };
+  else {
+    const { data, error } = await sb().rpc('open_dm', { p_other: target.dmWith });
+    if (error || !data) return 'Couldn’t open this conversation';
+    where = { dm_id: data as string };
+  }
+  if (at.getTime() < Date.now() + 30e3) return 'Pick a time at least a minute from now';
+  const { error } = await sb().from('scheduled_messages').insert({ ...where, body: body.slice(0, 8000), mentions, send_at: at.toISOString() });
+  return error ? 'Couldn’t schedule it. Check your connection' : null;
+}
+
+export type Scheduled = { id: number; body: string; at: string; place: string };
+
+export async function myScheduled(): Promise<Scheduled[] | null> {
+  const { data, error } = await sb()
+    .from('scheduled_messages')
+    .select('id, body, send_at, channel_id, dm_id, space_id, lane, channels ( name ), client_spaces ( name )')
+    .is('sent_at', null)
+    .order('send_at');
+  if (error) return null;
+  type R = { id: number; body: string; send_at: string; channel_id: string | null; dm_id: string | null; space_id: string | null; lane: string | null; channels: { name: string } | null; client_spaces: { name: string } | null };
+  return ((data ?? []) as unknown as R[]).map((r) => ({
+    id: r.id,
+    body: r.body,
+    at: r.send_at,
+    place: r.channel_id ? '# ' + (r.channels?.name ?? 'channel') : r.dm_id ? 'Direct message' : (r.client_spaces?.name ?? 'Client') + (r.lane === 'team' ? ' · Team notes' : ' · Client chat'),
+  }));
+}
+
+export async function cancelScheduled(id: number) {
+  const { error, count } = await sb().from('scheduled_messages').delete({ count: 'exact' }).eq('id', id);
+  return error || count === 0 ? 'It was already sent' : null;
+}
+
+/** Edits the text of your own message. */
+export async function editMessage(uiId: number, body: string) {
+  const id = toDbId(uiId);
+  if (id == null) return 'This message isn’t saved yet';
+  const { error, count } = await sb().from('messages').update({ body: body.slice(0, 8000) }, { count: 'exact' }).eq('id', id);
+  return error || count === 0 ? 'Couldn’t save the edit' : null;
+}
+
+/** A link to a message that opens it for anyone who can see it. */
+export const messageLink = (uiId: number) => {
+  const id = toDbId(uiId);
+  return id == null ? null : `${location.origin}/open?m=${id}`;
+};
+
+/** Where a message lives ('ch:', 'dm:' or 'sp:'), if you can see it. */
+export async function convOfMessage(id: number): Promise<string | null> {
+  const { data } = await sb().from('messages').select('channel_id, dm_id, space_id, lane, parent_id').eq('id', id).maybeSingle();
+  const m = data as { channel_id: string | null; dm_id: string | null; space_id: string | null; lane: string | null } | null;
+  if (!m) return null;
+  return m.channel_id ? 'ch:' + m.channel_id : m.dm_id ? 'dm:' + m.dm_id : 'sp:' + m.space_id + ':' + m.lane;
 }

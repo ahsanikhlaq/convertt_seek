@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { orgPeople, type OrgPerson } from '@/lib/seek/backend';
 import { PEOPLE, type LiveTask } from '@/lib/seek/data';
 import {
-  channelPins,
+  pinsIn,
   createTask,
   deleteTask,
   loadCanvas,
@@ -18,10 +18,17 @@ import {
   savedItems,
   saveMessage,
   setTaskDone,
+  cancelScheduled,
+  myScheduled,
+  scheduleMessage,
   type Canvas,
+  type ConvTarget,
   type PinnedMessage,
   type SavedItem,
+  type Scheduled,
 } from '@/lib/seek/liveExtras';
+import type { FileTarget } from '@/lib/seek/liveFiles';
+import { mentionIds } from '@/lib/seek/liveNotes';
 import { toUiId } from '@/lib/seek/live';
 import { flashMessage } from '@/lib/seek/liveDecisions';
 import { workingDaysFromNow } from '@/lib/seek/liveApprovals';
@@ -335,29 +342,30 @@ export function TasksDialog({ me, onClose }: { me: string | null; onClose: () =>
 }
 
 /** A channel's pinned messages (Pins tab). */
-export function PinsList({ channel, me, name }: { channel: string | null; me: string | null; name: string }) {
-  const { s, toast } = useSeek();
+export function PinsList({ target, me, where, reloadKey = 0, canUnpin = true }: { target: ConvTarget | null; me: string | null; where: string; reloadKey?: number; canUnpin?: boolean }) {
+  const { toast } = useSeek();
   const [pins, setPins] = useState<PinnedMessage[] | null>(null);
   const jump = useJump(me);
-  // reload when a message in this channel is pinned or unpinned here
-  const pinnedHere = (s.workspaces.C.msgs[name] ?? []).filter((m) => m.kind === 'msg' && m.pinned).length;
+  const key = target ? JSON.stringify(target) : '';
   useEffect(() => {
-    if (!channel) return;
+    if (!target) return;
     let alive = true;
-    void channelPins(channel).then((l) => alive && setPins(l ?? []));
+    void pinsIn(target).then((l) => alive && setPins(l ?? []));
     return () => {
       alive = false;
     };
-  }, [channel, pinnedHere]);
-  if (!channel) return null;
+  }, [key, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!target) return null;
   if (!pins) return <p className="sub">Loading…</p>;
-  if (!pins.length) return <div className="empty">Nothing pinned yet. Pin important messages (More → Pin, or P) so everyone in #{name} can find them.</div>;
+  if (!pins.length) return <div className="empty">Nothing pinned yet. Pin important messages (More → Pin, or P) so everyone in {where} can find them.</div>;
   return (
     <div className="flist">
       {pins.map((p) => (
         <div key={p.id} className="dec" style={{ margin: 0, boxShadow: 'inset 4px 0 0 var(--v)' }}>
           <div className="k">
             <span>📌 PINNED</span>
+            {p.lane === 'client' && <span className="tag gold">Client chat</span>}
+            {p.lane === 'team' && <span className="tag">Team notes</span>}
             <small style={{ marginLeft: 'auto' }}>
               {p.pinnedBy ? 'by ' + nameFor(p.pinnedBy, me) + ' · ' : ''}
               {when(p.pinnedAt)}
@@ -371,9 +379,10 @@ export function PinsList({ channel, me, name }: { channel: string | null; me: st
           </div>
           {p.files.length > 0 && <FileCards files={p.files} />}
           <div className="a">
-            <button type="button" className="btn sm" onClick={() => void jump('ch:' + channel, p.id)}>
+            <button type="button" className="btn sm" onClick={() => void jump(p.conv, p.id)}>
               Jump to message
             </button>
+            {canUnpin && (
             <button
               type="button"
               className="btn sm ghost"
@@ -386,6 +395,7 @@ export function PinsList({ channel, me, name }: { channel: string | null; me: st
             >
               Unpin
             </button>
+            )}
           </div>
         </div>
       ))}
@@ -485,5 +495,95 @@ export function CanvasEditor({ channel, me, name }: { channel: string | null; me
         </button>
       </div>
     </div>
+  );
+}
+
+/** Send later: quick choices or any time. */
+export function SendLaterDialog({ onPick, onClose }: { onPick: (at: Date) => Promise<void>; onClose: () => void }) {
+  const [custom, setCustom] = useState('');
+  const [busy, setBusy] = useState(false);
+  const pick = async (at: Date) => {
+    if (busy) return;
+    setBusy(true);
+    await onPick(at);
+    setBusy(false);
+  };
+  const choices = reminderChoices().filter(([l]) => l !== 'In 20 minutes');
+  return (
+    <Modal title="Send later" onClose={onClose} width={380}>
+      <div className="mb">
+        <div className="ppl" style={{ gap: 6 }}>
+          {choices.map(([l, d]) => (
+            <button key={l} type="button" className="btn" disabled={busy} style={{ justifyContent: 'space-between', display: 'flex' }} onClick={() => void pick(d)}>
+              <span>{l}</span>
+              <small style={{ color: 'var(--sb)' }}>{d.toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</small>
+            </button>
+          ))}
+        </div>
+        <div className="fld">
+          <label htmlFor="sl-c">Or pick a time</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input id="sl-c" className="inp" type="datetime-local" value={custom} onChange={(e) => setCustom(e.target.value)} />
+            <button type="button" className="btn pri" disabled={!custom || busy} onClick={() => void pick(new Date(custom))}>
+              Schedule
+            </button>
+          </div>
+        </div>
+        <small style={{ color: 'var(--sb)' }}>Seek sends it at that time while it&apos;s open on one of your devices, or as soon as you next open it. Find and cancel it under Scheduled.</small>
+      </div>
+    </Modal>
+  );
+}
+
+/** The composer's Send later handler for a conversation. */
+export function useSchedule(target: FileTarget | null, candidates: string[] = []) {
+  const { toast } = useSeek();
+  if (!target) return undefined;
+  return async (text: string, at: Date) => {
+    const err = await scheduleMessage(target, text, at, mentionIds(text, candidates.filter((k) => k !== 'AH')));
+    toast(err ?? 'Scheduled for ' + at.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
+    return !err;
+  };
+}
+
+/** Your scheduled messages, with Cancel. */
+export function ScheduledDialog({ onClose }: { onClose: () => void }) {
+  const { toast } = useSeek();
+  const [items, setItems] = useState<Scheduled[] | null>(null);
+  useEffect(() => {
+    void myScheduled().then((l) => setItems(l ?? []));
+  }, []);
+  return (
+    <Modal title="⏱ Scheduled" onClose={onClose} width={520}>
+      <div className="mb" style={{ minHeight: 160 }}>
+        {!items ? (
+          <p className="sub">Loading…</p>
+        ) : !items.length ? (
+          <div className="empty">Nothing scheduled. Write a message and press ⏱ Later to send it at a set time.</div>
+        ) : (
+          items.map((it) => (
+            <div key={it.id} className="frow" style={{ alignItems: 'flex-start' }}>
+              <span className="x">
+                <small>
+                  {new Date(it.at).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {it.place}
+                </small>
+                <div style={{ fontSize: 13.5, overflowWrap: 'anywhere' }}>{it.body.length > 280 ? it.body.slice(0, 280) + '…' : it.body}</div>
+              </span>
+              <button
+                type="button"
+                className="btn sm ghost"
+                onClick={async () => {
+                  const err = await cancelScheduled(it.id);
+                  toast(err ?? 'Cancelled · it won’t be sent');
+                  setItems((l) => (l ?? []).filter((x) => x.id !== it.id));
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </Modal>
   );
 }

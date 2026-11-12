@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { backendOn, DB_SCHEMA, sb } from './backend';
-import type { ChatMessage, FeedItem, State } from './data';
+import type { ChatMessage, FeedItem, State , MeetingCard } from './data';
 import { toDbId, toUiId } from './live';
 import { useSeek } from './store';
 
@@ -112,6 +112,18 @@ export function useLiveSync(me: string | null) {
             if (n > 0) rx[r.emoji!] = n;
             else delete rx[r.emoji!];
             m.rx = rx;
+          }),
+        );
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: DB_SCHEMA, table: 'messages' }, (p) => {
+        const r = p.new as { id: number; body: string; edited_at: string | null; pinned_at: string | null; card: MeetingCard | null };
+        if (!r.id) return;
+        update((d) =>
+          onMessage(d, toUiId(r.id), (m) => {
+            m.text = r.body;
+            m.edited = !!r.edited_at;
+            m.pinned = !!r.pinned_at;
+            if (r.card) m.card = r.card;
           }),
         );
       })

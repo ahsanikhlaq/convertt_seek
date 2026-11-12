@@ -47,7 +47,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     setup: ['setup', 'signup', 'welcome'],
     out: ['signup', 'welcome'],
     // a client only ever sees their own client space
-    client: ['clients'],
+    client: ['clients', 'open'],
   };
   const home = { in: ROUTES.channels, profile: ROUTES.welcome, setup: ROUTES.setup, out: ROUTES.signup, client: ROUTES.clients }[s.session];
   const ok = allowed[s.session];

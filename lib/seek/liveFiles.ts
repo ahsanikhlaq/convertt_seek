@@ -118,3 +118,19 @@ export async function channelFiles(channel: string): Promise<SharedFile[] | null
   type R = { id: number; user_id: string; files: FileRef[]; created_at: string };
   return ((data ?? []) as R[]).flatMap((r) => r.files.map((f) => ({ ...f, messageId: r.id, by: r.user_id, at: r.created_at, lane: null })));
 }
+
+/** Every file shared in your DM with someone, newest first. */
+export async function dmFiles(other: string): Promise<SharedFile[] | null> {
+  const { data: thread } = await sb().rpc('open_dm', { p_other: other });
+  if (!thread) return null;
+  const { data, error } = await sb()
+    .from('messages')
+    .select('id, user_id, files, created_at')
+    .eq('dm_id', thread as string)
+    .neq('files', '[]')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) return null;
+  type R = { id: number; user_id: string; files: FileRef[]; created_at: string };
+  return ((data ?? []) as R[]).flatMap((r) => r.files.map((f) => ({ ...f, messageId: r.id, by: r.user_id, at: r.created_at, lane: null })));
+}

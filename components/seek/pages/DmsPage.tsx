@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { backendOn } from '@/lib/seek/backend';
 import { PEOPLE, type DmThread, type PersonKey } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
@@ -11,7 +11,9 @@ import { InviteDialog } from '../InviteDialog';
 import { Composer, Feed, type FeedRef } from '../Messages';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
-import { useAttach } from '../Files';
+import { FileList, useAttach } from '../Files';
+import { PinsList, useSchedule } from '../Extras';
+import { dmFiles, type SharedFile } from '@/lib/seek/liveFiles';
 
 export function DmsPage() {
   // with a backend, DMs are real (lib/seek/liveDms.ts); the demo below stays exactly like the prototype
@@ -32,6 +34,24 @@ function LiveDmsPage() {
   const feed: FeedRef = { get: (d) => (d.dms[dm as PersonKey] ||= { last: '', unread: 0, msgs: [] }).msgs, where: 'DM ' + (dm ? nameOf(dm) : '') };
   const others = (live?.people ?? []).filter((k) => !s.dms[k]);
   const attach = useAttach(dm && dm !== 'AH' ? { dmWith: dm } : null);
+  const schedule = useSchedule(dm && dm !== 'AH' ? { dmWith: dm } : null);
+  const [tab, setTab] = useState<'Messages' | 'Files' | 'Pins'>('Messages');
+  const [files, setFiles] = useState<SharedFile[] | null>(null);
+  const msgs = dm ? (s.dms[dm]?.msgs ?? []) : [];
+  const pinned = msgs.filter((m) => m.kind === 'msg' && m.pinned).length;
+  const withFiles = msgs.filter((m) => m.kind === 'msg' && m.files?.length).length;
+  useEffect(() => {
+    setTab('Messages');
+  }, [dm]);
+  useEffect(() => {
+    if (tab !== 'Files' || !dm || dm === 'AH') return;
+    let alive = true;
+    setFiles(null);
+    void dmFiles(dm).then((f) => alive && setFiles(f ?? []));
+    return () => {
+      alive = false;
+    };
+  }, [tab, dm, withFiles]);
 
   const open = async (k: PersonKey) => {
     setPicking(false);
@@ -123,6 +143,16 @@ function LiveDmsPage() {
     <MainHeader
       title={nameOf(dm)}
       sub={PEOPLE[dm]?.role ?? ''}
+      below={
+        <div className="tabs" role="tablist">
+          {(['Messages', 'Files', 'Pins'] as const).map((t) => (
+            <button key={t} type="button" role="tab" aria-selected={tab === t} className={'tb' + (tab === t ? ' on' : '')} onClick={() => setTab(t)}>
+              {t}
+              {t === 'Pins' && pinned > 0 ? <span className="badge" style={{ background: 'var(--sb)' }}>{pinned}</span> : null}
+            </button>
+          ))}
+        </div>
+      }
       right={
         <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Profile details" aria-pressed={ui.paneOpen}>
           ⓘ
@@ -149,10 +179,18 @@ function LiveDmsPage() {
   return (
     <Shell active="dms" side={side} pane={pane}>
       {header}
-      {dm ? (
+      {dm && tab === 'Files' ? (
+        <div className="pg">
+          <FileList files={files} me={s.meId ?? null} empty={'No files yet. Share one with ＋ in the message box.'} />
+        </div>
+      ) : dm && tab === 'Pins' ? (
+        <div className="pg">
+          <PinsList target={dm !== 'AH' ? { dmWith: dm } : null} me={s.meId ?? null} where={'this conversation'} reloadKey={pinned} />
+        </div>
+      ) : dm ? (
         <>
           <Feed key={dm} feed={feed} banner={<div className="banner v">🔒 This conversation is just between you and {nameOf(dm)}.</div>} />
-          <Composer key={'c' + dm} placeholder={'Message ' + nameOf(dm)} people={[dm, 'AH']} onSend={(t) => void live?.send(t)} onAttach={attach} />
+          <Composer key={'c' + dm} placeholder={'Message ' + nameOf(dm)} people={[dm, 'AH']} onSend={(t) => void live?.send(t)} onAttach={attach} onSchedule={schedule} />
         </>
       ) : (
         <div className="pg">

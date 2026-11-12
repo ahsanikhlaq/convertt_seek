@@ -15,8 +15,8 @@ import type { LiveDecision } from '@/lib/seek/data';
 import { PromptDialog } from './Dialogs';
 import { FileCards } from './Files';
 import { MeetingCardView } from './Meetings';
-import { dueText, RemindDialog, TaskDialog } from './Extras';
-import { pinMessage, saveMessage } from '@/lib/seek/liveExtras';
+import { dueText, RemindDialog, SendLaterDialog, TaskDialog } from './Extras';
+import { editMessage, messageLink, pinMessage, saveMessage } from '@/lib/seek/liveExtras';
 import { approvalDraft } from '@/lib/seek/liveApprovals';
 import { usePopovers } from './Popovers';
 import { Avatar, Emoji, RichText } from './ui';
@@ -43,7 +43,7 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
   // the agency's team logs decisions; clients see the ones from their Client chat
   const canLog = s.session === 'in';
   const meId = s.meId ?? null;
-  const [dialog, setDialog] = useState<null | 'task' | 'remind'>(null);
+  const [dialog, setDialog] = useState<null | 'task' | 'remind' | 'edit'>(null);
   const dbId = toDbId(m.id);
   const isSaved = backendOn ? dbId != null && (s.lsaved ?? []).includes(dbId) : !!m.saved;
   const myTasks = backendOn && dbId != null ? (s.ltasks ?? []).filter((t) => t.source === dbId) : [];
@@ -198,6 +198,27 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
       toast('Couldn’t copy. Select the text and copy it');
     }
   };
+  const copyLink = async () => {
+    setUI({ menu: null });
+    const url = messageLink(m.id);
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('Link copied · it opens for anyone who can see this conversation');
+    } catch {
+      toast(url);
+    }
+  };
+  const saveEdit = async (text: string) => {
+    setDialog(null);
+    if (text === m.text) return;
+    const err = await editMessage(m.id, text);
+    if (err) return toast(err);
+    edit((x) => {
+      x.text = text;
+      x.edited = true;
+    });
+  };
   const remove = async () => {
     setUI({ menu: null });
     if (!confirm('Delete this message for everyone? This can’t be undone.')) return;
@@ -228,8 +249,12 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
       if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || e.metaKey || e.ctrlKey) return;
       const k = e.key.toLowerCase();
       if (backendOn) {
-        if (k === 'l') void copyText();
-        else if (k === 's' && live) {
+        if (k === 'l') void (live ? copyLink() : copyText());
+        else if (k === 'e' && live && m.who === 'AH') {
+          e.preventDefault();
+          setUI({ menu: null });
+          setDialog('edit');
+        } else if (k === 's' && live) {
           e.preventDefault();
           void toggleSave();
         } else if (k === 'p' && live && canLog) {
@@ -272,7 +297,10 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
           <b>{p.name}</b>
           {m.ai && <span className="tag ai">AI</span>}
           {m.client && <span className="tag gold">client</span>}
-          <small>{m.time}</small>
+          <small>
+            {m.time}
+            {m.edited ? ' · edited' : ''}
+          </small>
         </div>
         <div className="tx">
           <RichText text={m.text} />
@@ -416,9 +444,27 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
               ★ {isSaved ? 'Remove from saved' : 'Save'} <kbd>S</kbd>
             </button>
           )}
+          {live && (
+            <button type="button" role="menuitem" onClick={() => void copyLink()}>
+              🔗 Copy link <kbd>L</kbd>
+            </button>
+          )}
           <button type="button" role="menuitem" onClick={() => void copyText()}>
-            ⧉ Copy text <kbd>L</kbd>
+            ⧉ Copy text{live ? '' : ' '}
+            {!live && <kbd>L</kbd>}
           </button>
+          {live && m.who === 'AH' && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setUI({ menu: null });
+                setDialog('edit');
+              }}
+            >
+              ✎ Edit message <kbd>E</kbd>
+            </button>
+          )}
           {live && m.who === 'AH' && (
             <button type="button" role="menuitem" onClick={() => void remove()} style={{ color: 'var(--red)' }}>
               🗑 Delete message
@@ -457,6 +503,8 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
         </div>
       )}
       {dialog === 'task' && createPortal(<TaskDialog initial={m.text.replace(/\s+/g, ' ').trim()} sourceUiId={m.id} me={meId} onClose={() => setDialog(null)} />, document.body)}
+      {dialog === 'edit' &&
+        createPortal(<PromptDialog title="Edit message" label="Message" initial={m.text} confirm="Save" multiline onCancel={() => setDialog(null)} onSubmit={(t) => void saveEdit(t)} />, document.body)}
       {dialog === 'remind' && createPortal(<RemindDialog target={{ uiId: m.id }} onClose={() => setDialog(null)} />, document.body)}
       {logging &&
         createPortal(
@@ -634,6 +682,7 @@ export function Composer({
   autoFocus,
   style,
   onAttach,
+  onSchedule,
 }: {
   placeholder: string;
   button?: string;
@@ -646,10 +695,13 @@ export function Composer({
   style?: React.CSSProperties;
   /** backend mode: uploads files with the typed text as their caption; resolves true when sent */
   onAttach?: (files: File[], caption: string) => Promise<boolean>;
+  /** backend mode: sends the text later; resolves true when scheduled */
+  onSchedule?: (text: string, at: Date) => Promise<boolean>;
 }) {
   const { toast } = useSeek();
   const fileIn = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(0);
+  const [later, setLater] = useState(false);
   const pop = usePopovers();
   const ta = useRef<HTMLTextAreaElement>(null);
   const [v, setV] = useState('');
@@ -851,6 +903,30 @@ export function Composer({
             Send later
           </button>
         )}
+        {!thread && onSchedule && (
+          <button
+            type="button"
+            className="btn sm ghost"
+            title="Send later"
+            onClick={() => (v.trim() ? setLater(true) : toast('Write the message first, then pick when to send it'))}
+          >
+            ⏱ Later
+          </button>
+        )}
+        {later && onSchedule &&
+          createPortal(
+            <SendLaterDialog
+              onClose={() => setLater(false)}
+              onPick={async (at) => {
+                if (await onSchedule(v.trim(), at)) {
+                  setV('');
+                  setMn(null);
+                  setLater(false);
+                }
+              }}
+            />,
+            document.body,
+          )}
         <button type="button" className={'btn sm ' + (gold ? 'gold' : 'pri')} onClick={send}>
           {button}
         </button>

@@ -15,7 +15,7 @@ import { useSeek } from './store';
  * thread pane and composer render it unchanged. You are always person 'AH'; teammates are keyed by user id.
  */
 
-type Row = { id: number; channel_id: string; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; pinned_at?: string | null };
+type Row = { id: number; channel_id: string; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; pinned_at?: string | null; edited_at?: string | null };
 type ChannelRow = { id: string; name: string; description: string; private?: boolean; created_by?: string | null };
 
 /** Database ids are offset so they never collide with ids the app hands out locally (decision cards, etc.). */
@@ -110,7 +110,7 @@ export function useLiveChat(): LiveChat | null {
     const byId = new Map<number, ChatMessage>();
     for (const r of rows) {
       if (r.parent_id == null) {
-        const m: ChatMessage = { kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), text: r.body, files: r.files?.length ? r.files : undefined, pinned: !!r.pinned_at };
+        const m: ChatMessage = { kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), text: r.body, files: r.files?.length ? r.files : undefined, pinned: !!r.pinned_at, edited: !!r.edited_at };
         roots.push(m);
         byId.set(r.id, m);
       }
@@ -246,7 +246,7 @@ export function useLiveChat(): LiveChat | null {
     (async () => {
       const { data, error } = await sb()
         .from('messages')
-        .select('id, channel_id, user_id, parent_id, body, created_at, files, pinned_at')
+        .select('id, channel_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at')
         .eq('channel_id', id)
         .order('created_at', { ascending: false })
         .limit(300);
@@ -277,7 +277,7 @@ export function useLiveChat(): LiveChat | null {
     const { data, error } = await sb()
       .from('messages')
       .insert({ channel_id, body, parent_id: parent, mentions: mentionIds(body, people.filter((k) => k !== 'AH')) })
-      .select('id, channel_id, user_id, parent_id, body, created_at, files, pinned_at')
+      .select('id, channel_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at')
       .single();
     if (error) {
       toast('Message not sent. Check your connection and try again');
