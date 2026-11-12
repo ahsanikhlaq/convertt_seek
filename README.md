@@ -140,7 +140,7 @@ time (Seek delivers it while it is open on one of your devices, or as soon as yo
 channels sidebar lists and cancels them. Messages that fail to send stay in the conversation as "Not sent" with Retry
 and Discard, and go by themselves when the connection is back; an offline banner shows while you are offline. DMs
 have Files and Pins tabs; client spaces have a Pins tab (clients see Client chat pins). 🎧 Huddle (channels) and 📞 Call
-(DMs) open a private Seek video room (a free Jitsi Meet room with a random name, no account needed) and post a card
+(DMs) open a private Seek video room (a free Jitsi Meet room on meet.jit.si with a random name; its host may be asked to sign in with Google, GitHub or Facebook) and post a card
 others join from; the database only accepts such cards from people, so nobody can forge a meeting card or link.
 
 **Notification sounds:** in the profile (and a client's Settings): six sounds with a preview, volume, which
@@ -192,9 +192,9 @@ removed or demoted. Everyone else sees it read-only.
 **Client spaces** (Clients → ＋ New opens a pop-up): one simple invite: the client's email, the space name, an
 optional welcome message, and who on your team works on this client. Send invite creates the space (the client is its
 approver) and emails them "X invited you to <space>" with the welcome message, a Join button and a 6-digit code; Copy
-invite link gives a link they open and sign in with that email. In the email, Join now opens the client's join
-screen (as in the prototype): they enter the 6-digit code from the same email and land in their space, with no
-profile step. More client people can be added from People. Clients
+invite link gives a link they open and sign in with that email. The email has only a Join now button (no code);
+pressing it opens the client's join screen and emails them a 6-digit sign-in code, which they enter to land in their
+space, with no profile step. More client people can be added from People. Clients
 sign in with a code and see only their own project, starting on the conversation. The agency's team
 sees Client chat, Team notes (never shown to the client), Status (both sides' checklist), Approvals, Files and People
 (roles, resend invite, remove). The database enforces the split: a client session never receives Team notes (or

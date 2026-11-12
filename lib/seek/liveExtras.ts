@@ -398,7 +398,8 @@ export async function convOfMessage(id: number): Promise<string | null> {
 // ---------------------------------------------------------------- huddles and calls
 /**
  * Starts a huddle (channel) or a call (DM): opens a private Seek video room for you and posts a HUDDLE card so
- * others can join. Rooms are free Jitsi Meet rooms with a random name; nobody needs an account.
+ * others can join. Rooms are free Jitsi Meet rooms (meet.jit.si) with a random name; the public service may ask the
+ * person who starts a room to sign in with Google, GitHub or Facebook.
  */
 export async function startHuddle(target: ConvTarget): Promise<string | null> {
   const link = 'https://meet.jit.si/Seek-' + crypto.randomUUID().replace(/-/g, '').slice(0, 24);

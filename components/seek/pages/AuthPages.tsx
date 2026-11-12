@@ -799,6 +799,7 @@ export function WelcomePage() {
   const formRef = useRef<HTMLDivElement>(null);
   // a client's invite email: Join now opens this code screen (as in the prototype)
   const [clientJoin, setClientJoin] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
 
   /** Signed in: set up the profile, or carry on if that's already done. */
   const toProfile = async (acc: Account) => {
@@ -857,6 +858,18 @@ export function WelcomePage() {
           history.replaceState(null, '', location.pathname);
           setClientJoin(true);
           setPhase('code');
+          // Join now: email the client a fresh sign-in code (the invite itself has none)
+          const to = (q.get('email') ?? '').trim();
+          if (isEmail(to)) {
+            setBusy(true);
+            const err = await sendCode(to);
+            setBusy(false);
+            const n = waitSeconds(err);
+            if (n) setWait(n);
+            else if (!err) setWait(RESEND_AFTER);
+            if (err && !n) toast(err);
+            setCodeSent(!err);
+          }
           return;
         }
       }
@@ -1047,7 +1060,11 @@ export function WelcomePage() {
                 <h1 style={{ margin: '4px 0 0' }}>Welcome</h1>
               </div>
               <p className="sub" style={{ margin: 0 }}>
-                Enter the 6-digit code we just emailed you{isEmail(email) ? ' at ' + email : ''}.
+                {busy && !codeSent
+                  ? 'Sending your sign-in code…'
+                  : codeSent
+                    ? 'Enter the 6-digit code we just emailed you' + (isEmail(email) ? ' at ' + email : '') + '.'
+                    : 'Enter your email and we’ll send you a 6-digit sign-in code.'}
               </p>
               {!isEmail(email) && (
                 <div className="fld" style={{ width: '100%', textAlign: 'left' }}>
@@ -1060,7 +1077,27 @@ export function WelcomePage() {
                 {busy ? 'Opening…' : 'Open my space'}
               </button>
               {isEmail(email) && <Resend email={email} wait={wait} setWait={setWait} />}
-              <p className="fine">No password. The code is in the same email as the Join button.</p>
+              {!codeSent && !busy && (
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ width: '100%' }}
+                  disabled={busy || !isEmail(email) || wait > 0}
+                  onClick={async () => {
+                    setBusy(true);
+                    const err = await sendCode(email.trim());
+                    setBusy(false);
+                    const n = waitSeconds(err);
+                    if (n) setWait(n);
+                    else if (!err) setWait(RESEND_AFTER);
+                    toast(err || 'Code sent to ' + email.trim());
+                    if (!err) setCodeSent(true);
+                  }}
+                >
+                  Email me a code
+                </button>
+              )}
+              <p className="fine">No password. The code arrives in a separate email; check spam if it isn’t there in a minute.</p>
             </div>
           )}
 

@@ -164,5 +164,5 @@ export function downloadIcs(c: Pick<MeetingCard, 'id' | 'title' | 'starts_at' | 
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-/** A Seek video room: a free Jitsi Meet room with a random, unguessable name (no account needed). */
+/** A Seek video room: a free Jitsi Meet room (meet.jit.si) with a random, unguessable name. */
 export const seekRoom = () => 'https://meet.jit.si/Seek-' + crypto.randomUUID().replace(/-/g, '').slice(0, 20);

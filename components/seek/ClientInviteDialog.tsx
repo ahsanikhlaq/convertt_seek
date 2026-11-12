@@ -146,7 +146,7 @@ export function ClientInviteDialog({ onClose, onCreated }: { onClose: () => void
           void send();
         }}
       >
-        <p style={{ margin: 0, color: 'var(--mu)', fontSize: 13.5 }}>They get their own private space, and an email with a Join button and a sign-in code. No password.</p>
+        <p style={{ margin: 0, color: 'var(--mu)', fontSize: 13.5 }}>They get their own private space and an email with a Join now button. Clicking it emails them a sign-in code. No password.</p>
         <div className="fld">
           <label htmlFor="ci-e">Client email</label>
           <input className="inp" id="ci-e" type="email" placeholder="chris@client.com" value={email} disabled={!!made} autoFocus onChange={(ev) => setEmail(ev.target.value)} />

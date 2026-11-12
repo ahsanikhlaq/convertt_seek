@@ -28,12 +28,12 @@
           <a href="{{ if .Data.space }}{{ .RedirectTo }}?client=1&email={{ .Email }}{{ else }}{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=invite&email={{ .Email }}{{ end }}" style="display:block;padding:14px 26px;font-family:'Outfit','Helvetica Neue',Arial,sans-serif;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:12px;">Join now</a>
         </td>
       </tr></table>
-      <p style="margin:12px 0 0;text-align:center;font-size:12.5px;color:#7a6179;">No password. {{ if .Data.space }}You'll enter the sign-in code below.{{ else }}You'll get a sign-in code.{{ end }}</p>
-      <!-- the code -->
-      <p style="margin:24px 0 8px;font-size:13px;line-height:1.55;color:#5f4a5e;">{{ if .Data.space }}Your sign-in code:{{ else }}Button not working? Open Seek and enter this code:{{ end }}</p>
+      <p style="margin:12px 0 0;text-align:center;font-size:12.5px;color:#7a6179;">No password. {{ if .Data.space }}Click Join now and we'll email you a sign-in code.{{ else }}You'll get a sign-in code.{{ end }}</p>
+      <!-- teammates also get the code as a fallback; clients get theirs only after pressing Join now -->
+      {{ if not .Data.space }}<p style="margin:24px 0 8px;font-size:13px;line-height:1.55;color:#5f4a5e;">Button not working? Open Seek and enter this code:</p>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
         <td align="center" style="background:#f2e6f2;border-radius:10px;padding:10px 18px;font-family:'Geist Mono',SFMono-Regular,Menlo,Consolas,monospace;font-size:22px;font-weight:700;letter-spacing:6px;color:#4b154a;">{{ .Token }}</td>
-      </tr></table>
+      </tr></table>{{ end }}
     </td></tr>
     <tr><td style="padding:20px 4px 0;font-family:'Outfit','Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.55;color:#7a6179;">
       This invite was sent to {{ .Email }}. If you weren't expecting it, you can ignore this email.<br><br>

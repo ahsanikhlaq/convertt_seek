@@ -207,7 +207,7 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
             ))}
           </div>
           {tool === 'seek' ? (
-            <em>A private video room is created for this call (in the browser, no account needed).</em>
+            <em>A private video room is created for this call. It opens in the browser (Jitsi Meet); whoever starts it may be asked to sign in with Google, GitHub or Facebook.</em>
           ) : (
             <input
               className="inp"
