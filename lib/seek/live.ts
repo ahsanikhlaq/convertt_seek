@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { backendOn, currentAccount, DB_SCHEMA, sb, sendInvite } from './backend';
+import { backendOn, currentAccount, DB_SCHEMA, quickAccount, sb, sendInvite } from './backend';
 import { PEOPLE, type ChatMessage, type FeedItem, type FileRef, type MessageCard, type PersonKey } from './data';
 import { initialsOf, channelId as toChannelName, isEmail } from './format';
 import { hydrateReactions, markNotSent, markRead, unreadCounts } from './liveSync';
@@ -116,9 +116,11 @@ export function useLiveChat(): LiveChat | null {
   const [people, setPeople] = useState<PersonKey[]>([]);
   const [admin, setAdmin] = useState(false);
   const [info, setInfo] = useState(new Map<string, ChannelInfo>());
-  const meRef = useRef<string | null>(null);
-  const wsRef = useRef<string | null>(null);
-  const chans = useRef(new Map<string, string>()); // channel name → id
+  // start from what this device saved last time (who you are, your channels), so the open channel loads at once
+  const meRef = useRef<string | null>(s.meId ?? null);
+  const wsRef = useRef<string | null>(s.orgId ?? null);
+  const chans = useRef(new Map<string, string>(s.workspaces.C.channels.filter((c) => c.cid).map((c) => [c.id, c.cid!]))); // channel name → id
+  const loadedFor = useRef('');
   const current = s.workspaces.C.ch;
   const currentRef = useRef(current);
   currentRef.current = current;
@@ -210,8 +212,8 @@ export function useLiveChat(): LiveChat | null {
     let live: RealtimeChannel | null = null;
     let alive = true;
     (async () => {
-      // the account is loaded once at start-up and shared, so this is usually instant
-      const acc = await currentAccount();
+      // the last-known account (no network) when there is one; it's refreshed in the background at start-up
+      const acc = (await quickAccount()) ?? (await currentAccount());
       if (!alive || !acc?.workspace) return;
       meRef.current = acc.id;
       wsRef.current = acc.workspace.id;
@@ -259,9 +261,12 @@ export function useLiveChat(): LiveChat | null {
 
   // ---- the open channel's messages (latest 300, oldest first), its reactions, and mark it read
   useEffect(() => {
-    if (!enabled || !ready) return;
+    if (!enabled) return;
     const id = chans.current.get(current);
     if (!id) return;
+    // loaded as soon as we know the channel (from this device's saved list); not again when the list refreshes
+    if (loadedFor.current === id) return;
+    loadedFor.current = id;
     markRead('ch:' + id);
     let alive = true;
     (async () => {
@@ -273,6 +278,7 @@ export function useLiveChat(): LiveChat | null {
         .limit(300);
       if (!alive) return;
       if (error) {
+        loadedFor.current = '';
         toast('Couldn’t load messages. Check your connection');
         return;
       }
@@ -289,6 +295,7 @@ export function useLiveChat(): LiveChat | null {
     })();
     return () => {
       alive = false;
+      if (loadedFor.current === id) loadedFor.current = '';
     };
   }, [enabled, ready, current]); // eslint-disable-line react-hooks/exhaustive-deps
 

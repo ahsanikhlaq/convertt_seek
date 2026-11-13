@@ -86,15 +86,49 @@ export function Emoji({ k, large }: { k: string; large?: boolean }) {
 }
 
 /** Message text with @mentions highlighted and :custom: emoji rendered */
-export function RichText({ text }: { text: string }) {
-  const parts = text.split(/(@\w+|:[a-z0-9_-]+:)/g);
+// inline formatting, like Slack: *bold* _italic_ ~strike~ `code`, links, @mentions and :emoji:
+const INLINE = /(`[^`\n]+`|(?<![\w*])\*[^*\n]+\*(?![\w*])|(?<![\w_])_[^_\n]+_(?![\w_])|(?<![\w~])~[^~\n]+~(?![\w~])|https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]|@\w+|:[a-z0-9_-]+:)/g;
+
+function Inline({ text }: { text: string }) {
+  const parts = text.split(INLINE);
   return (
     <>
       {parts.map((p, i) => {
         if (!p) return null;
+        if (i % 2 === 0) return <Fragment key={i}>{p}</Fragment>;
+        if (p.startsWith('`')) return <code key={i} className="icode">{p.slice(1, -1)}</code>;
+        if (p.startsWith('*')) return <b key={i}><Inline text={p.slice(1, -1)} /></b>;
+        if (p.startsWith('_')) return <em key={i}><Inline text={p.slice(1, -1)} /></em>;
+        if (p.startsWith('~')) return <s key={i}><Inline text={p.slice(1, -1)} /></s>;
+        if (p.startsWith('http')) return <a key={i} href={p} target="_blank" rel="noopener noreferrer nofollow" className="mlink">{p}</a>;
         if (p.startsWith('@')) return <span key={i} className="at">{p}</span>;
-        if (/^:[a-z0-9_-]+:$/.test(p)) return <Emoji key={i} k={p} />;
-        return <Fragment key={i}>{p}</Fragment>;
+        return <Emoji key={i} k={p} />;
+      })}
+    </>
+  );
+}
+
+/** Message text with Slack-style formatting: code blocks, "- " bullet lines, and inline styles. */
+export function RichText({ text }: { text: string }) {
+  const blocks = text.split(/(```[\s\S]*?```)/g);
+  return (
+    <>
+      {blocks.map((b, i) => {
+        if (!b) return null;
+        if (b.startsWith('```') && b.endsWith('```') && b.length >= 6) return <pre key={i} className="cblock">{b.slice(3, -3).replace(/^\n|\n$/g, '')}</pre>;
+        const lines = b.split('\n');
+        return (
+          <Fragment key={i}>
+            {lines.map((l, j) => {
+              const bullet = /^\s*[-•*] (.*)$/.exec(l);
+              const quote = /^> ?(.*)$/.exec(l);
+              const end = j < lines.length - 1 ? '\n' : '';
+              if (bullet) return <span key={j} className="bul"><Inline text={bullet[1]} /></span>;
+              if (quote) return <span key={j} className="qline"><Inline text={quote[1]} /></span>;
+              return <Fragment key={j}><Inline text={l} />{end}</Fragment>;
+            })}
+          </Fragment>
+        );
       })}
     </>
   );

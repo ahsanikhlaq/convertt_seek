@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { backendOn, currentAccount, DB_SCHEMA, sb } from './backend';
+import { backendOn, currentAccount, DB_SCHEMA, quickAccount, sb } from './backend';
 import type { ChatMessage, FileRef, MessageCard, PersonKey } from './data';
 import { inviteByEmail, keyFor, learnProfiles, timeLabel, toUiId } from './live';
 import { hydrateReactions, markNotSent, markRead, unreadCounts } from './liveSync';
@@ -26,15 +26,35 @@ export type LiveDms = {
   invite: (email: string, opts?: { role?: 'member' | 'admin'; channels?: string[] }) => Promise<string>;
 };
 
+// who your DMs are with (user id → conversation id), remembered on this device so a reload opens the last
+// conversation straight away; refreshed from the server on every visit and removed with the rest on sign-out
+const THREADS = 'seek:dmThreads';
+function savedThreads(me: string | null): [string, string][] {
+  try {
+    const v = JSON.parse(localStorage.getItem(THREADS) || 'null') as { me: string; pairs: [string, string][] } | null;
+    return v && me && v.me === me ? v.pairs : [];
+  } catch {
+    return [];
+  }
+}
+function keepThreads(me: string | null, pairs: [string, string][]) {
+  try {
+    if (me) localStorage.setItem(THREADS, JSON.stringify({ me, pairs }));
+  } catch {}
+}
+
 export function useLiveDms(): LiveDms | null {
   const { s, update, toast } = useSeek();
   const enabled = backendOn && s.session === 'in';
   const [ready, setReady] = useState(false);
   const [people, setPeople] = useState<PersonKey[]>([]);
-  const me = useRef<string | null>(null);
-  const ws = useRef<string | null>(null);
-  const threadOf = useRef(new Map<string, string>()); // other user id → thread id
-  const otherOf = useRef(new Map<string, string>()); // thread id → other user id
+  // start from what this device saved last time, so the open conversation loads at once
+  const me = useRef<string | null>(s.meId ?? null);
+  const ws = useRef<string | null>(s.orgId ?? null);
+  const saved = savedThreads(s.meId ?? null);
+  const threadOf = useRef(new Map<string, string>(saved)); // other user id → thread id
+  const otherOf = useRef(new Map<string, string>(saved.map(([u, t]) => [t, u]))); // thread id → other user id
+  const loadedFor = useRef('');
   const current = s.dm;
   const currentRef = useRef(current);
   currentRef.current = current;
@@ -89,48 +109,45 @@ export function useLiveDms(): LiveDms | null {
     let live: RealtimeChannel | null = null;
     let alive = true;
     (async () => {
-      // the account is loaded once at start-up and shared, so this is usually instant
-      const acc = await currentAccount();
+      // the last-known account (no network) when there is one; it's refreshed in the background at start-up
+      const acc = (await quickAccount()) ?? (await currentAccount());
       if (!alive || !acc?.workspace) return;
       me.current = acc.id;
       ws.current = acc.workspace.id;
 
-      const [{ data: members }, { data: mine }] = await Promise.all([
+      // everything in one round trip: teammates, who your conversations are with, their latest messages, unread counts
+      // (the database only returns conversations you're in)
+      const [{ data: members }, { data: all }, { data: recent }, counts] = await Promise.all([
         sb().from('workspace_members').select('user_id, role').eq('workspace_id', ws.current),
-        sb().from('dm_members').select('thread_id').eq('user_id', me.current),
+        sb().from('dm_members').select('thread_id, user_id'),
+        sb().from('messages').select('id, dm_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at, card').eq('workspace_id', ws.current).not('dm_id', 'is', null).order('created_at', { ascending: false }).limit(400),
+        unreadCounts(ws.current).catch(() => new Map<string, number>()),
       ]);
       const team = ((members ?? []) as { user_id: string; role: string }[]).filter((m) => m.role !== 'guest').map((m) => m.user_id);
-      const threadIds = ((mine ?? []) as { thread_id: string }[]).map((m) => m.thread_id);
-      let pairs: { thread_id: string; user_id: string }[] = [];
-      let lasts: Row[] = [];
-      if (threadIds.length) {
-        const [{ data: all }, { data: recent }] = await Promise.all([
-          sb().from('dm_members').select('thread_id, user_id').in('thread_id', threadIds),
-          sb().from('messages').select('id, dm_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at, card').in('dm_id', threadIds).order('created_at', { ascending: false }).limit(400),
-        ]);
-        pairs = ((all ?? []) as { thread_id: string; user_id: string }[]).filter((p) => p.user_id !== me.current);
-        lasts = (recent ?? []) as Row[];
-      }
-      const [counts] = await Promise.all([
-        unreadCounts(ws.current).catch(() => new Map<string, number>()),
-        learnProfiles([...team, ...pairs.map((p) => p.user_id)], me.current),
-      ]);
+      const pairs = ((all ?? []) as { thread_id: string; user_id: string }[]).filter((p) => p.user_id !== me.current);
+      const lasts = (recent ?? []) as Row[];
       if (!alive) return;
 
       threadOf.current = new Map(pairs.map((p) => [p.user_id, p.thread_id]));
       otherOf.current = new Map(pairs.map((p) => [p.thread_id, p.user_id]));
+      keepThreads(me.current, pairs.map((p) => [p.user_id, p.thread_id]));
       setPeople(team.filter((id) => id !== me.current).map(key));
       update((d) => {
-        d.dms = {}; // the demo's sample conversations don't belong in a real workspace
+        // keep the messages already on screen; drop conversations that aren't yours (or the demo's samples)
+        const prev = d.dms;
+        d.dms = {};
         // newest conversation first
         const order = [...new Set(lasts.map((r) => r.dm_id!))].concat(pairs.map((p) => p.thread_id));
         for (const t of [...new Set(order)]) {
           const other = otherOf.current.get(t);
           if (!other) continue;
-          d.dms[key(other)] = { last: lasts.find((r) => r.dm_id === t)?.body ?? '', unread: counts.get('dm:' + t) ?? 0, msgs: [] };
+          const k = key(other);
+          d.dms[k] = { last: lasts.find((r) => r.dm_id === t)?.body ?? '', unread: counts.get('dm:' + t) ?? 0, msgs: prev[k]?.msgs ?? [] };
         }
         if (!d.dms[d.dm]) d.dm = (Object.keys(d.dms)[0] as PersonKey) ?? '';
       });
+      // names and photos fill in afterwards (most are already remembered on this device)
+      void learnProfiles([...team, ...pairs.map((p) => p.user_id)], me.current).then(() => alive && update(() => {}));
 
       live = sb()
         .channel('seek-dms:' + ws.current)
@@ -157,10 +174,13 @@ export function useLiveDms(): LiveDms | null {
 
   // ---- the open conversation's messages (latest 300, oldest first)
   useEffect(() => {
-    if (!enabled || !ready || !current) return;
+    if (!enabled || !current) return;
     const other = current === 'AH' ? null : current;
     const thread = other ? threadOf.current.get(other) : undefined;
     if (!thread) return;
+    // loaded as soon as we know the conversation (from this device); not again when the list refreshes
+    if (loadedFor.current === thread) return;
+    loadedFor.current = thread;
     markRead('dm:' + thread);
     let alive = true;
     (async () => {
@@ -173,6 +193,7 @@ export function useLiveDms(): LiveDms | null {
         .limit(300);
       if (!alive) return;
       if (error) {
+        loadedFor.current = '';
         toast('Couldn’t load messages. Check your connection');
         return;
       }
@@ -187,6 +208,7 @@ export function useLiveDms(): LiveDms | null {
     })();
     return () => {
       alive = false;
+      if (loadedFor.current === thread) loadedFor.current = '';
     };
   }, [enabled, ready, current]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -1,9 +1,13 @@
 import type { Metadata, Viewport } from 'next';
+import { Inter } from 'next/font/google';
 import { AppFrame } from '@/components/seek/AppFrame';
 import { PopoverProvider } from '@/components/seek/Popovers';
 import { SeekProvider } from '@/lib/seek/store';
 import './fonts.css';
 import './seek.css';
+
+// Inter: a clear, professional typeface made for screens (self-hosted by Next.js at build time)
+const inter = Inter({ subsets: ['latin', 'latin-ext'], display: 'swap', variable: '--font-sans' });
 
 export const metadata: Metadata = {
   title: { default: 'Seek by Convertt', template: '%s · Seek' },
@@ -25,7 +29,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // the theme toggles `dark` and colour tokens on <html> at runtime
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body>
         <SeekProvider>
           <PopoverProvider>

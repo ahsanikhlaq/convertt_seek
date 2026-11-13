@@ -165,6 +165,7 @@ export function dropAccountSnapshot() {
   try {
     localStorage.removeItem(SNAP);
     localStorage.removeItem('seek:people');
+    localStorage.removeItem('seek:dmThreads');
   } catch {}
 }
 /** The last-known account for whoever is signed in on this device (no network), or null. */

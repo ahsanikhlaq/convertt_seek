@@ -22,7 +22,7 @@ import { editMessage, messageLink, pinMessage, saveMessage } from '@/lib/seek/li
 import { approvalDraft } from '@/lib/seek/liveApprovals';
 import { usePopovers } from './Popovers';
 import { Avatar, Emoji, RichText } from './ui';
-import { Ic } from './icons';
+import { Ic, type IconKey } from './icons';
 
 /** Where a feed lives in the state, so actions can write back to it. */
 export type FeedRef = {
@@ -428,23 +428,25 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
       </div>
       {!inThread && (
         <div className="mt">
+          <button type="button" title="Add reaction" aria-label="Add reaction" onClick={(ev) => pop.openEmoji(ev.currentTarget, react)}>
+            <Ic n="react" size={17} />
+          </button>
           {feed.threads && (
-            <button type="button" onClick={openThread}>
-              Reply
+            <button type="button" title="Reply in thread" aria-label="Reply in thread" onClick={openThread}>
+              <Ic n="thread" size={17} />
             </button>
           )}
-          <button type="button" onClick={(ev) => pop.openEmoji(ev.currentTarget, react)}>
-            React
-          </button>
           {live && (
-            <button type="button" className={isSaved ? 'on' : ''} onClick={() => void toggleSave()}>
-              {isSaved ? 'Saved' : 'Save'}
+            <button type="button" className={isSaved ? 'on' : ''} title={isSaved ? 'Remove from saved' : 'Save for later'} aria-label={isSaved ? 'Remove from saved' : 'Save for later'} onClick={() => void toggleSave()}>
+              <Ic n="bookmark" size={17} />
             </button>
           )}
           {!backendOn && (
             <button
               type="button"
               className={m.saved ? 'on' : ''}
+              title={m.saved ? 'Remove from saved' : 'Save for later'}
+              aria-label={m.saved ? 'Remove from saved' : 'Save for later'}
               onClick={() => {
                 edit((x) => {
                   x.saved = !x.saved;
@@ -452,11 +454,11 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
                 toast(m.saved ? 'Removed from saved' : 'Saved for later');
               }}
             >
-              {m.saved ? 'Saved' : 'Save'}
+              <Ic n="bookmark" size={17} />
             </button>
           )}
-          <button type="button" data-more={m.id} aria-expanded={menuOpen} onClick={() => setUI({ menu: menuOpen ? null : m.id })}>
-            More
+          <button type="button" data-more={m.id} aria-expanded={menuOpen} title="More actions" aria-label="More actions" onClick={() => setUI({ menu: menuOpen ? null : m.id })}>
+            <Ic n="more" size={17} />
           </button>
         </div>
       )}
@@ -853,6 +855,53 @@ export function Composer({
     });
   };
 
+  /** Wraps the selected text in a format (or inserts the markers and puts the cursor between them). */
+  const wrap = (open: string, close = open) => {
+    const t = ta.current!;
+    const a = t.selectionStart ?? v.length;
+    const b = t.selectionEnd ?? a;
+    const sel = v.slice(a, b);
+    const nv = v.slice(0, a) + open + sel + close + v.slice(b);
+    setV(nv);
+    requestAnimationFrame(() => {
+      t.focus();
+      if (sel) t.setSelectionRange(a, a + open.length + sel.length + close.length);
+      else t.setSelectionRange(a + open.length, a + open.length);
+    });
+  };
+  /** Starts each selected line (or the current one) with a prefix, e.g. "- " for a bulleted list. */
+  const prefixLines = (pre: string) => {
+    const t = ta.current!;
+    const a = v.lastIndexOf('\n', (t.selectionStart ?? v.length) - 1) + 1;
+    const b = t.selectionEnd ?? v.length;
+    const block = v.slice(a, b) || '';
+    const nb = block.split('\n').map((l) => (l.startsWith(pre) ? l : pre + l)).join('\n');
+    const nv = v.slice(0, a) + nb + v.slice(b);
+    setV(nv);
+    requestAnimationFrame(() => {
+      t.focus();
+      t.setSelectionRange(a + nb.length, a + nb.length);
+    });
+  };
+  const addLink = () => {
+    const url = window.prompt('Link (https://…)');
+    if (!url) return;
+    const u = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+    const t = ta.current!;
+    const a = t.selectionStart ?? v.length;
+    const b = t.selectionEnd ?? a;
+    const sel = v.slice(a, b);
+    wrap(sel ? '' : '', sel ? ' (' + u + ')' : u);
+  };
+  const FORMATS: [IconKey, string, () => void, string?][] = [
+    ['bold', 'Bold', () => wrap('*'), 'Ctrl+B'],
+    ['italic', 'Italic', () => wrap('_'), 'Ctrl+I'],
+    ['strike', 'Strikethrough', () => wrap('~'), 'Ctrl+Shift+X'],
+    ['link', 'Link', addLink],
+    ['list', 'Bulleted list', () => prefixLines('- ')],
+    ['code', 'Code', () => (ta.current && ta.current.selectionStart !== ta.current.selectionEnd && v.slice(ta.current.selectionStart, ta.current.selectionEnd).includes('\n') ? wrap('```\n', '\n```') : wrap('`'))],
+  ];
+
   const insert = (txt: string, mention?: boolean) => {
     const t = ta.current!;
     const p = t.selectionStart ?? v.length;
@@ -903,6 +952,15 @@ export function Composer({
           : undefined
       }
     >
+      {!thread && (
+        <div className="fmt" role="toolbar" aria-label="Formatting">
+          {FORMATS.map(([icon, label, run, keys]) => (
+            <button key={icon} type="button" title={label + (keys ? ' (' + keys + ')' : '')} aria-label={label} onMouseDown={(e) => e.preventDefault()} onClick={run}>
+              <Ic n={icon} size={16} />
+            </button>
+          ))}
+        </div>
+      )}
       <textarea
         ref={ta}
         rows={1}
@@ -929,6 +987,15 @@ export function Composer({
             if (e.key === 'Escape') {
               e.stopPropagation();
               setMn(null);
+              return;
+            }
+          }
+          // formatting shortcuts
+          if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+            const k = e.key.toLowerCase();
+            if (k === 'b' || k === 'i' || (k === 'x' && e.shiftKey)) {
+              e.preventDefault();
+              wrap(k === 'b' ? '*' : k === 'i' ? '_' : '~');
               return;
             }
           }
@@ -1056,8 +1123,9 @@ export function Composer({
             />,
             document.body,
           )}
-        <button type="button" className={'btn sm ' + (gold ? 'gold' : 'pri')} onClick={send}>
-          {button}
+        <button type="button" className={'btn sm send ' + (gold ? 'gold' : 'pri') + (v.trim() ? '' : ' idle')} onClick={send} aria-label={button} title={button + (enterSends() ? ' (Enter)' : ' (Ctrl+Enter)')}>
+          <Ic n="send" size={16} />
+          {button !== 'Send' && <span>{button}</span>}
         </button>
       </div>
     </div>
