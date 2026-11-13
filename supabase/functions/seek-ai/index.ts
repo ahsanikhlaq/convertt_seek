@@ -103,13 +103,65 @@ async function namesOf(admin: SupabaseClient, ids: (string | null)[]): Promise<M
   return new Map(((data ?? []) as { id: string; name: string; email: string }[]).map((p) => [p.id, (p.name || '').trim() || (p.email ?? '').split('@')[0]]));
 }
 
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * A moment as seen in a time zone: weekday (0 = Sun), minutes since midnight, and "Fri 19:51". Time zones are saved
+ * either as IANA names ("Asia/Karachi") or as labels like "Lahore (GMT+5)" / "UTC-4:30"; both work.
+ */
+function zoned(at: Date, tz: string): { wd: number; min: number; label: string } {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(at);
+    const g = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+    const wd = DAYS.indexOf(g('weekday'));
+    const h = Number(g('hour')) % 24;
+    const m = Number(g('minute'));
+    return { wd, min: h * 60 + m, label: g('weekday') + ' ' + String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') };
+  } catch {
+    const o = /(?:GMT|UTC)\s*([+-−])\s*(\d{1,2})(?::?(\d{2}))?/i.exec(tz);
+    const off = o ? (o[1] === '+' ? 1 : -1) * (Number(o[2]) * 60 + Number(o[3] ?? 0)) : 0;
+    const d = new Date(at.getTime() + off * 60_000);
+    const wd = d.getUTCDay();
+    const min = d.getUTCHours() * 60 + d.getUTCMinutes();
+    return { wd, min, label: DAYS[wd] + ' ' + String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0') };
+  }
+}
+
 /** "14:05" in a time zone. */
 function clock(iso: string, tz: string) {
-  try {
-    return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz });
-  } catch {
-    return iso.slice(11, 16);
+  return zoned(new Date(iso), tz).label.slice(4);
+}
+
+const hm = (x: string) => {
+  const [h, m] = x.split(':').map(Number);
+  return h * 60 + (m || 0);
+};
+const span = (mins: number) => (mins < 60 ? 'about ' + Math.max(1, Math.round(mins)) + ' min' : mins < 36 * 60 ? 'about ' + Math.round(mins / 60) + ' h' : 'about ' + Math.round(mins / 1440) + ' days');
+
+/**
+ * Whether someone is in their working hours now and, if not, when they start again (Monday to Friday is assumed),
+ * worked out here so the AI never has to do time arithmetic.
+ */
+function workingNow(hours: string | null, tz: string): string {
+  const m = /(\d{1,2}:\d{2})\s*[–—-]\s*(\d{1,2}:\d{2})/.exec(hours ?? '');
+  if (!m) return '';
+  const start = hm(m[1]);
+  const end = hm(m[2]);
+  const now = zoned(new Date(), tz || 'UTC');
+  const weekday = now.wd >= 1 && now.wd <= 5;
+  if (weekday && now.min >= start && now.min < end) return 'within working hours now (until ' + m[2] + ' their time, in ' + span(end - now.min) + ')';
+  // the next weekday start
+  let days = 0;
+  let wd = now.wd;
+  if (!(weekday && now.min < start)) {
+    do {
+      days++;
+      wd = (wd + 1) % 7;
+    } while (wd === 0 || wd === 6);
   }
+  const until = days * 1440 + start - now.min;
+  const when = days === 0 ? 'today' : days === 1 ? 'tomorrow' : 'on ' + DAYS[wd];
+  return 'outside working hours now; next working hours start ' + when + ' at ' + m[1] + ' their time, in ' + span(until) + ' (assuming Mon–Fri)';
 }
 
 function ago(iso: string | null) {
@@ -125,7 +177,7 @@ function ago(iso: string | null) {
 const STATUS: Record<string, string> = { on: 'Available', mt: 'In a meeting', fc: 'Focus time', aw: 'Away' };
 
 /** Who else is on the team / in the channel: status, last seen, working hours and their local time now. */
-async function availability(admin: SupabaseClient, ws: string, ids: string[]): Promise<Person[]> {
+async function availability(admin: SupabaseClient, ws: string, ids: string[], fallbackTz = 'UTC'): Promise<Person[]> {
   if (!ids.length) return [];
   const [{ data: ps }, { data: roles }] = await Promise.all([
     admin.from('profiles').select('id, name, email, title, status, dnd_until, last_seen_at, work_hours, time_zone').in('id', ids),
@@ -140,18 +192,13 @@ async function availability(admin: SupabaseClient, ws: string, ids: string[]): P
       const paused = !!p.dnd_until && Date.parse(p.dnd_until) > Date.now();
       const status = STATUS[p.status ?? 'on'] ?? 'Available';
       const here = p.status !== 'aw' && !paused && !!p.last_seen_at && Date.now() - Date.parse(p.last_seen_at) < 5 * 60_000;
-      const tz = p.time_zone || '';
-      let local = '';
-      if (tz) {
-        try {
-          local = new Date().toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: tz });
-        } catch {}
-      }
+      const tz = p.time_zone || fallbackTz;
       const parts = [
-        status + (paused ? ', notifications paused until ' + clock(p.dnd_until!, tz || 'UTC') : ''),
+        status + (paused ? ', notifications paused until ' + clock(p.dnd_until!, tz) : ''),
         ago(p.last_seen_at),
-        p.work_hours ? 'works ' + p.work_hours + (tz ? ' (' + tz + ')' : '') : '',
-        local ? 'their local time now: ' + local : '',
+        p.work_hours ? 'works ' + p.work_hours + ' (' + tz + ')' : '',
+        'their local time now: ' + zoned(new Date(), tz).label,
+        workingNow(p.work_hours, tz),
       ].filter(Boolean);
       return { name, title: p.title ?? '', status, here, line: '- ' + name + (p.title ? ' (' + p.title + ')' : '') + (role.get(p.id) === 'owner' || role.get(p.id) === 'admin' ? ', ' + role.get(p.id) : '') + ': ' + parts.join('; ') };
     });
@@ -160,12 +207,7 @@ async function availability(admin: SupabaseClient, ws: string, ids: string[]): P
 /** The assistant's brief: who it is, what it may say, the team's own instructions and knowledge, who is around. */
 function assistantPrompt(o: { org: string; channel: string; sender: string; mentioned: boolean; tz: string; team: Person[]; instructions: string; knowledge: string }) {
   const first = o.sender.split(/\s+/)[0];
-  let now = '';
-  try {
-    now = new Date().toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: o.tz });
-  } catch {
-    now = new Date().toISOString();
-  }
+  const now = zoned(new Date(), o.tz).label;
   return [
     'You are "Seek assistant", the AI teammate of ' + (o.org || 'this team') + ' (an agency). You are posting in the #' + o.channel + ' channel of Seek, the team’s chat app.',
     o.mentioned ? o.sender + ' asked you directly (they wrote @assistant).' : o.sender + ' posted while nobody else in this channel is available, so you reply on the team’s behalf.',
@@ -174,7 +216,7 @@ function assistantPrompt(o: { org: string; channel: string; sender: string; ment
     'YOUR JOB',
     '- Reply to the LATEST MESSAGE like a capable, courteous account coordinator would.',
     '- If TEAM KNOWLEDGE answers it, answer clearly and specifically, using those facts.',
-    '- If they ask when someone will be back or reply, use TEAM AVAILABILITY (status, last seen, working hours, local time) to give an honest estimate, for example "Muzaffar’s day starts at 09:00 Karachi time, about 12 hours from now". Never promise an exact time.',
+    '- If they ask when someone will be back or reply, use TEAM AVAILABILITY. It already says whether each person is within working hours now and when their next working hours start; repeat those facts, do not calculate times yourself. Example: "Muzaffar is outside working hours now; Muzaffar’s next working day starts on Monday at 09:00 Lahore time." Never promise an exact reply time.',
     '- Otherwise, show you understood the request in a few words, say the team is away right now and will follow up, and if useful ask for the one detail that would help them act faster.',
     '- If it sounds urgent, say how to reach the team urgently only if the team’s instructions give a way.',
     '',
@@ -249,7 +291,7 @@ Deno.serve(async (req) => {
     // everyone else in the channel (team only), with what's needed to say when they'll be back
     const { data: mem } = await admin.from('channel_members').select('user_id').eq('channel_id', m.channel_id).neq('user_id', user.id);
     const ids = ((mem ?? []) as { user_id: string }[]).map((x) => x.user_id);
-    const team = await availability(admin, m.workspace_id, ids);
+    const team = await availability(admin, m.workspace_id, ids, (w?.time_zone as string | null) || 'UTC');
     if (!mentioned) {
       // is anyone else in the channel around? (not Away, not paused, active in the last 5 minutes)
       if (team.some((p) => p.here)) return json({ replied: false, why: 'someone is here' });
@@ -294,7 +336,7 @@ Deno.serve(async (req) => {
     const { data: w } = await admin.from('workspaces').select('name, time_zone').eq('id', ws).single();
     const { data: mem } = await admin.from('workspace_members').select('user_id, role').eq('workspace_id', ws).neq('user_id', user.id);
     const ids = ((mem ?? []) as { user_id: string; role: string }[]).filter((x) => x.role !== 'guest').map((x) => x.user_id);
-    const team = await availability(admin, ws, ids);
+    const team = await availability(admin, ws, ids, (w?.time_zone as string | null) || 'UTC');
     const who = await namesOf(admin, [user.id]);
     const tz = (w?.time_zone as string | null) || 'UTC';
     const sender = who.get(user.id) ?? 'there';
