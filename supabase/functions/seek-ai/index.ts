@@ -15,28 +15,76 @@ const cors = {
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-// defaults to Google's "latest Flash" alias, so it keeps working as models are renamed; set GEMINI_MODEL to pin one
-const MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest';
+// Google's "latest Flash-Lite" alias answers in a few seconds on the free tier (and keeps working as models are
+// renamed); set GEMINI_MODEL to pin another
+const MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-flash-lite-latest';
 const DEFAULT_ON: Record<string, boolean> = { summariser: true, task_suggester: true };
+
+// when the main model is busy (503), over its free limit (429) or slow, Flash answers instead (each model has its own
+// free quota)
+const FALLBACK = Deno.env.get('GEMINI_FALLBACK_MODEL') || 'gemini-flash-latest';
+let used = MODEL; // which model answered (returned to the app, for the footnote)
+
+async function call(model: string, key: string, body: Record<string, unknown>, thinking: boolean): Promise<Response> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 20_000);
+  try {
+    const gen = body.generationConfig as Record<string, unknown>;
+    return await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      // quick answers: the least "thinking" the model allows (older models don't know this setting; see below)
+      body: JSON.stringify({ ...body, generationConfig: thinking ? { ...gen, thinkingConfig: { thinkingLevel: 'minimal' } } : gen }),
+      signal: ctl.signal,
+    });
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 async function gemini(system: string, prompt: string, asJson = false): Promise<string> {
   const key = Deno.env.get('GEMINI_API_KEY');
   if (!key) throw new Error('AI isn’t connected yet. An admin needs to add the Gemini API key in Supabase.');
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.3, maxOutputTokens: 1200, ...(asJson ? { responseMimeType: 'application/json' } : {}) },
-    }),
-  });
-  if (res.status === 429) throw new Error('The free AI limit is used up for now. Try again in a minute (or tomorrow if the daily limit is reached).');
-  if (!res.ok) throw new Error('The AI service didn’t answer (' + res.status + '). Try again shortly.');
-  const out = await res.json();
-  const text = (out?.candidates?.[0]?.content?.parts ?? []).map((p: { text?: string }) => p.text ?? '').join('').trim();
-  if (!text) throw new Error('The AI returned nothing. Try again.');
-  return text;
+  const body = {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.3, maxOutputTokens: 1500, ...(asJson ? { responseMimeType: 'application/json' } : {}) },
+  };
+  let last = 0;
+  let why = '';
+  for (const model of [...new Set([MODEL, FALLBACK])]) {
+    let res: Response;
+    try {
+      res = await call(model, key, body, true);
+      // a model that doesn't accept the thinking setting: ask again without it
+      if (res.status === 400) res = await call(model, key, body, false);
+    } catch {
+      last = 504; // too slow: try the next model
+      continue;
+    }
+    if (res.ok) {
+      const out = await res.json();
+      const text = (out?.candidates?.[0]?.content?.parts ?? [])
+        .filter((p: { thought?: boolean }) => !p.thought)
+        .map((p: { text?: string }) => p.text ?? '')
+        .join('')
+        .trim();
+      if (text) {
+        used = model;
+        return text;
+      }
+      last = 204;
+      continue;
+    }
+    last = res.status;
+    why = (await res.text().catch(() => '')).slice(0, 300);
+    if (res.status !== 429 && res.status < 500) break; // a real error (bad key, bad request): don't retry
+  }
+  if (last === 429) throw new Error('The free AI limit is used up for now. Try again in a minute (or tomorrow if the daily limit is reached).');
+  if (last === 401 || last === 403 || /API key|API_KEY/i.test(why)) throw new Error('The Gemini API key was refused. Check the GEMINI_API_KEY secret in Supabase.');
+  if (last === 504 || last === 503) throw new Error('The AI is busy right now. Try again in a minute.');
+  if (last === 204) throw new Error('The AI returned nothing. Try again.');
+  throw new Error('The AI service didn’t answer (' + last + '). Try again shortly.');
 }
 
 Deno.serve(async (req) => {
@@ -128,7 +176,7 @@ Deno.serve(async (req) => {
         `Conversation: ${where}\nMessages (oldest first):\n${lines.join('\n')}`,
       );
       await admin.from('agent_log').insert({ workspace_id: ws, agent, action: `Summarised ${where} for ${nameOf.get(user.id) ?? 'a teammate'}`, conv, sources: msgs.map((m) => m.id).slice(-80), actor_id: user.id });
-      return json({ text, sources: msgs.length, model: MODEL });
+      return json({ text, sources: msgs.length, model: used });
     }
     const raw = await gemini(
       'You are Seek’s Task suggester. From the message, list concrete tasks someone should do. Return JSON only: ' +
@@ -148,7 +196,7 @@ Deno.serve(async (req) => {
       return json({ error: 'The AI answer couldn’t be read. Try again.' }, 502);
     }
     await admin.from('agent_log').insert({ workspace_id: ws, agent, action: `Suggested ${tasks.length} task${tasks.length === 1 ? '' : 's'} for ${nameOf.get(user.id) ?? 'a teammate'}`, conv, sources: [msgs[0].id], actor_id: user.id });
-    return json({ tasks, model: MODEL });
+    return json({ tasks, model: used });
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : 'Something went wrong' }, 502);
   }
