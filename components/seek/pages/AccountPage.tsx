@@ -11,7 +11,7 @@ import { ConfirmDialog } from '../Dialogs';
 import { PauseSelect } from '../PauseSelect';
 import { AlsoNotify, ChannelExceptions, DesktopBanners, Keywords, Schedule, WhatToNotify } from '../NotifySettings';
 import { usePopovers } from '../Popovers';
-import { ClientRail, MainHeader, Shell, Sidebar } from '../Shell';
+import { ClientRail, MainHeader, Shell } from '../Shell';
 import { SoundSettings } from '../SoundSettings';
 import { Avatar, ModeSeg, Switch } from '../ui';
 
@@ -20,12 +20,12 @@ import { Avatar, ModeSeg, Switch } from '../ui';
  * Most settings are saved to your account (they follow you to other devices); "Messages & media" are per device.
  */
 const TABS = [
-  ['profile', 'Profile', 'Your name, photo and working hours'],
-  ['notifications', 'Notifications', 'What notifies you, keywords, schedule, sounds'],
-  ['messages', 'Messages & media', 'How the message box and pictures behave'],
-  ['appearance', 'Appearance', 'Light or dark, and your colours'],
-  ['region', 'Language & region', 'Your time zone'],
-  ['security', 'Account & security', 'Sign-in and devices'],
+  ['profile', 'Profile', 'Your name, photo and working hours', '👤'],
+  ['notifications', 'Notifications', 'What notifies you, keywords, schedule and sounds', '🔔'],
+  ['messages', 'Messages & media', 'How the message box and pictures behave', '💬'],
+  ['appearance', 'Appearance', 'Light or dark, and your colours', '🎨'],
+  ['region', 'Language & region', 'Your time zone', '🌐'],
+  ['security', 'Account & security', 'Sign-in and devices', '🔒'],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -35,31 +35,24 @@ export function AccountPage() {
   const q = useSearchParams();
   const tab = (TABS.find((t) => t[0] === q.get('tab'))?.[0] ?? 'profile') as Tab;
   const go = (t: Tab) => {
-    router.replace(ROUTES.account + '?tab=' + t);
+    router.replace(ROUTES.account + '?tab=' + t, { scroll: false });
     setUI({ sideOpen: false });
   };
   const cur = TABS.find((t) => t[0] === tab)!;
-  const side = (
-    <Sidebar title="Account settings" sub={s.me.email}>
-      {TABS.map(([k, l, d]) => (
-        <button key={k} type="button" className={'si' + (tab === k ? ' on' : '')} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>
-          <span className="x">
-            <b>{l}</b>
-            <small>{d}</small>
-          </span>
-        </button>
-      ))}
-    </Sidebar>
-  );
+  // keep the open tab in view on narrow screens, where the tab bar scrolls sideways
+  useEffect(() => {
+    document.querySelector('.acct-tabs [aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [tab]);
   return (
-    <Shell active="account" side={side} rail={s.session === 'client' ? <ClientRail /> : undefined}>
+    <Shell active="account" side={null} wide rail={s.session === 'client' ? <ClientRail /> : undefined}>
       <MainHeader
-        title={cur[1]}
-        sub={cur[2]}
+        title="Account settings"
+        sub={'Signed in as ' + s.me.email}
         below={
           <div className="tabs acct-tabs" role="tablist" aria-label="Account settings">
-            {TABS.map(([k, l]) => (
-              <button key={k} type="button" role="tab" aria-selected={tab === k} className={'tb' + (tab === k ? ' on' : '')} onClick={() => go(k)}>
+            {TABS.map(([k, l, , icon]) => (
+              <button key={k} type="button" role="tab" id={'at-' + k} aria-selected={tab === k} aria-controls="acct-panel" className={'tb' + (tab === k ? ' on' : '')} onClick={() => go(k)}>
+                <span aria-hidden="true">{icon}</span>
                 {l}
               </button>
             ))}
@@ -67,7 +60,11 @@ export function AccountPage() {
         }
       />
       <div className="pg">
-        <div className="acct">
+        <div className="acct" role="tabpanel" id="acct-panel" aria-labelledby={'at-' + tab}>
+          <div className="acct-hd">
+            <h2>{cur[1]}</h2>
+            <p>{cur[2]}</p>
+          </div>
           {tab === 'profile' && <ProfileTab />}
           {tab === 'notifications' && <NotificationsTab />}
           {tab === 'messages' && <MessagesTab />}

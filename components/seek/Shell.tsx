@@ -277,10 +277,11 @@ export function ClientRail() {
   );
 }
 
-export function Shell({ active, side, pane, rail, children }: { active: RouteKey; side: React.ReactNode; pane?: React.ReactNode; rail?: React.ReactNode; children: React.ReactNode }) {
+/** `wide`: no list column; the page uses the full width (Account settings). */
+export function Shell({ active, side, pane, rail, wide, children }: { active: RouteKey; side: React.ReactNode; pane?: React.ReactNode; rail?: React.ReactNode; wide?: boolean; children: React.ReactNode }) {
   const { ui } = useSeek();
   return (
-    <div className={'app' + (ui.sideOpen ? ' side-open' : '') + (pane ? ' has-pane' : '')}>
+    <div className={'app' + (ui.sideOpen ? ' side-open' : '') + (pane ? ' has-pane' : '') + (wide ? ' wide' : '')}>
       {rail ?? <Rail active={active} />}
       <TopBar />
       {side}
