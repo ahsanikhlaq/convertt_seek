@@ -376,11 +376,10 @@ export function useLiveChat(): LiveChat | null {
         .single();
       if (error) return error.code === '23505' ? '#' + name + ' already exists' : 'Couldn’t create the channel';
       const c = data as ChannelRow;
-      if (opts.private && opts.members?.length) {
-        await sb()
-          .from('channel_members')
-          .insert(opts.members.filter((u) => u !== meRef.current).map((u) => ({ channel_id: c.id, user_id: u, added_by: meRef.current })));
-      }
+      // private: the people you picked; public: the whole team (anyone can leave it later)
+      const add = opts.private ? (opts.members ?? []) : people.filter((k) => k !== 'AH');
+      const others = [...new Set(add)].filter((u) => u !== meRef.current);
+      if (others.length) await sb().from('channel_members').insert(others.map((u) => ({ channel_id: c.id, user_id: u, added_by: meRef.current })));
       await loadChannels();
       update((d) => {
         d.workspaces.C.ch = c.name;
