@@ -21,6 +21,8 @@ export type UI = {
   logOf: string | null;
   palette: boolean;
   profile: boolean;
+  /** a DM opened from Home: keep the Home sidebar (channels and DMs) */
+  home: boolean;
 };
 
 const initialUI = (): UI => ({
@@ -35,6 +37,7 @@ const initialUI = (): UI => ({
   logOf: null,
   palette: false,
   profile: false,
+  home: false,
 });
 
 type ToastState = { text: string; undo: (() => void) | null; key: number } | null;

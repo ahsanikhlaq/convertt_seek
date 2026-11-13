@@ -878,3 +878,8 @@ html.dark .mlink{color:#5fa8f0}html.dark .icode{color:#f08bb0}
 .chrow{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;border:1px solid var(--ln)}
 .chrow .h{color:var(--sb);display:inline-flex}
 .chrow .x{flex:1;min-width:0}.chrow .x b{display:block;font-weight:600}.chrow .x small{color:var(--sb);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Home sidebar: DMs with a small photo */
+.si.dmi{gap:9px}
+.si.dmi .pav .pdot{right:-3px;bottom:-3px}
+.notews{display:block;color:var(--v);font-size:12px;font-weight:600}

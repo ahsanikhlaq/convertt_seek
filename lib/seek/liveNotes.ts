@@ -15,9 +15,9 @@ import { playSound, type SoundKey } from './sounds';
  * Seek isn't in front (unless you paused notifications).
  */
 
-type Row = { id: number; kind: Note['kind']; title: string; body: string; conv: string; actor_id: string | null; created_at: string; read_at: string | null };
-const toNote = (r: Row): Note => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, conv: r.conv, actor: r.actor_id, at: r.created_at, read: !!r.read_at });
-const COLS = 'id, kind, title, body, conv, actor_id, created_at, read_at';
+type Row = { id: number; kind: Note['kind']; title: string; body: string; conv: string; actor_id: string | null; created_at: string; read_at: string | null; workspace_id: string | null; message_id: number | null };
+const toNote = (r: Row): Note => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, conv: r.conv, actor: r.actor_id, at: r.created_at, read: !!r.read_at, ws: r.workspace_id, messageId: r.message_id });
+const COLS = 'id, kind, title, body, conv, actor_id, created_at, read_at, workspace_id, message_id';
 
 /** The @mentioned people in a message: teammates whose first name (or full name) follows an @. */
 export function mentionIds(text: string, candidates: string[]): string[] {

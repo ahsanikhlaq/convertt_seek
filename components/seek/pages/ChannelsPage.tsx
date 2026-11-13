@@ -17,6 +17,10 @@ import { startHuddle } from '@/lib/seek/liveExtras';
 import { CanvasEditor, PinsList, SavedDialog, ScheduledDialog, TasksDialog, useSchedule } from '../Extras';
 import { channelFiles, type SharedFile } from '@/lib/seek/liveFiles';
 import { Ic } from '../icons';
+import { ChannelList, DmList } from '../HomeSide';
+import { useLiveDms } from '@/lib/seek/liveDms';
+import { useRouter } from 'next/navigation';
+import { ROUTES } from '@/lib/seek/routes';
 import { CatchUpDialog } from '../AiDialogs';
 
 const TEAM: PersonKey[] = ['AH', 'SY', 'MO', 'ZA'];
@@ -33,6 +37,18 @@ export function ChannelsPage() {
   const myOpenTasks = (s.ltasks ?? []).filter((t) => t.status === 'open' && t.owner === s.meId).length;
   // with a backend: real channels and messages, live (lib/seek/live.ts); in demo mode this is null
   const live = useLiveChat();
+  // Home also lists your direct messages (kept live here too)
+  useLiveDms();
+  const router = useRouter();
+  const openDm = (k: PersonKey) => {
+    update((d) => {
+      d.dm = k;
+      const t = d.dms[k];
+      if (t) t.unread = 0;
+    });
+    setUI({ home: true, sideOpen: false, menu: null, thread: null });
+    router.push(ROUTES.dms);
+  };
   const team: PersonKey[] = live ? live.people : TEAM;
   const wsId = s.wsId;
   const ws = s.workspaces[wsId];
@@ -64,15 +80,7 @@ export function ChannelsPage() {
       }
     >
       <div className="sg lbl">Channels</div>
-      {ws.channels.map((x) => (
-        <button key={x.id} type="button" className={'si' + (x.id === ch ? ' on' : '') + (x.unread ? ' unread' : '')} aria-current={x.id === ch ? 'page' : undefined} onClick={() => open(x.id)}>
-          <span className="h" title={x.private ? 'Private channel' : undefined}>{x.private ? <Ic n="lock" size={14} /> : <Ic n="hash" size={14} />}</span>
-          <span className="x">
-            <b>{x.id}</b>
-          </span>
-          {x.unread ? <span className="badge">{x.unread}</span> : x.tier ? <span className="tag">{x.tier}</span> : null}
-        </button>
-      ))}
+      <ChannelList active={ch} onOpen={open} />
       {!live && (
         <button type="button" className="si" onClick={() => toast('Browse all ' + ws.channels.length + ' channels')}>
           <Ic n="plus" size={14} /> Browse channels
@@ -91,6 +99,20 @@ export function ChannelsPage() {
       {live && (
         <button type="button" className="si" onClick={() => setInviting(true)}>
           <Ic n="plus" size={14} /> Invite people
+        </button>
+      )}
+      {live && <div className="sg lbl">Direct messages</div>}
+      {live && <DmList active={null} onOpen={openDm} />}
+      {live && (
+        <button
+          type="button"
+          className="si"
+          onClick={() => {
+            setUI({ home: true, sideOpen: false });
+            router.push(ROUTES.dms);
+          }}
+        >
+          <Ic n="compose" size={14} /> New message
         </button>
       )}
       {live && <div className="sg lbl">You</div>}
@@ -277,7 +299,7 @@ export function ChannelsPage() {
     <Shell active="channels" side={side} pane={ui.thread != null ? <ThreadPane feed={feed} people={team} onReply={live ? (root, t, also) => void live.reply(ch, root, t, also) : undefined} /> : undefined}>
       <MainHeader
         title={<span className="mtl">{c.private ? <Ic n="lock" size={16} /> : <Ic n="hash" size={16} />}{ch}</span>}
-        sub={c.desc}
+        sub={live ? s.ws.name + (c.desc ? ' · ' + c.desc : '') : c.desc}
         right={
           <>
             <span className="stack hide-m">

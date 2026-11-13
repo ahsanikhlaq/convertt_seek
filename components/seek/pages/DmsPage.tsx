@@ -16,6 +16,9 @@ import { FileList, useAttach } from '../Files';
 import { PinsList, useSchedule } from '../Extras';
 import { dmThreadWith, startHuddle } from '@/lib/seek/liveExtras';
 import { CatchUpDialog } from '../AiDialogs';
+import { ChannelList, DmList } from '../HomeSide';
+import { useRouter } from 'next/navigation';
+import { ROUTES } from '@/lib/seek/routes';
 import { dmFiles, type SharedFile } from '@/lib/seek/liveFiles';
 import { Ic, StatusMark } from '../icons';
 
@@ -27,7 +30,8 @@ export function DmsPage() {
 const nameOf = (k: PersonKey) => PEOPLE[k]?.name ?? 'Someone';
 
 function LiveDmsPage() {
-  const { s, ui, setUI, toast } = useSeek();
+  const { s, ui, setUI, toast, update } = useSeek();
+  const router = useRouter();
   const live = useLiveDms();
   const [picking, setPicking] = useState(false);
   const [inviting, setInviting] = useState(false);
@@ -260,8 +264,40 @@ function LiveDmsPage() {
       </Pane>
     ) : undefined;
 
+  // opened from Home: the same sidebar as Home (channels and DMs), with Home lit in the rail
+  const homeSide = ui.home ? (
+    <Sidebar
+      title={s.ws.name || 'Home'}
+      sub="Home"
+      action={
+        <button type="button" className="btn sm" onClick={() => setPicking(true)} aria-label="New message">
+          <Ic n="compose" />
+        </button>
+      }
+    >
+      <div className="sg lbl">Channels</div>
+      <ChannelList
+        active={null}
+        onOpen={(id) => {
+          update((d) => {
+            d.workspaces[d.wsId].ch = id;
+            const x = d.workspaces[d.wsId].channels.find((y) => y.id === id);
+            if (x) x.unread = 0;
+          });
+          setUI({ home: false, sideOpen: false, chTab: 'Messages', thread: null });
+          router.push(ROUTES.channels);
+        }}
+      />
+      <div className="sg lbl">Direct messages</div>
+      <DmList active={dm} onOpen={(k) => void open(k)} />
+      <button type="button" className="si" onClick={() => setPicking(true)}>
+        <Ic n="compose" size={14} /> New message
+      </button>
+    </Sidebar>
+  ) : null;
+
   return (
-    <Shell active="dms" side={side} pane={pane}>
+    <Shell active="dms" side={homeSide ?? side} pane={pane}>
       {header}
       {catchUp && dm && <CatchUpDialog conv={catchUp} where={nameOf(dm)} onClose={() => setCatchUp(null)} />}
       {dm && tab === 'Files' ? (

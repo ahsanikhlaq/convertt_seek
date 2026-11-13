@@ -235,7 +235,8 @@ async function loadAccount(id: string, email: string): Promise<Account> {
   try {
     pref = localStorage.getItem(PREF);
   } catch {}
-  const m = rows.find((r) => r.workspaces?.id === pref) ?? rows.find((r) => r.workspaces);
+  // the workspace you last picked; otherwise the one you own; otherwise the first you joined
+  const m = rows.find((r) => r.workspaces?.id === pref) ?? rows.find((r) => r.workspaces && r.role === 'owner') ?? rows.find((r) => r.workspaces);
   const w = m?.workspaces;
   const p = (profile ?? {}) as { name?: string; title?: string; time_zone?: string; onboarded_at?: string | null; status?: string; dnd_until?: string | null; avatar_url?: string | null; theme?: Account['look']; pronouns?: string; work_hours?: string; notify_email?: Account['notifyEmail']; notify_sound?: string; notify_volume?: number; notify_play?: 'all' | 'important' | 'off'; notify_alert_secs?: number };
   return {

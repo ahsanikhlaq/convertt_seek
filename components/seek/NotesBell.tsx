@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { currentAccount } from '@/lib/seek/backend';
+import { currentAccount, forgetAccount, preferOrg } from '@/lib/seek/backend';
 import type { Note } from '@/lib/seek/data';
 import { markNotesRead, openNote } from '@/lib/seek/liveNotes';
 import { useSeek } from '@/lib/seek/store';
@@ -50,6 +50,14 @@ export function NotesBell({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
 
   const go = async (n: Note) => {
     setOpen(false);
+    // from another workspace you're in: switch to it and open the message there
+    if (n.ws && s.orgId && n.ws !== s.orgId && (s.orgs ?? []).some((o) => o.id === n.ws)) {
+      if (!n.read) await markNotesRead([n.id]);
+      preferOrg(n.ws);
+      forgetAccount();
+      location.assign(n.messageId ? '/open?m=' + n.messageId : '/channels');
+      return;
+    }
     const me = (await currentAccount())?.id ?? null;
     let to = '';
     update((d) => {
@@ -111,6 +119,7 @@ export function NotesBell({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
                   {n.actor ? <Avatar k={n.actor} size={30} /> : <span className="av" style={{ width: 30, height: 30 }}><Ic n={ICON[n.kind]} /></span>}
                   <span className="x">
                     <b>{n.title}</b>
+                    {n.ws && s.orgId && n.ws !== s.orgId && <small className="notews">in {(s.orgs ?? []).find((o) => o.id === n.ws)?.name ?? 'another workspace'}</small>}
                     <small>{n.body}</small>
                   </span>
                   <span className="t">{ago(n.at)}</span>

@@ -33,7 +33,7 @@ export function useWorkspaceSwitch() {
 }
 
 const NAV: [RouteKey, IconName, string][] = [
-  ['channels', 'team', 'Team'],
+  ['channels', 'team', 'Home'],
   ['dms', 'dm', 'DMs'],
   ['clients', 'cl', 'Clients'],
   ['meetings', 'mt', 'Meetings'],
@@ -101,7 +101,7 @@ function useWorkspaceList(): { items: WsItem[] } {
 }
 
 function Rail({ active }: { active: RouteKey }) {
-  const { s, setUI, toast } = useSeek();
+  const { s, ui, setUI, toast } = useSeek();
   const { items } = useWorkspaceList();
   const dot: Partial<Record<RouteKey, boolean>> = {
     dms: Object.values(s.dms).some((d) => d && d.unread > 0),
@@ -120,9 +120,9 @@ function Rail({ active }: { active: RouteKey }) {
       </button>
       <span className="sep"></span>
       {NAV.map(([r, i, l]) => {
-        const on = active === r || (r === 'agents' && active === 'apps');
+        const on = r === 'channels' ? active === 'channels' || (active === 'dms' && ui.home) : r === 'dms' ? active === 'dms' && !ui.home : active === r || (r === 'agents' && active === 'apps');
         return (
-          <Link key={r} href={ROUTES[r]} className={'ri' + (on ? ' on' : '')} aria-current={on ? 'page' : undefined} onClick={() => setUI({ sideOpen: false })}>
+          <Link key={r} href={ROUTES[r]} className={'ri' + (on ? ' on' : '')} aria-current={on ? 'page' : undefined} onClick={() => setUI({ sideOpen: false, home: false })}>
             <Icon name={i} />
             {l}
             {dot[r] && <span className="dot"></span>}
