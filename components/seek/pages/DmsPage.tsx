@@ -14,7 +14,8 @@ import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar, SeenText } from '../ui';
 import { FileList, useAttach } from '../Files';
 import { PinsList, useSchedule } from '../Extras';
-import { startHuddle } from '@/lib/seek/liveExtras';
+import { dmThreadWith, startHuddle } from '@/lib/seek/liveExtras';
+import { CatchUpDialog } from '../AiDialogs';
 import { dmFiles, type SharedFile } from '@/lib/seek/liveFiles';
 import { Ic, StatusMark } from '../icons';
 
@@ -39,6 +40,7 @@ function LiveDmsPage() {
   const attach = useAttach(dm && dm !== 'AH' ? { dmWith: dm } : null);
   const schedule = useSchedule(dm && dm !== 'AH' ? { dmWith: dm } : null);
   const [tab, setTab] = useState<'Messages' | 'Files' | 'Pins'>('Messages');
+  const [catchUp, setCatchUp] = useState<string | null>(null);
   const [info, setInfo] = useState<{ title: string; pronouns: string; workHours: string; timeZone: string; status: string; email: string } | null>(null);
   useEffect(() => {
     setInfo(null);
@@ -185,6 +187,20 @@ function LiveDmsPage() {
             <button
               type="button"
               className="btn sm"
+              title="An AI summary of the latest messages"
+              onClick={async () => {
+                const t = await dmThreadWith(dm);
+                if (t) setCatchUp('dm:' + t);
+                else toast('Couldn’t open this conversation');
+              }}
+            >
+              <Ic n="ai" /> <span className="hide-m">Catch up</span>
+            </button>
+          )}
+          {dm !== 'AH' && (
+            <button
+              type="button"
+              className="btn sm"
               onClick={async () => {
                 const err = await startHuddle({ dmWith: dm });
                 toast(err ?? 'Call started · ' + nameOf(dm) + ' can join from the chat');
@@ -247,6 +263,7 @@ function LiveDmsPage() {
   return (
     <Shell active="dms" side={side} pane={pane}>
       {header}
+      {catchUp && dm && <CatchUpDialog conv={catchUp} where={nameOf(dm)} onClose={() => setCatchUp(null)} />}
       {dm && tab === 'Files' ? (
         <div className="pg">
           <FileList files={files} me={s.meId ?? null} empty={'No files yet. Share one with the + button in the message box.'} />

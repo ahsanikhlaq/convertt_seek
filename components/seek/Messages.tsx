@@ -23,6 +23,7 @@ import { approvalDraft } from '@/lib/seek/liveApprovals';
 import { usePopovers } from './Popovers';
 import { Avatar, Emoji, RichText } from './ui';
 import { Ic, type IconKey } from './icons';
+import { SuggestTasksDialog } from './AiDialogs';
 
 /** Where a feed lives in the state, so actions can write back to it. */
 export type FeedRef = {
@@ -78,7 +79,7 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
   // the agency's team logs decisions; clients see the ones from their Client chat
   const canLog = s.session === 'in';
   const meId = s.meId ?? null;
-  const [dialog, setDialog] = useState<null | 'task' | 'remind' | 'edit'>(null);
+  const [dialog, setDialog] = useState<null | 'task' | 'remind' | 'edit' | 'ai-tasks'>(null);
   const dbId = toDbId(m.id);
   const isSaved = backendOn ? dbId != null && (s.lsaved ?? []).includes(dbId) : !!m.saved;
   const myTasks = backendOn && dbId != null ? (s.ltasks ?? []).filter((t) => t.source === dbId) : [];
@@ -482,6 +483,18 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
               role="menuitem"
               onClick={() => {
                 setUI({ menu: null });
+                setDialog('ai-tasks');
+              }}
+            >
+              <Ic n="ai" /> Suggest tasks with AI
+            </button>
+          )}
+          {live && canLog && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setUI({ menu: null });
                 setLogging(true);
               }}
             >
@@ -572,6 +585,7 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
       {dialog === 'edit' &&
         createPortal(<PromptDialog title="Edit message" label="Message" initial={m.text} confirm="Save" multiline onCancel={() => setDialog(null)} onSubmit={(t) => void saveEdit(t)} />, document.body)}
       {dialog === 'remind' && createPortal(<RemindDialog target={{ uiId: m.id }} onClose={() => setDialog(null)} />, document.body)}
+      {dialog === 'ai-tasks' && createPortal(<SuggestTasksDialog uiId={m.id} onClose={() => setDialog(null)} />, document.body)}
       {logging &&
         createPortal(
         <PromptDialog

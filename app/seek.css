@@ -849,3 +849,18 @@ html.dark :is(.frow,.appr){background-color:var(--card)!important;border-color:v
 .bul{display:block;padding-left:18px;position:relative}.bul:before{content:"";position:absolute;left:5px;top:.68em;width:5px;height:5px;border-radius:50%;background:currentColor}
 .qline{display:block;padding-left:12px;border-left:3px solid var(--ln2);color:var(--mu)}
 html.dark .mlink{color:#5fa8f0}html.dark .icode{color:#f08bb0}
+
+/* AI agents */
+.aiwait{display:flex;align-items:center;gap:10px;color:var(--ai);font-weight:600;padding:18px 4px}
+.aiwait .lic{animation:aipulse 1.2s ease-in-out infinite}
+@keyframes aipulse{50%{opacity:.35}}
+.aisum{font-size:15px;line-height:1.6;white-space:pre-wrap;color:var(--ink)}
+.aifoot{display:block;margin-top:12px;color:var(--sb);font-size:12.5px}
+.aitasks{display:flex;flex-direction:column;gap:8px}
+.aitask{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--ln);border-radius:10px}
+.aitask>.lic{color:var(--ai)}
+.aitask .x{flex:1;min-width:0}.aitask .x b{display:block;font-weight:600}.aitask .x small{color:var(--sb)}
+
+/* unread messages in another organisation */
+.wsb{position:relative}
+.wsun{position:absolute;top:-5px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#e01e5a;color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px var(--rbg)}

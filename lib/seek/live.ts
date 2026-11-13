@@ -8,6 +8,7 @@ import { initialsOf, channelId as toChannelName, isEmail } from './format';
 import { hydrateReactions, markNotSent, markRead, unreadCounts } from './liveSync';
 import { mentionIds } from './liveNotes';
 import { useSeek } from './store';
+import { onLiveStatus, useResync } from './resync';
 
 /**
  * Real team chat for the Channels screen (backend mode only). Channels and messages come from Supabase, new
@@ -113,6 +114,7 @@ export function useLiveChat(): LiveChat | null {
   const { s, update, toast } = useSeek();
   const enabled = backendOn && s.session === 'in';
   const [ready, setReady] = useState(false);
+  const sync = useResync();
   const [people, setPeople] = useState<PersonKey[]>([]);
   const [admin, setAdmin] = useState(false);
   const [info, setInfo] = useState(new Map<string, ChannelInfo>());
@@ -121,6 +123,7 @@ export function useLiveChat(): LiveChat | null {
   const wsRef = useRef<string | null>(s.orgId ?? null);
   const chans = useRef(new Map<string, string>(s.workspaces.C.channels.filter((c) => c.cid).map((c) => [c.id, c.cid!]))); // channel name → id
   const loadedFor = useRef('');
+  const syncSeen = useRef(0);
   const current = s.workspaces.C.ch;
   const currentRef = useRef(current);
   currentRef.current = current;
@@ -246,7 +249,7 @@ export function useLiveChat(): LiveChat | null {
           await learnPeople([m.user_id]);
           setPeople((xs) => (xs.includes(keyOf(m.user_id)) ? xs : [...xs, keyOf(m.user_id)]));
         })
-        .subscribe();
+        .subscribe(onLiveStatus());
 
       const ids = ((members ?? []) as { user_id: string; role: string }[]).filter((m) => m.role !== 'guest').map((m) => m.user_id);
       await learnPeople(ids);
@@ -264,6 +267,11 @@ export function useLiveChat(): LiveChat | null {
     if (!enabled) return;
     const id = chans.current.get(current);
     if (!id) return;
+    // catching up reloads the open channel even if it was loaded already
+    if (syncSeen.current !== sync) {
+      syncSeen.current = sync;
+      loadedFor.current = '';
+    }
     // loaded as soon as we know the channel (from this device's saved list); not again when the list refreshes
     if (loadedFor.current === id) return;
     loadedFor.current = id;
@@ -300,7 +308,13 @@ export function useLiveChat(): LiveChat | null {
       // a finished load stays loaded; an unfinished one is tried again
       if (!done && loadedFor.current === id) loadedFor.current = '';
     };
-  }, [enabled, ready, current]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, ready, current, sync]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // catching up (back to the tab, back online, reconnected): reload the open channel and the unread counts
+  useEffect(() => {
+    if (!enabled || !sync) return;
+    void loadChannels();
+  }, [sync]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const insert = async (channel: string, body: string, parent: number | null) => {
     const channel_id = chans.current.get(channel);

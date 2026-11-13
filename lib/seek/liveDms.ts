@@ -7,6 +7,7 @@ import type { ChatMessage, FileRef, MessageCard, PersonKey } from './data';
 import { inviteByEmail, keyFor, learnProfiles, timeLabel, toUiId } from './live';
 import { hydrateReactions, markNotSent, markRead, unreadCounts } from './liveSync';
 import { useSeek } from './store';
+import { onLiveStatus, useResync } from './resync';
 
 /**
  * Real direct messages for the DMs screen (backend mode only). Conversations live in seek.dm_threads, their
@@ -47,6 +48,7 @@ export function useLiveDms(): LiveDms | null {
   const { s, update, toast } = useSeek();
   const enabled = backendOn && s.session === 'in';
   const [ready, setReady] = useState(false);
+  const sync = useResync();
   const [people, setPeople] = useState<PersonKey[]>([]);
   // start from what this device saved last time, so the open conversation loads at once
   const me = useRef<string | null>(s.meId ?? null);
@@ -55,6 +57,7 @@ export function useLiveDms(): LiveDms | null {
   const threadOf = useRef(new Map<string, string>(saved)); // other user id → thread id
   const otherOf = useRef(new Map<string, string>(saved.map(([u, t]) => [t, u]))); // thread id → other user id
   const loadedFor = useRef('');
+  const syncSeen = useRef(0);
   const current = s.dm;
   const currentRef = useRef(current);
   currentRef.current = current;
@@ -163,7 +166,7 @@ export function useLiveDms(): LiveDms | null {
           await learnProfiles([m.user_id], me.current);
           setPeople((xs) => (xs.includes(key(m.user_id)) ? xs : [...xs, key(m.user_id)]));
         })
-        .subscribe();
+        .subscribe(onLiveStatus());
       setReady(true);
     })();
     return () => {
@@ -178,6 +181,11 @@ export function useLiveDms(): LiveDms | null {
     const other = current === 'AH' ? null : current;
     const thread = other ? threadOf.current.get(other) : undefined;
     if (!thread) return;
+    // catching up reloads the open conversation even if it was loaded already
+    if (syncSeen.current !== sync) {
+      syncSeen.current = sync;
+      loadedFor.current = '';
+    }
     // loaded as soon as we know the conversation (from this device); not again when the list refreshes
     if (loadedFor.current === thread) return;
     loadedFor.current = thread;
@@ -213,7 +221,20 @@ export function useLiveDms(): LiveDms | null {
       // a finished load stays loaded; an unfinished one is tried again
       if (!done && loadedFor.current === thread) loadedFor.current = '';
     };
-  }, [enabled, ready, current]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, ready, current, sync]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // catching up (back to the tab, back online, reconnected): reload the open conversation and unread counts
+  useEffect(() => {
+    if (!enabled || !sync || !ws.current) return;
+    void unreadCounts(ws.current).then((counts) =>
+      update((d) => {
+        for (const [other, thread] of threadOf.current) {
+          const t = d.dms[key(other)];
+          if (t && key(other) !== d.dm) t.unread = counts.get('dm:' + thread) ?? 0;
+        }
+      }),
+    );
+  }, [sync]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!enabled) return null;
   return {

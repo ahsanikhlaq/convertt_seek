@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 import { backendOn, forgetAccount, preferOrg } from '@/lib/seek/backend';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -10,6 +12,8 @@ import { NotesBell } from './NotesBell';
 import { usePopovers } from './Popovers';
 import { Avatar, Icon, Logo, ModeSeg, OrgMark, StatusDot, type IconName } from './ui';
 import { Ic } from './icons';
+import { useResync } from '@/lib/seek/resync';
+import { unreadCounts } from '@/lib/seek/liveSync';
 
 export function useWorkspaceSwitch() {
   const { s, update, setUI, toast } = useSeek();
@@ -37,12 +41,35 @@ const NAV: [RouteKey, IconName, string][] = [
   ['agents', 'ap', 'Apps'],
 ];
 
-type WsItem = { key: string; name: string; mark: React.ReactNode; on: boolean; open: () => void };
+type WsItem = { key: string; name: string; mark: React.ReactNode; on: boolean; open: () => void; unread?: number };
+
+/** Unread messages in your other organisations (checked every minute, and when you come back to Seek). */
+function useOtherOrgUnread(ids: string[]) {
+  const [counts, setCounts] = useState<Map<string, number>>(new Map());
+  const sync = useResync();
+  const key = ids.join(',');
+  useEffect(() => {
+    if (!backendOn || !ids.length) return;
+    let alive = true;
+    const check = async () => {
+      const res = await Promise.all(ids.map((id) => unreadCounts(id).then((m) => [id, [...m.values()].reduce((a, b) => a + b, 0)] as const).catch(() => [id, 0] as const)));
+      if (alive) setCounts(new Map(res));
+    };
+    void check();
+    const t = setInterval(() => document.visibilityState === 'visible' && void check(), 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [key, sync]); // eslint-disable-line react-hooks/exhaustive-deps
+  return counts;
+}
 
 /** The workspaces to list: the two samples in demo mode, or every organisation you belong to with a backend. */
 function useWorkspaceList(): { items: WsItem[] } {
   const { s, toast } = useSeek();
   const sw = useWorkspaceSwitch();
+  const other = useOtherOrgUnread(backendOn ? (s.orgs ?? []).filter((o) => o.id !== s.orgId).map((o) => o.id) : []);
   if (!backendOn)
     return {
       items: (Object.keys(WORKSPACES) as WorkspaceId[]).map((w) => ({ key: w, name: WORKSPACES[w].name, mark: w, on: s.wsId === w, open: () => sw(w) })),
@@ -52,6 +79,7 @@ function useWorkspaceList(): { items: WsItem[] } {
     items: orgs.map((o) => {
       const on = o.id === s.orgId || orgs.length === 1;
       return {
+        unread: on ? 0 : (other.get(o.id) ?? 0),
         key: o.id,
         name: o.name,
         mark: <OrgMark name={o.name} logo={on ? s.ws.logo ?? o.logo : o.logo} />,
@@ -82,8 +110,9 @@ function Rail({ active }: { active: RouteKey }) {
   return (
     <nav className="rail" aria-label="Main">
       {items.map((w) => (
-        <button key={w.key} type="button" className={'wsb' + (w.on ? ' on' : '')} onClick={w.open} title={w.name} aria-label={'Workspace ' + w.name}>
+        <button key={w.key} type="button" className={'wsb' + (w.on ? ' on' : '')} onClick={w.open} title={w.name + (w.unread ? ' · ' + w.unread + ' unread' : '')} aria-label={'Workspace ' + w.name + (w.unread ? ', ' + w.unread + ' unread' : '')}>
           {w.mark}
+          {!!w.unread && <span className="wsun">{w.unread > 99 ? '99+' : w.unread}</span>}
         </button>
       ))}
       <button type="button" className="wsb add" onClick={() => toast('Create or join another workspace')} aria-label="Add a workspace">

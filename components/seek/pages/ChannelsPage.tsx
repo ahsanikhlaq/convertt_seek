@@ -17,6 +17,7 @@ import { startHuddle } from '@/lib/seek/liveExtras';
 import { CanvasEditor, PinsList, SavedDialog, ScheduledDialog, TasksDialog, useSchedule } from '../Extras';
 import { channelFiles, type SharedFile } from '@/lib/seek/liveFiles';
 import { Ic } from '../icons';
+import { CatchUpDialog } from '../AiDialogs';
 
 const TEAM: PersonKey[] = ['AH', 'SY', 'MO', 'ZA'];
 const TABS = ['Messages', 'Files', 'Canvas', 'Pins'];
@@ -27,6 +28,7 @@ export function ChannelsPage() {
   const [inviting, setInviting] = useState(false);
   const [membersOf, setMembersOf] = useState<string | null>(null);
   const [listing, setListing] = useState<null | 'saved' | 'tasks' | 'scheduled'>(null);
+  const [catchUp, setCatchUp] = useState(false);
   const myOpenTasks = (s.ltasks ?? []).filter((t) => t.status === 'open' && t.owner === s.meId).length;
   // with a backend: real channels and messages, live (lib/seek/live.ts); in demo mode this is null
   const live = useLiveChat();
@@ -259,6 +261,11 @@ export function ChannelsPage() {
                 <Ic n="users" /> <span className="hide-m">Members</span>
               </button>
             )}
+            {live && c.cid && (
+              <button type="button" className="btn sm" onClick={() => setCatchUp(true)} title="An AI summary of the latest messages">
+                <Ic n="ai" /> <span className="hide-m">Catch up</span>
+              </button>
+            )}
             <button type="button" className="btn sm" onClick={async () => {
                 if (!live) return toast('Huddle started · others can join');
                 if (!c.cid) return;
@@ -273,6 +280,7 @@ export function ChannelsPage() {
       />
       {body}
       {listing === 'saved' && <SavedDialog me={live?.me ?? null} onClose={() => setListing(null)} />}
+      {catchUp && c.cid && <CatchUpDialog conv={'ch:' + c.cid} where={'#' + ch} onClose={() => setCatchUp(false)} />}
       {listing === 'tasks' && <TasksDialog me={live?.me ?? null} onClose={() => setListing(null)} />}
       {listing === 'scheduled' && <ScheduledDialog onClose={() => setListing(null)} />}
       {creating && live && (
