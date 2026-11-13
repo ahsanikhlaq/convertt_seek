@@ -8,7 +8,7 @@ import { channelId } from '@/lib/seek/format';
 import { useSeek } from '@/lib/seek/store';
 import { PromptDialog } from '../Dialogs';
 import { InviteDialog } from '../InviteDialog';
-import { ChannelMembersDialog, NewChannelDialog } from '../ChannelDialogs';
+import { BrowseChannelsDialog, ChannelMembersDialog, NewChannelDialog } from '../ChannelDialogs';
 import { Composer, Feed, ThreadPane, useSendTo, type FeedRef } from '../Messages';
 import { MainHeader, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
@@ -29,13 +29,14 @@ export function ChannelsPage() {
   const [membersOf, setMembersOf] = useState<string | null>(null);
   const [listing, setListing] = useState<null | 'saved' | 'tasks' | 'scheduled'>(null);
   const [catchUp, setCatchUp] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
   const myOpenTasks = (s.ltasks ?? []).filter((t) => t.status === 'open' && t.owner === s.meId).length;
   // with a backend: real channels and messages, live (lib/seek/live.ts); in demo mode this is null
   const live = useLiveChat();
   const team: PersonKey[] = live ? live.people : TEAM;
   const wsId = s.wsId;
   const ws = s.workspaces[wsId];
-  const ch = ws.channels.find((c) => c.id === ws.ch) ? ws.ch : ws.channels[0]?.id ?? 'general';
+  const ch = ws.channels.find((c) => c.id === ws.ch) ? ws.ch : ws.channels[0]?.id ?? '';
   const c = ws.channels.find((x) => x.id === ch) ?? { id: ch, unread: 0, desc: '' };
   const feed: FeedRef = { get: (d) => (d.workspaces[wsId].msgs[ch] ||= []), where: ch, threads: true };
   const send = useSendTo(feed);
@@ -75,6 +76,11 @@ export function ChannelsPage() {
       {!live && (
         <button type="button" className="si" onClick={() => toast('Browse all ' + ws.channels.length + ' channels')}>
           <Ic n="plus" size={14} /> Browse channels
+        </button>
+      )}
+      {live && (
+        <button type="button" className="si" onClick={() => setBrowsing(true)}>
+          <Ic n="search" size={14} /> Browse channels
         </button>
       )}
       {live && (
@@ -221,6 +227,52 @@ export function ChannelsPage() {
     );
   }
 
+  // a workspace with no channels yet: invite the team to create the first one
+  if (live && !ws.channels.length)
+    return (
+      <Shell active="channels" side={side}>
+        <MainHeader title={s.ws.name || 'Your workspace'} sub="No channels yet" />
+        <div className="pg">
+          <div className="nochan">
+            <span className="nochan-ic">
+              <Ic n="hash" size={26} />
+            </span>
+            <h2>{live.ready ? 'Create your first channel' : 'Loading your channels…'}</h2>
+            {live.ready && (
+              <>
+                <p>Channels are where your team talks about a project, a topic or a client. Everyone on the team can join public channels; private ones are for the people you add.</p>
+                <div className="nochan-acts">
+                  {live.channels.size > 0 && (
+                    <button type="button" className="btn" onClick={() => setBrowsing(true)}>
+                      <Ic n="search" size={16} /> Browse channels
+                    </button>
+                  )}
+                  <button type="button" className="btn pri" onClick={() => setCreating(true)}>
+                    <Ic n="plus" size={16} /> Create a channel
+                  </button>
+                  <button type="button" className="btn" onClick={() => setInviting(true)}>
+                    <Ic n="users" size={16} /> Invite people
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        {creating && (
+          <NewChannelDialog
+            live={live}
+            onClose={() => setCreating(false)}
+            onCreated={() => {
+              setCreating(false);
+              setUI({ thread: null, chTab: 'Messages', sideOpen: false, menu: null });
+            }}
+          />
+        )}
+        {inviting && <InviteDialog onClose={() => setInviting(false)} invite={live.invite} channels={[...live.channels.values()].map((x) => ({ id: x.id, name: x.name }))} admin={live.admin} />}
+        {browsing && <BrowseChannelsDialog live={live} onClose={() => setBrowsing(false)} onOpen={open} />}
+      </Shell>
+    );
+
   return (
     <Shell active="channels" side={side} pane={ui.thread != null ? <ThreadPane feed={feed} people={team} onReply={live ? (root, t, also) => void live.reply(ch, root, t, also) : undefined} /> : undefined}>
       <MainHeader
@@ -256,8 +308,8 @@ export function ChannelsPage() {
             >
               <Ic n="bell" /> {live ? (c.tier === 'Muted' ? 'Mute' : c.tier ?? 'Normal') : s.notif}
             </button>
-            {live && c.private && (
-              <button type="button" className="btn sm" onClick={() => setMembersOf(ch)} aria-label={'Members of #' + ch}>
+            {live && c.cid && (
+              <button type="button" className="btn sm" onClick={() => setMembersOf(ch)} aria-label={'Members of #' + ch} title="Members and channel settings">
                 <Ic n="users" /> <span className="hide-m">Members</span>
               </button>
             )}
@@ -294,6 +346,7 @@ export function ChannelsPage() {
         />
       )}
       {membersOf && live && <ChannelMembersDialog live={live} channel={membersOf} onClose={() => setMembersOf(null)} />}
+      {browsing && live && <BrowseChannelsDialog live={live} onClose={() => setBrowsing(false)} onOpen={open} />}
       {creating && !live && (
         <PromptDialog
           title="Create a channel"

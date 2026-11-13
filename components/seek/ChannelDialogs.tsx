@@ -5,7 +5,7 @@ import { PEOPLE, type PersonKey } from '@/lib/seek/data';
 import { channelId } from '@/lib/seek/format';
 import type { LiveChat } from '@/lib/seek/live';
 import { useSeek } from '@/lib/seek/store';
-import { Modal } from './Dialogs';
+import { ConfirmDialog, Modal } from './Dialogs';
 import { Avatar, SeenText } from './ui';
 import { Ic } from './icons';
 
@@ -118,9 +118,11 @@ export function NewChannelDialog({ live, onClose, onCreated }: { live: LiveChat;
   );
 }
 
-/** Who is in a private channel: add teammates, remove people. */
+/** A channel's people: everyone in it, add teammates, remove people (admins and the creator), leave, delete (admins). */
 export function ChannelMembersDialog({ live, channel, onClose }: { live: LiveChat; channel: string; onClose: () => void }) {
   const { toast } = useSeek();
+  const [confirm, setConfirm] = useState<null | 'leave' | 'delete'>(null);
+  const general = channel === 'general';
   const [members, setMembers] = useState<string[] | null>(null);
   const [adding, setAdding] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -147,16 +149,45 @@ export function ChannelMembersDialog({ live, channel, onClose }: { live: LiveCha
   };
 
   return (
-    <Modal title={<span className="mtl"><Ic n="lock" />#{channel} · members</span>} onClose={onClose} width={460} footer={<button type="button" className="btn" onClick={onClose}>Done</button>}>
+    <>
+    <Modal
+      title={<span className="mtl">{info?.private ? <Ic n="lock" /> : <Ic n="hash" />}{channel}{members ? ' · ' + members.length + (members.length === 1 ? ' member' : ' members') : ''}</span>}
+      onClose={onClose}
+      width={480}
+      footer={
+        <div className="chfoot">
+          {!general && info?.joined && (
+            <button type="button" className="btn" onClick={() => setConfirm('leave')}>
+              Leave channel
+            </button>
+          )}
+          {!general && live.admin && (
+            <button type="button" className="btn danger" onClick={() => setConfirm('delete')}>
+              <Ic n="trash" size={15} /> Delete channel
+            </button>
+          )}
+          <span style={{ flex: 1 }} />
+          <button type="button" className="btn" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      }
+    >
       <div className="mb">
-        <em>Only these people {live.admin ? '(and admins)' : 'and admins'} can see #{channel}.</em>
+        <em>
+          {general
+            ? 'Everyone on the team is in #general. Clients never are.'
+            : info?.private
+              ? 'Only these people (and admins) can see #' + channel + '.'
+              : 'Anyone on the team can find and join #' + channel + ' from Browse channels.'}
+        </em>
         {members === null ? (
           <p className="sub">Loading…</p>
         ) : (
           <div className="ppl">
             {(members ?? []).map((u) => {
               const you = u === live.me;
-              const canRemove = live.admin || info?.createdBy === live.me;
+              const canRemove = !general && (live.admin || info?.createdBy === live.me);
               return (
                 <div key={u}>
                   <Avatar k={you ? 'AH' : u} size={30} presence />
@@ -185,6 +216,7 @@ export function ChannelMembersDialog({ live, channel, onClose }: { live: LiveCha
             })}
           </div>
         )}
+        {!general && (
         <div className="fld">
           <label>Add people</label>
           <PeoplePicker people={others} picked={adding} onToggle={(k) => setAdding((xs) => (xs.includes(k) ? xs.filter((x) => x !== k) : [...xs, k]))} />
@@ -192,6 +224,95 @@ export function ChannelMembersDialog({ live, channel, onClose }: { live: LiveCha
             <button type="button" className="btn pri" style={{ alignSelf: 'flex-start' }} onClick={add} disabled={busy}>
               {busy ? 'Adding…' : `Add ${adding.length}`}
             </button>
+          )}
+        </div>
+        )}
+      </div>
+    </Modal>
+    {confirm === 'leave' && (
+      <ConfirmDialog
+        title={'Leave #' + channel + '?'}
+        body={info?.private ? 'You’ll need someone in the channel to add you back.' : 'You can join again any time from Browse channels.'}
+        confirm="Leave"
+        onCancel={() => setConfirm(null)}
+        onConfirm={async () => {
+          setConfirm(null);
+          const err = await live.leave(channel);
+          toast(err ?? 'You left #' + channel);
+          if (!err) onClose();
+        }}
+      />
+    )}
+    {confirm === 'delete' && (
+      <ConfirmDialog
+        title={'Delete #' + channel + '?'}
+        body={'The channel and all of its messages and files are deleted for everyone. This can’t be undone.'}
+        confirm="Delete channel"
+        danger
+        onCancel={() => setConfirm(null)}
+        onConfirm={async () => {
+          setConfirm(null);
+          const err = await live.deleteChannel(channel);
+          toast(err ?? '#' + channel + ' deleted');
+          if (!err) onClose();
+        }}
+      />
+    )}
+    </>
+  );
+}
+
+/** Public channels you're not in (and, for admins, private ones they can see): join with one click. */
+export function BrowseChannelsDialog({ live, onClose, onOpen }: { live: LiveChat; onClose: () => void; onOpen: (name: string) => void }) {
+  const { toast } = useSeek();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const all = [...live.channels.values()].filter((c) => !q.trim() || c.name.includes(q.trim().toLowerCase()));
+  return (
+    <Modal title="Browse channels" icon={<Ic n="hash" />} onClose={onClose} width={500} footer={<button type="button" className="btn" onClick={onClose}>Done</button>}>
+      <div className="mb">
+        <input className="inp" placeholder="Search channels" aria-label="Search channels" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="chlist">
+          {all.length ? (
+            all.map((c) => (
+              <div key={c.id} className="chrow">
+                <span className="h">{c.private ? <Ic n="lock" size={15} /> : <Ic n="hash" size={15} />}</span>
+                <span className="x">
+                  <b>{c.name}</b>
+                  <small>{c.joined ? 'You’re in this channel' : c.description || (c.private ? 'Private channel' : 'Public channel')}</small>
+                </span>
+                {c.joined ? (
+                  <button
+                    type="button"
+                    className="btn sm"
+                    onClick={() => {
+                      onOpen(c.name);
+                      onClose();
+                    }}
+                  >
+                    Open
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn sm pri"
+                    disabled={busy === c.name}
+                    onClick={async () => {
+                      setBusy(c.name);
+                      const err = await live.join(c.name);
+                      setBusy(null);
+                      if (err) return toast(err);
+                      toast('You joined #' + c.name);
+                      onClose();
+                    }}
+                  >
+                    {busy === c.name ? 'Joining…' : 'Join'}
+                  </button>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="empty">No channels match.</div>
           )}
         </div>
       </div>

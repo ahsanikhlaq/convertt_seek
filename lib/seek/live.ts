@@ -86,7 +86,7 @@ export async function inviteByEmail(
   return (await sendInvite(workspaceId, email, opts)).message;
 }
 
-export type ChannelInfo = { id: string; name: string; private: boolean; createdBy: string | null };
+export type ChannelInfo = { id: string; name: string; private: boolean; createdBy: string | null; description?: string; joined: boolean };
 
 export type LiveChat = {
   ready: boolean;
@@ -102,8 +102,14 @@ export type LiveChat = {
   reply: (channel: string, rootUiId: number, text: string, alsoToChannel: boolean) => Promise<void>;
   createChannel: (name: string, opts?: { private?: boolean; members?: string[]; description?: string }) => Promise<string | null>;
   invite: (email: string, opts?: { role?: 'member' | 'admin'; channels?: string[] }) => Promise<string>;
-  /** people in a private channel (user ids) */
+  /** people in a channel (user ids) */
   members: (channel: string) => Promise<string[]>;
+  /** join a public channel (it appears in your sidebar and opens) */
+  join: (channel: string) => Promise<string | null>;
+  /** leave a channel (not #general) */
+  leave: (channel: string) => Promise<string | null>;
+  /** delete a channel and its messages (admins; not #general) */
+  deleteChannel: (channel: string) => Promise<string | null>;
   addMember: (channel: string, userId: string) => Promise<string | null>;
   removeMember: (channel: string, userId: string) => Promise<string | null>;
   /** your notification level for a channel */
@@ -123,6 +129,7 @@ export function useLiveChat(): LiveChat | null {
   const wsRef = useRef<string | null>(s.orgId ?? null);
   const chans = useRef(new Map<string, string>(s.workspaces.C.channels.filter((c) => c.cid).map((c) => [c.id, c.cid!]))); // channel name → id
   const loadedFor = useRef('');
+  const allChans = useRef(new Map<string, string>()); // every channel you can see (joined or not), name → id
   const syncSeen = useRef(0);
   const current = s.workspaces.C.ch;
   const currentRef = useRef(current);
@@ -187,20 +194,25 @@ export function useLiveChat(): LiveChat | null {
   const loadChannels = useCallback(async () => {
     const ws = wsRef.current;
     if (!ws) return;
-    const [{ data: channels }, counts, { data: prefs }] = await Promise.all([
+    const [{ data: channels }, counts, { data: prefs }, { data: mine }] = await Promise.all([
       sb().from('channels').select('id, name, description, private, created_by').eq('workspace_id', ws).order('created_at'),
       unreadCounts(ws).catch(() => new Map<string, number>()),
       sb().from('channel_prefs').select('channel_id, level, muted_until'),
+      sb().from('channel_members').select('channel_id').eq('user_id', meRef.current ?? ''),
     ]);
+    // your channels are the ones you're a member of; the rest of the public ones are under Browse channels
+    const joined = new Set(((mine ?? []) as { channel_id: string }[]).map((m) => m.channel_id));
     // your notification level per channel: Digest or Muted show as a tag
     const tierOf = new Map(
       ((prefs ?? []) as { channel_id: string; level: string; muted_until: string | null }[])
         .filter((p) => p.level !== 'mute' || !p.muted_until || new Date(p.muted_until) > new Date())
         .map((p) => [p.channel_id, p.level === 'digest' ? 'Digest' : p.level === 'mute' ? 'Muted' : p.level === 'all' ? 'Everything' : undefined]),
     );
-    const list = (channels ?? []) as ChannelRow[];
+    const all = (channels ?? []) as ChannelRow[];
+    const list = all.filter((c) => joined.has(c.id));
     chans.current = new Map(list.map((c) => [c.name, c.id]));
-    setInfo(new Map(list.map((c) => [c.name, { id: c.id, name: c.name, private: !!c.private, createdBy: c.created_by ?? null }])));
+    allChans.current = new Map(all.map((c) => [c.name, c.id]));
+    setInfo(new Map(all.map((c) => [c.name, { id: c.id, name: c.name, private: !!c.private, createdBy: c.created_by ?? null, description: c.description, joined: joined.has(c.id) }])));
     update((d) => {
       const w = d.workspaces.C;
       w.channels = list.map((c) => ({ id: c.name, cid: c.id, unread: c.name === w.ch ? 0 : counts.get('ch:' + c.id) ?? 0, desc: c.description, private: !!c.private, tier: tierOf.get(c.id) }));
@@ -243,6 +255,9 @@ export function useLiveChat(): LiveChat | null {
         // new channels you can see, and private channels you're added to or removed from
         .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'channels', filter: `workspace_id=eq.${ws}` }, () => void loadChannels())
         .on('postgres_changes', { event: '*', schema: DB_SCHEMA, table: 'channel_members', filter: `user_id=eq.${acc.id}` }, () => void loadChannels())
+        // a channel deleted, or someone removed from one (deletes can't be filtered, so any of them reloads the list)
+        .on('postgres_changes', { event: 'DELETE', schema: DB_SCHEMA, table: 'channels' }, () => void loadChannels())
+        .on('postgres_changes', { event: 'DELETE', schema: DB_SCHEMA, table: 'channel_members' }, () => void loadChannels())
         .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'workspace_members', filter: `workspace_id=eq.${ws}` }, async (p) => {
           const m = p.new as { user_id: string; role: string };
           if (m.role === 'guest') return;
@@ -334,7 +349,7 @@ export function useLiveChat(): LiveChat | null {
     addRow(data as Row);
   };
 
-  const idOf = (channel: string) => chans.current.get(channel) ?? null;
+  const idOf = (channel: string) => chans.current.get(channel) ?? allChans.current.get(channel) ?? null;
 
   if (!enabled) return null;
   return {
@@ -401,9 +416,41 @@ export function useLiveChat(): LiveChat | null {
     removeMember: async (channel, userId) => {
       const id = idOf(channel);
       if (!id) return 'Channel not found';
-      const { error } = await sb().from('channel_members').delete().eq('channel_id', id).eq('user_id', userId);
-      if (!error && userId === meRef.current) await loadChannels();
-      return error ? 'Only admins and the channel’s creator can remove people' : null;
+      const { data, error } = await sb().from('channel_members').delete().eq('channel_id', id).eq('user_id', userId).select('user_id');
+      if (error) return /general/i.test(error.message) ? 'Everyone on the team is in #general' : 'Couldn’t remove them. Try again';
+      if (!data?.length) return 'Only admins and the channel’s creator can remove people';
+      if (userId === meRef.current) await loadChannels();
+      return null;
+    },
+    join: async (channel) => {
+      const id = idOf(channel);
+      if (!id || !meRef.current) return 'Channel not found';
+      const { error } = await sb().from('channel_members').insert({ channel_id: id, user_id: meRef.current, added_by: meRef.current });
+      if (error && error.code !== '23505') return 'Couldn’t join #' + channel + '. Private channels need someone in them to add you';
+      await loadChannels();
+      update((d) => {
+        d.workspaces.C.ch = channel;
+      });
+      return null;
+    },
+    leave: async (channel) => {
+      const id = idOf(channel);
+      if (!id || !meRef.current) return 'Channel not found';
+      if (channel === 'general') return 'Everyone on the team is in #general';
+      const { error } = await sb().from('channel_members').delete().eq('channel_id', id).eq('user_id', meRef.current);
+      if (error) return /general/i.test(error.message) ? 'Everyone on the team is in #general' : 'Couldn’t leave. Try again';
+      await loadChannels();
+      return null;
+    },
+    deleteChannel: async (channel) => {
+      const id = idOf(channel);
+      if (!id) return 'Channel not found';
+      if (channel === 'general') return '#general can’t be deleted';
+      const { data, error } = await sb().from('channels').delete().eq('id', id).select('id');
+      if (error) return /general/i.test(error.message) ? '#general can’t be deleted' : 'Couldn’t delete the channel. Try again';
+      if (!data?.length) return 'Only admins can delete channels';
+      await loadChannels();
+      return null;
     },
   };
 }
