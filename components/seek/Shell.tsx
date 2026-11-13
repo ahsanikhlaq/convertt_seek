@@ -32,9 +32,21 @@ export function useWorkspaceSwitch() {
   };
 }
 
-const NAV: [RouteKey, IconName, string][] = [
+/** The People rail icon: two heads, drawn like the rail's other line icons. */
+function PeopleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true">
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20c.6-3.6 3.3-5.5 6.5-5.5s5.9 1.9 6.5 5.5" />
+      <path d="M15.5 4.8a3.4 3.4 0 0 1 0 6.4M18 14.8c2 .7 3.2 2.4 3.5 5.2" />
+    </svg>
+  );
+}
+
+const NAV: [RouteKey, IconName | 'people', string][] = [
   ['channels', 'team', 'Home'],
   ['dms', 'dm', 'DMs'],
+  ['people', 'people', 'People'],
   ['clients', 'cl', 'Clients'],
   ['meetings', 'mt', 'Meetings'],
   ['decisions', 'dc', 'Decisions'],
@@ -123,7 +135,7 @@ function Rail({ active }: { active: RouteKey }) {
         const on = r === 'channels' ? active === 'channels' || (active === 'dms' && ui.home) : r === 'dms' ? active === 'dms' && !ui.home : active === r || (r === 'agents' && active === 'apps');
         return (
           <Link key={r} href={ROUTES[r]} className={'ri' + (on ? ' on' : '')} aria-current={on ? 'page' : undefined} onClick={() => setUI({ sideOpen: false, home: false })}>
-            <Icon name={i} />
+            {i === 'people' ? <PeopleIcon /> : <Icon name={i} />}
             {l}
             {dot[r] && <span className="dot"></span>}
           </Link>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { backendOn, currentAccount, DB_SCHEMA, quickAccount, sb } from './backend';
+import { accountFor, backendOn, DB_SCHEMA, sb } from './backend';
 import type { ChatMessage, FileRef, MessageCard, PersonKey } from './data';
 import { inviteByEmail, keyFor, learnProfiles, timeLabel, toUiId } from './live';
 import { hydrateReactions, markNotSent, markRead, unreadCounts } from './liveSync';
@@ -57,6 +57,7 @@ export function useLiveDms(): LiveDms | null {
   const threadOf = useRef(new Map<string, string>(saved)); // other user id → thread id
   const otherOf = useRef(new Map<string, string>(saved.map(([u, t]) => [t, u]))); // thread id → other user id
   const loadedFor = useRef('');
+  const orgKey = s.orgId ?? null;
   const syncSeen = useRef(0);
   const current = s.dm;
   const currentRef = useRef(current);
@@ -111,10 +112,12 @@ export function useLiveDms(): LiveDms | null {
     if (!enabled) return;
     let live: RealtimeChannel | null = null;
     let alive = true;
+    setReady(false);
     (async () => {
-      // the last-known account (no network) when there is one; it's refreshed in the background at start-up
-      const acc = (await quickAccount()) ?? (await currentAccount());
+      // the workspace that is open (when you switch, everything here starts again for the new one)
+      const acc = await accountFor(orgKey);
       if (!alive || !acc?.workspace) return;
+      loadedFor.current = '';
       me.current = acc.id;
       ws.current = acc.workspace.id;
 
@@ -173,7 +176,7 @@ export function useLiveDms(): LiveDms | null {
       alive = false;
       if (live) sb().removeChannel(live);
     };
-  }, [enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, orgKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- the open conversation's messages (latest 300, oldest first)
   useEffect(() => {

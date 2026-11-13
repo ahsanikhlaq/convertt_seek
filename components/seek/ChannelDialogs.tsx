@@ -161,7 +161,7 @@ export function ChannelMembersDialog({ live, channel, onClose }: { live: LiveCha
               Leave channel
             </button>
           )}
-          {!general && live.admin && (
+          {live.admin && (
             <button type="button" className="btn danger" onClick={() => setConfirm('delete')}>
               <Ic n="trash" size={15} /> Delete channel
             </button>
@@ -265,7 +265,7 @@ export function ChannelMembersDialog({ live, channel, onClose }: { live: LiveCha
     {confirm === 'delete' && (
       <ConfirmDialog
         title={'Delete #' + channel + '?'}
-        body={'The channel and all of its messages and files are deleted for everyone. This can’t be undone.'}
+        body={(general ? '#general is where the whole team talks. ' : '') + 'The channel and all of its messages and files are deleted for everyone. This can’t be undone.'}
         confirm="Delete channel"
         danger
         onCancel={() => setConfirm(null)}

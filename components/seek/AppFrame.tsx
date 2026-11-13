@@ -249,6 +249,7 @@ function Palette() {
         ),
       })),
       { label: 'Schedule a call', kind: 'schedule', go: to('meetings') },
+      { label: 'People directory', kind: 'people', go: to('people') },
       { label: 'Decisions log', kind: 'decisions', go: to('decisions') },
       { label: 'AI agents', kind: 'agents', go: to('agents') },
       { label: 'All apps', kind: 'apps', go: to('apps') },

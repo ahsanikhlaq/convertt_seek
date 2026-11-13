@@ -1,45 +1,70 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { backendOn, currentAccount } from '@/lib/seek/backend';
-import { AGENTS, agentLog, levelName, LEVELS, loadAgents, loadTraining, RUNNING, saveTraining, setAgent, setAiPaused, type AgentKey, type AgentState, type Level, type LogEntry } from '@/lib/seek/liveAgents';
+import { AGENTS, agentLog, levelName, LEVELS, loadAgents, loadTraining, previewAssistant, RUNNING, saveTraining, setAgent, setAiPaused, type AgentKey, type AgentState, type Level, type LogEntry } from '@/lib/seek/liveAgents';
 import { Modal } from '../Dialogs';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
-import { Switch } from '../ui';
+import { Avatar, RichText, Switch } from '../ui';
 import { Ic } from '../icons';
 
-function AppsSide({ active }: { active: 'apps' | 'agents' }) {
-  const { toast, setUI } = useSeek();
+/** Apps and AI: the two pages, every agent with whether it's on (click to jump to it), and the log. */
+function AppsSide({ active, on, paused, onLog }: { active: 'apps' | 'agents'; on?: Partial<Record<AgentKey, boolean>>; paused?: boolean; onLog?: () => void }) {
+  const { setUI } = useSeek();
+  const router = useRouter();
   const close = () => setUI({ sideOpen: false });
+  const isOn = (k: AgentKey) => !paused && (on?.[k] ?? AGENTS.find((a) => a.key === k)!.on);
+  const count = AGENTS.filter((a) => isOn(a.key)).length;
+  const jump = (k: AgentKey) => {
+    close();
+    if (active !== 'agents') {
+      router.push(ROUTES.agents + '#agent-' + k);
+      return;
+    }
+    const el = document.getElementById('agent-' + k);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('flash');
+    void el.offsetWidth;
+    el.classList.add('flash');
+  };
   return (
-    <Sidebar title="Apps" sub="connected tools and AI">
-      <div className="sg lbl">Apps</div>
-      <Link href={ROUTES.apps} className={'si' + (active === 'apps' ? ' on' : '')} aria-current={active === 'apps' ? 'page' : undefined} onClick={close}>
-        <span className="x">
-          <b>All apps</b>
-        </span>
+    <Sidebar title="Apps" sub="Tools and AI for your team">
+      <div className="sg lbl">Overview</div>
+      <Link href={ROUTES.apps} className={'si apsi' + (active === 'apps' ? ' on' : '')} aria-current={active === 'apps' ? 'page' : undefined} onClick={close}>
+        <span className="h"><Ic n="system" size={15} /></span>
+        <span className="x"><b>All apps</b></span>
       </Link>
-      {['Automations', 'What reaches clients'].map((l) => (
-        <button key={l} type="button" className="si" onClick={() => toast(l)}>
-          <span className="x">
-            <b>{l}</b>
-          </span>
+      <Link href={ROUTES.agents} className={'si apsi' + (active === 'agents' ? ' on' : '')} aria-current={active === 'agents' ? 'page' : undefined} onClick={close}>
+        <span className="h"><Ic n="ai" size={15} /></span>
+        <span className="x"><b>AI agents</b></span>
+        <span className="tag">{paused ? 'Paused' : count + ' on'}</span>
+      </Link>
+      <div className="sg lbl">Agents</div>
+      {AGENTS.map((a) => (
+        <button key={a.key} type="button" className="si apsi agsi" onClick={() => jump(a.key)} title={a.does}>
+          <span className={'agdot' + (isOn(a.key) ? ' on' : '')} aria-hidden="true" />
+          <span className="x"><b>{a.name}</b></span>
+          {RUNNING.includes(a.key) && isOn(a.key) && <span className="live">Live</span>}
         </button>
       ))}
-      <div className="sg lbl">AI</div>
-      <button type="button" className="si" onClick={() => toast('Away assistant')}>
-        <span className="x">
-          <b>Away assistant</b>
-        </span>
+      <div className="sg lbl">Activity</div>
+      <button
+        type="button"
+        className="si apsi"
+        onClick={() => {
+          close();
+          if (onLog) onLog();
+          else router.push(ROUTES.agents);
+        }}
+      >
+        <span className="h"><Ic n="recent" size={15} /></span>
+        <span className="x"><b>Agent log</b></span>
       </button>
-      <Link href={ROUTES.agents} className={'si' + (active === 'agents' ? ' on' : '')} aria-current={active === 'agents' ? 'page' : undefined} onClick={close}>
-        <span className="x">
-          <b>AI agents</b>
-        </span>
-      </Link>
     </Sidebar>
   );
 }
@@ -81,6 +106,18 @@ function LiveAgentsPage() {
 
   const pa = !!data?.paused;
   const running = data ? AGENTS.filter((a) => data.settings.get(a.key)?.enabled).length : 0;
+  const onMap = Object.fromEntries(AGENTS.map((a) => [a.key, data?.settings.get(a.key)?.enabled ?? a.on])) as Record<AgentKey, boolean>;
+  // arriving from the sidebar on another page (/agents#agent-…): show that agent
+  useEffect(() => {
+    if (!data) return;
+    const id = location.hash.slice(1);
+    if (!id) return;
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ block: 'center' });
+      el.classList.add('flash');
+    }
+  }, [!!data]); // eslint-disable-line react-hooks/exhaustive-deps
   const change = async (key: AgentKey, next: AgentState, msg: string) => {
     if (!ws) return;
     const err = await setAgent(ws, key, next.enabled, next.level);
@@ -89,13 +126,13 @@ function LiveAgentsPage() {
   };
 
   return (
-    <Shell active="agents" side={<AppsSide active="agents" />}>
+    <Shell active="agents" side={<AppsSide active="agents" on={onMap} paused={pa} onLog={() => setLogOf('all')} />}>
       <MainHeader
         title="AI agents"
         sub="Each agent follows the same hard rules, keeps a log, and can be switched off."
         right={
           <button type="button" className="btn sm" onClick={() => setLogOf('all')}>
-            Agent log
+            <Ic n="recent" size={15} /> Agent log
           </button>
         }
       />
@@ -127,8 +164,8 @@ function LiveAgentsPage() {
         <div className="banner v" style={{ margin: 0 }}>
           <Ic n="ai" size={14} />{' '}
           <span>
-            Agents are set up but not running yet: they start once the AI connection is added (a Claude API key, saved on the
-            server by an admin). Your choices here are kept and apply from then on.
+            The Summariser, Task suggester and Away assistant are live, running on Google Gemini’s free tier while you test. Each one
+            only sees what the person using it can see, and everything it does is in the log.
           </span>
         </div>
         {pa && (
@@ -140,7 +177,7 @@ function LiveAgentsPage() {
           {AGENTS.map((a) => {
             const st = data?.settings.get(a.key) ?? { enabled: a.on, level: a.level };
             return (
-              <div key={a.key} className={'agc' + (!st.enabled || pa ? ' off' : '')}>
+              <div key={a.key} id={'agent-' + a.key} className={'agc' + (!st.enabled || pa ? ' off' : '')}>
                 <div className="ct">
                   <span className="ic"><Ic n="ai" size={18} /></span>
                   <div>
@@ -635,10 +672,49 @@ export function AppsPage() {
 }
 
 /** Teach the assistant: how to reply (instructions) and what it can answer from (knowledge). Admins only. */
+const TEMPLATE = (org: string) => ({
+  instructions: [
+    `You represent ${org || 'our agency'}. Reply like our account manager: friendly, confident and brief.`,
+    'Our working hours are Monday to Friday, 09:00–18:00 (Pakistan time). Outside those hours, say we will reply on the next working day.',
+    'For anything urgent (site down, payment problem), ask them to email support@yourcompany.com with URGENT in the subject.',
+    'Never quote prices or agree to new work or deadlines; say the account manager will confirm.',
+  ].join('\n'),
+  knowledge: [
+    'ABOUT US',
+    '- Services: website design and development, SEO, paid ads, branding',
+    '- Usual response time: within 4 working hours',
+    '',
+    'HOW WE WORK',
+    '- Revisions: 2 rounds are included in every design phase',
+    '- Feedback: post it in your project channel; we review it every working day',
+    '- Invoices go out on the 1st of each month; payment terms are 14 days',
+    '',
+    'FAQ',
+    'Q: Can you make a small change today?',
+    'A: Small text or image changes are usually done within one working day.',
+  ].join('\n'),
+});
+
 function TeachDialog({ ws, agent, onClose }: { ws: string; agent: AgentKey; onClose: () => void }) {
-  const { toast } = useSeek();
+  const { s, toast } = useSeek();
   const [v, setV] = useState<{ instructions: string; knowledge: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState('');
+  const [asking, setAsking] = useState(false);
+  const [answer, setAnswer] = useState<{ q: string; text?: string; error?: string } | null>(null);
+  const tryIt = async () => {
+    if (!v || !q.trim()) return;
+    setAsking(true);
+    const r = await previewAssistant(ws, q.trim(), v.instructions, v.knowledge);
+    setAsking(false);
+    setAnswer({ q: q.trim(), ...r });
+  };
+  const useTemplate = () => {
+    if (!v) return;
+    const t = TEMPLATE(s.ws.name);
+    if ((v.instructions.trim() || v.knowledge.trim()) && !confirm('Replace what is written now with the template?')) return;
+    setV(t);
+  };
   useEffect(() => {
     void loadTraining(ws, agent).then(setV);
   }, [ws, agent]);
@@ -655,7 +731,7 @@ function TeachDialog({ ws, agent, onClose }: { ws: string; agent: AgentKey; onCl
       title="Teach the assistant"
       icon={<Ic n="ai" />}
       onClose={onClose}
-      width={620}
+      width={760}
       footer={
         <>
           <button type="button" className="btn" onClick={onClose}>
@@ -672,6 +748,15 @@ function TeachDialog({ ws, agent, onClose }: { ws: string; agent: AgentKey; onCl
           <p className="sub">Loading…</p>
         ) : (
           <>
+            <div className="teachtop">
+              <p>
+                The assistant replies in channels you add it to when nobody on the team is around, or when someone writes <b>@assistant</b>. It
+                also knows who is in the channel, their working hours and when they were last active, so it can say when you’ll be back.
+              </p>
+              <button type="button" className="btn sm" onClick={useTemplate}>
+                <Ic n="edit" size={14} /> Start from a template
+              </button>
+            </div>
             <div className="fld">
               <label htmlFor="t-ins">How it should reply</label>
               <textarea
@@ -696,6 +781,42 @@ function TeachDialog({ ws, agent, onClose }: { ws: string; agent: AgentKey; onCl
                 onChange={(e) => setV({ ...v, knowledge: e.target.value })}
               />
               <em>{v.knowledge.length.toLocaleString()} / 20,000 characters. It only answers from this; anything else, it says the team will get back to them.</em>
+            </div>
+            <div className="tryit">
+              <div className="tryhd">
+                <b>Try it</b>
+                <small>Ask what a client or teammate might ask. It uses what’s written above, even before you save. Nothing is posted.</small>
+              </div>
+              <div className="tryrow">
+                <input
+                  className="inp"
+                  placeholder="e.g. When will the team be back? or How many revisions do we get?"
+                  value={q}
+                  maxLength={1000}
+                  onChange={(e) => setQ(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void tryIt();
+                    }
+                  }}
+                />
+                <button type="button" className="btn pri" disabled={asking || !q.trim()} onClick={() => void tryIt()}>
+                  {asking ? 'Thinking…' : 'Ask'}
+                </button>
+              </div>
+              {answer && (
+                <div className="tryans">
+                  <div className="tryq">
+                    <Avatar k="AH" size={26} />
+                    <span>{answer.q}</span>
+                  </div>
+                  <div className="trya">
+                    <Avatar k="AI" size={26} />
+                    {answer.error ? <span className="err">{answer.error}</span> : <div><RichText text={answer.text ?? ''} /></div>}
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}

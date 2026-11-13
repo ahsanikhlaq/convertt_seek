@@ -64,6 +64,20 @@ export async function saveTraining(ws: string, agent: AgentKey, instructions: st
 /** Agents that are running now (the others are switched on but not built yet). */
 export const RUNNING: AgentKey[] = ['summariser', 'task_suggester', 'away_assistant'];
 
+/** Try the assistant with (unsaved) instructions and knowledge: the reply comes back here; nothing is posted. Admins. */
+export async function previewAssistant(ws: string, question: string, instructions: string, knowledge: string): Promise<{ text?: string; error?: string }> {
+  const { data, error } = await sb().functions.invoke('seek-ai', { body: { action: 'preview', ws, question, instructions, knowledge } });
+  if (error) {
+    try {
+      const j = await (error as { context?: Response }).context?.json();
+      if (j?.error) return { error: j.error };
+    } catch {}
+    return { error: 'The assistant couldn’t answer. Try again shortly' };
+  }
+  if (data?.error) return { error: data.error };
+  return { text: String(data?.text ?? '') };
+}
+
 export async function setAiPaused(ws: string, paused: boolean) {
   const { error } = await sb().rpc('set_ai_paused', { p_ws: ws, p_paused: paused });
   return error ? (/admins/.test(error.message) ? 'Only admins can pause AI' : 'Couldn’t save. Check your connection') : null;

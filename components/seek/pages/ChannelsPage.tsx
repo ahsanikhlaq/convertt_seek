@@ -72,7 +72,7 @@ export function ChannelsPage() {
   const side = (
     <Sidebar
       title={backendOn ? s.ws.name : WORKSPACES[wsId].name}
-      sub={backendOn ? `Team · ${ws.channels.length} channels · ${team.length} ${team.length === 1 ? 'person' : 'people'}` : WORKSPACES[wsId].sub}
+      sub={backendOn ? `Team · ${ws.channels.length} ${ws.channels.length === 1 ? 'channel' : 'channels'} · ${team.length} ${team.length === 1 ? 'person' : 'people'}` : WORKSPACES[wsId].sub}
       action={
         <button type="button" className="btn sm" onClick={() => setCreating(true)} aria-label="New channel">
           <Ic n="plus" size={18} />

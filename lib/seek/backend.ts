@@ -175,10 +175,28 @@ export async function quickAccount(): Promise<Account | null> {
     if (!raw) return null;
     const acc = JSON.parse(raw) as Account;
     const { data } = await sb().auth.getSession();
-    return data.session?.user?.id === acc.id ? acc : null;
+    if (data.session?.user?.id !== acc.id) return null;
+    // you just switched workspace: open that one, not the one saved last time
+    const pref = localStorage.getItem(PREF);
+    if (pref && acc.workspace && acc.workspace.id !== pref) {
+      const o = acc.orgs.find((x) => x.id === pref);
+      if (!o) return null;
+      acc.workspace = o;
+    }
+    return acc;
   } catch {
     return null;
   }
+}
+
+/**
+ * The account for the workspace that is open: the saved one when it is for that workspace (fast), otherwise the
+ * fresh one. Live chat uses this so it never loads one workspace's channels under another's name.
+ */
+export async function accountFor(orgId: string | null | undefined): Promise<Account | null> {
+  const q = await quickAccount();
+  if (q?.workspace && (!orgId || q.workspace.id === orgId)) return q;
+  return currentAccount();
 }
 
 /** Who is signed in, and their organization. null when signed out. Pass fresh=true after changing either. */

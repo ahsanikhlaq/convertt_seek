@@ -30,7 +30,7 @@ function usePlace(anchor: HTMLElement | null, box: React.RefObject<HTMLDivElemen
   useLayoutEffect(() => {
     if (!anchor || !box.current) return;
     const a = anchor.getBoundingClientRect();
-    const width = Math.min(340, innerWidth - 16);
+    const width = Math.min(360, innerWidth - 16);
     const left = Math.max(8, Math.min(a.left, innerWidth - width - 8));
     const h = Math.min(box.current.offsetHeight, innerHeight - 16);
     let top: number;
@@ -169,6 +169,8 @@ function EmojiPicker({ req, onClose }: { req: EmojiReq; onClose: () => void }) {
               key={c}
               type="button"
               role="tab"
+              title={c}
+              aria-label={c}
               aria-selected={cat === c && !q}
               className={cat === c && !q ? 'on' : ''}
               onClick={() => {
@@ -177,10 +179,10 @@ function EmojiPicker({ req, onClose }: { req: EmojiReq; onClose: () => void }) {
               }}
             >
               {CAT_ICON[c]}
-              <span>{c}</span>
             </button>
           ))}
         </div>
+        <div className="emcat">{q ? 'Search results' : cat}</div>
         <div className="emg">
           {items.length ? (
             items.map((x) => (

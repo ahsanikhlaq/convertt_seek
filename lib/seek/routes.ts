@@ -8,6 +8,7 @@ export const ROUTES = {
   terms: '/terms',
   channels: '/channels',
   dms: '/dms',
+  people: '/people',
   clients: '/clients',
   meetings: '/meetings',
   invite: '/invite',

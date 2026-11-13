@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { backendOn, currentAccount, DB_SCHEMA, quickAccount, sb, sendInvite } from './backend';
+import { accountFor, backendOn, DB_SCHEMA, sb, sendInvite } from './backend';
 import { PEOPLE, type ChatMessage, type FeedItem, type FileRef, type MessageCard, type PersonKey } from './data';
 import { initialsOf, channelId as toChannelName, isEmail } from './format';
 import { hydrateReactions, markNotSent, markRead, unreadCounts } from './liveSync';
@@ -110,7 +110,7 @@ export type LiveChat = {
   join: (channel: string) => Promise<string | null>;
   /** leave a channel (not #general) */
   leave: (channel: string) => Promise<string | null>;
-  /** delete a channel and its messages (admins; not #general) */
+  /** delete a channel and its messages (admins) */
   deleteChannel: (channel: string) => Promise<string | null>;
   /** add or remove the AI assistant (admins and the channel's creator) */
   setAssistant: (channel: string, on: boolean) => Promise<string | null>;
@@ -133,6 +133,7 @@ export function useLiveChat(): LiveChat | null {
   const wsRef = useRef<string | null>(s.orgId ?? null);
   const chans = useRef(new Map<string, string>(s.workspaces.C.channels.filter((c) => c.cid).map((c) => [c.id, c.cid!]))); // channel name → id
   const loadedFor = useRef('');
+  const orgKey = s.orgId ?? null;
   const allChans = useRef(new Map<string, string>()); // every channel you can see (joined or not), name → id
   const agentChans = useRef(new Set<string>()); // channel ids that have the AI assistant
   const syncSeen = useRef(0);
@@ -235,10 +236,12 @@ export function useLiveChat(): LiveChat | null {
     if (!enabled) return;
     let live: RealtimeChannel | null = null;
     let alive = true;
+    setReady(false);
     (async () => {
-      // the last-known account (no network) when there is one; it's refreshed in the background at start-up
-      const acc = (await quickAccount()) ?? (await currentAccount());
+      // the workspace that is open (when you switch, everything here starts again for the new one)
+      const acc = await accountFor(orgKey);
       if (!alive || !acc?.workspace) return;
+      loadedFor.current = '';
       meRef.current = acc.id;
       wsRef.current = acc.workspace.id;
       setAdmin(['owner', 'admin'].includes(acc.workspace.role));
@@ -285,7 +288,7 @@ export function useLiveChat(): LiveChat | null {
       alive = false;
       if (live) sb().removeChannel(live);
     };
-  }, [enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, orgKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- the open channel's messages (latest 300, oldest first), its reactions, and mark it read
   useEffect(() => {
@@ -469,9 +472,8 @@ export function useLiveChat(): LiveChat | null {
     deleteChannel: async (channel) => {
       const id = idOf(channel);
       if (!id) return 'Channel not found';
-      if (channel === 'general') return '#general can’t be deleted';
       const { data, error } = await sb().from('channels').delete().eq('id', id).select('id');
-      if (error) return /general/i.test(error.message) ? '#general can’t be deleted' : 'Couldn’t delete the channel. Try again';
+      if (error) return /general/i.test(error.message) ? 'Only admins can delete #general' : 'Couldn’t delete the channel. Try again';
       if (!data?.length) return 'Only admins can delete channels';
       await loadChannels();
       return null;
