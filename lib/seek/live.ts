@@ -269,6 +269,7 @@ export function useLiveChat(): LiveChat | null {
     loadedFor.current = id;
     markRead('ch:' + id);
     let alive = true;
+    let done = false;
     (async () => {
       const { data, error } = await sb()
         .from('messages')
@@ -289,13 +290,15 @@ export function useLiveChat(): LiveChat | null {
         const c = d.workspaces.C.channels.find((x) => x.id === current);
         if (c) c.unread = 0;
       });
+      done = true;
       // names and reactions load together, after the messages are on screen
       await Promise.all([learnPeople(rows.map((r) => r.user_id)), hydrateReactions(update, feed.map((m) => m.id), meRef.current)]);
       if (alive) update(() => {});
     })();
     return () => {
       alive = false;
-      if (loadedFor.current === id) loadedFor.current = '';
+      // a finished load stays loaded; an unfinished one is tried again
+      if (!done && loadedFor.current === id) loadedFor.current = '';
     };
   }, [enabled, ready, current]); // eslint-disable-line react-hooks/exhaustive-deps
 

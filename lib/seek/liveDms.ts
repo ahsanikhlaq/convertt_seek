@@ -183,6 +183,7 @@ export function useLiveDms(): LiveDms | null {
     loadedFor.current = thread;
     markRead('dm:' + thread);
     let alive = true;
+    let done = false;
     (async () => {
       const { data, error } = await sb()
         .from('messages')
@@ -204,11 +205,13 @@ export function useLiveDms(): LiveDms | null {
         t.msgs = msgs;
         t.unread = 0;
       });
+      done = true;
       await hydrateReactions(update, msgs.map((m) => m.id), me.current);
     })();
     return () => {
       alive = false;
-      if (loadedFor.current === thread) loadedFor.current = '';
+      // a finished load stays loaded; an unfinished one is tried again
+      if (!done && loadedFor.current === thread) loadedFor.current = '';
     };
   }, [enabled, ready, current]); // eslint-disable-line react-hooks/exhaustive-deps
 
