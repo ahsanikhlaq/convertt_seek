@@ -1,6 +1,30 @@
 'use client';
 
 import type { State } from './data';
+import type { NotifySchedule } from './backend';
+
+/** Whether now is inside your notification schedule (always, when you have none). Uses your time zone. */
+export function inSchedule(sch: NotifySchedule | null | undefined, tz?: string) {
+  if (!sch || !sch.days?.length) return true;
+  let day = new Date().getDay();
+  let mins = new Date().getHours() * 60 + new Date().getMinutes();
+  try {
+    if (tz && tz.includes('/')) {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
+      const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+      day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(get('weekday'));
+      mins = Number(get('hour')) * 60 + Number(get('minute'));
+    }
+  } catch {}
+  const toM = (x: string) => {
+    const [h, m] = x.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+  const a = toM(sch.from);
+  const b = toM(sch.to);
+  if (!sch.days.includes(day)) return false;
+  return a <= b ? mins >= a && mins < b : mins >= a || mins < b;
+}
 
 /** Whether your notifications are paused right now (a pause ends by itself at its time). */
 export function isPaused(me: State['me']) {

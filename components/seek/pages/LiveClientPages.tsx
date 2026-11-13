@@ -11,7 +11,7 @@ import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { Composer, Feed, type FeedRef } from '../Messages';
 import { ClientRail, MainHeader, Pane, Shell, Sidebar } from '../Shell';
-import { Avatar } from '../ui';
+import { Avatar, SeenText } from '../ui';
 import { ApprovalsTab, type Approver } from '../Approvals';
 import { ScheduleDialog } from '../Meetings';
 import { ClientInviteDialog } from '../ClientInviteDialog';
@@ -320,22 +320,25 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
       <div className="ppl">
         {clients.map((p) => (
           <div key={p.id}>
-            {p.userId ? <Avatar k={p.userId} size={32} /> : <span className="av" style={{ width: 32, height: 32, background: 'var(--golds)', color: 'var(--gold)', fontSize: 12 }}>{firstName(p)[0]?.toUpperCase()}</span>}
+            {p.userId ? <Avatar k={p.userId} size={32} presence /> : <span className="av" style={{ width: 32, height: 32, background: 'var(--golds)', color: 'var(--gold)', fontSize: 12 }}>{firstName(p)[0]?.toUpperCase()}</span>}
             <span>
               <b>{personName(p)}</b>
               <small>
                 client · {p.role}
-                {p.userId ? '' : ' · invited'}
+                {p.userId ? <SeenText id={p.userId} prefix=" · " /> : ' · invited'}
               </small>
             </span>
           </div>
         ))}
         {teamKeys.map((k, i) => (
           <div key={k}>
-            <Avatar k={k} size={32} />
+            <Avatar k={k} size={32} presence />
             <span>
               <b>{nameOf(k)}</b>
-              <small>team{sp.team[i]?.isLead ? ' · lead' : ''}</small>
+              <small>
+                team{sp.team[i]?.isLead ? ' · lead' : ''}
+                <SeenText id={k} prefix=" · " />
+              </small>
             </span>
           </div>
         ))}
@@ -603,10 +606,13 @@ function PeopleTab({ live, sp }: { live: LiveClients; sp: Space }) {
             const k = (t.userId === live.me ? 'AH' : t.userId) as PersonKey;
             return (
               <div key={t.userId}>
-                <Avatar k={k} size={32} />
+                <Avatar k={k} size={32} presence />
                 <span>
                   <b>{nameOf(k)}</b>
-                  <small>{t.isLead ? 'lead' : 'team'}</small>
+                  <small>
+                    {t.isLead ? 'lead' : 'team'}
+                    <SeenText id={k} prefix=" · " />
+                  </small>
                 </span>
               </div>
             );
@@ -908,10 +914,13 @@ function ClientPortal({ live }: { live: LiveClients }) {
             <div className="ppl">
               {sp.team.map((t) => (
                 <div key={t.userId}>
-                  <Avatar k={t.userId} size={32} />
+                  <Avatar k={t.userId} size={32} presence />
                   <span>
                     <b>{nameOf(t.userId)}</b>
-                    <small>{t.isLead ? 'your project lead' : 'team'}</small>
+                    <small>
+                      {t.isLead ? 'your project lead' : 'team'}
+                      <SeenText id={t.userId} prefix=" · " />
+                    </small>
                   </span>
                 </div>
               ))}

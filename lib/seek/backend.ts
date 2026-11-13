@@ -57,7 +57,34 @@ export type Account = {
   notifyEmail: 'instant' | 'daily' | 'off';
   /** notification sound, volume (0–100), what plays it, and how long desktop alerts stay (0 = until closed) */
   sound: { key: string; volume: number; play: 'all' | 'important' | 'off'; alertSecs: number };
+  /** what notifies you, like Slack's notification preferences (private to you) */
+  notify: NotifyPrefs;
 };
+
+/** Days are 0 (Sun) to 6 (Sat); times are "HH:MM" in your time zone. */
+export type NotifySchedule = { days: number[]; from: string; to: string };
+export type NotifyPrefs = {
+  level: 'all' | 'mentions' | 'nothing';
+  threads: boolean;
+  huddles: boolean;
+  desktop: boolean;
+  preview: boolean;
+  keywords: string[];
+  schedule: NotifySchedule | null;
+};
+export const DEFAULT_NOTIFY: NotifyPrefs = { level: 'mentions', threads: true, huddles: true, desktop: true, preview: true, keywords: [], schedule: null };
+
+/** Saves some of your notification preferences. */
+export async function saveNotify(p: Partial<NotifyPrefs>): Promise<string | null> {
+  const { data } = await sb().auth.getSession();
+  const uid = data.session?.user.id;
+  if (!uid) return 'Sign in again';
+  const { error } = await sb()
+    .from('notify_prefs')
+    .upsert({ user_id: uid, ...p, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+  forgetAccount();
+  return error ? friendly(error.message) : null;
+}
 
 /** A client space you belong to as a client. */
 export type ClientSpaceRef = { id: string; name: string; project: string; code: string; color: string; agency: string; agencyLogo: string | null; role: string; invitedBy: string };
@@ -186,9 +213,10 @@ async function loadAccount(id: string, email: string): Promise<Account> {
       .order('joined_at', { ascending: true })
       .limit(20),
     sb().rpc('my_client_spaces'),
+    sb().from('notify_prefs').select('level, threads, huddles, desktop, preview, keywords, schedule').eq('user_id', id).maybeSingle(),
   ]);
   const [{ data: joined }, first] = await Promise.all([sb().rpc('accept_my_invites'), parts()]);
-  const [{ data: profile }, { data: memberships }, { data: spaces }] = (Number(joined) || 0) > 0 ? await parts() : first;
+  const [{ data: profile }, { data: memberships }, { data: spaces }, { data: np }] = (Number(joined) || 0) > 0 ? await parts() : first;
   type SpaceRow = { space_id: string; name: string; project: string; code: string; color: string; agency: string; agency_logo: string | null; role: string; invited_by: string };
   const clientSpaces = ((spaces ?? []) as SpaceRow[]).map((r) => ({
     id: r.space_id,
@@ -222,6 +250,7 @@ async function loadAccount(id: string, email: string): Promise<Account> {
     workHours: p.work_hours ?? '09:00–18:00',
     notifyEmail: p.notify_email ?? 'instant',
     sound: { key: p.notify_sound ?? 'chime', volume: p.notify_volume ?? 70, play: p.notify_play ?? 'all', alertSecs: p.notify_alert_secs ?? 8 },
+    notify: { ...DEFAULT_NOTIFY, ...((np ?? {}) as Partial<NotifyPrefs>), keywords: ((np as { keywords?: string[] } | null)?.keywords ?? []) },
     look: p.theme ?? null,
     onboarded: Boolean(p.onboarded_at),
     workspace: w ? { id: w.id, name: w.name, slug: w.slug, role: m!.role, logo: w.logo_url, joinCode: w.join_code, accent: w.brand_accent, tz: w.time_zone } : null,

@@ -6,7 +6,7 @@ import { channelId } from '@/lib/seek/format';
 import type { LiveChat } from '@/lib/seek/live';
 import { useSeek } from '@/lib/seek/store';
 import { Modal } from './Dialogs';
-import { Avatar } from './ui';
+import { Avatar, SeenText } from './ui';
 
 const nameOf = (k: PersonKey) => PEOPLE[k]?.name ?? 'Someone';
 
@@ -158,10 +158,13 @@ export function ChannelMembersDialog({ live, channel, onClose }: { live: LiveCha
               const canRemove = live.admin || info?.createdBy === live.me;
               return (
                 <div key={u}>
-                  <Avatar k={you ? 'AH' : u} size={30} />
+                  <Avatar k={you ? 'AH' : u} size={30} presence />
                   <span style={{ flex: 1 }}>
                     <b>{you ? 'You' : nameOf(u)}</b>
-                    <small>{info?.createdBy === u ? 'created the channel' : 'member'}</small>
+                    <small>
+                      {info?.createdBy === u ? 'created the channel' : 'member'}
+                      {!you && <SeenText id={u} prefix=" · " />}
+                    </small>
                   </span>
                   {canRemove && !you && (
                     <button

@@ -106,7 +106,7 @@ export type LiveChat = {
   addMember: (channel: string, userId: string) => Promise<string | null>;
   removeMember: (channel: string, userId: string) => Promise<string | null>;
   /** your notification level for a channel */
-  setLevel: (channel: string, level: 'normal' | 'digest' | 'mute') => Promise<string | null>;
+  setLevel: (channel: string, level: 'normal' | 'all' | 'digest' | 'mute') => Promise<string | null>;
 };
 
 export function useLiveChat(): LiveChat | null {
@@ -191,7 +191,7 @@ export function useLiveChat(): LiveChat | null {
     const tierOf = new Map(
       ((prefs ?? []) as { channel_id: string; level: string; muted_until: string | null }[])
         .filter((p) => p.level !== 'mute' || !p.muted_until || new Date(p.muted_until) > new Date())
-        .map((p) => [p.channel_id, p.level === 'digest' ? 'Digest' : p.level === 'mute' ? 'Muted' : undefined]),
+        .map((p) => [p.channel_id, p.level === 'digest' ? 'Digest' : p.level === 'mute' ? 'Muted' : p.level === 'all' ? 'Everything' : undefined]),
     );
     const list = (channels ?? []) as ChannelRow[];
     chans.current = new Map(list.map((c) => [c.name, c.id]));
@@ -370,7 +370,7 @@ export function useLiveChat(): LiveChat | null {
       if (error) return 'Couldn’t save that. Try again';
       update((d) => {
         const c = d.workspaces.C.channels.find((x) => x.id === channel);
-        if (c) c.tier = level === 'digest' ? 'Digest' : level === 'mute' ? 'Muted' : undefined;
+        if (c) c.tier = level === 'digest' ? 'Digest' : level === 'mute' ? 'Muted' : level === 'all' ? 'Everything' : undefined;
       });
       return null;
     },

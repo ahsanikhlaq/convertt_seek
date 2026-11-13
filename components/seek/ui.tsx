@@ -3,10 +3,13 @@
 import { Fragment } from 'react';
 import { PEOPLE, type PersonKey, type Mode } from '@/lib/seek/data';
 import { useSeek } from '@/lib/seek/store';
+import { usePresenceOf } from '@/lib/seek/presence';
 
-export function Avatar({ k, size = 32, className = '' }: { k: PersonKey; size?: number; className?: string }) {
+/** A person's picture or initials. With `presence`, a green dot shows when they're active (grey ring when not). */
+export function Avatar({ k, size = 32, className = '', presence }: { k: PersonKey; size?: number; className?: string; presence?: boolean }) {
   const p = PEOPLE[k] ?? { name: k, color: '#7a6179', role: '' };
-  return (
+  const pr = usePresenceOf(presence ? k : null);
+  const av = (
     <span
       className={'av ' + className}
       style={{ width: size, height: size, background: p.color, fontSize: Math.round(size * 0.36) }}
@@ -14,6 +17,25 @@ export function Avatar({ k, size = 32, className = '' }: { k: PersonKey; size?: 
       title={p.name}
     >
       {p.photo ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit', display: 'block' }} /> : k === 'AI' ? '✦' : (p.initials ?? k)}
+    </span>
+  );
+  if (!pr.known) return av;
+  return (
+    <span className="pav" title={p.name + ' · ' + pr.label}>
+      {av}
+      <i className={'pdot' + (pr.active ? ' on' : '')} style={{ width: Math.max(9, Math.round(size * 0.3)), height: Math.max(9, Math.round(size * 0.3)) }} role="img" aria-label={pr.label} />
+    </span>
+  );
+}
+
+/** "Active now" or "Last seen 5 min ago" for someone (nothing in demo mode or for you). */
+export function SeenText({ id, prefix = '' }: { id: string | null | undefined; prefix?: string }) {
+  const pr = usePresenceOf(id);
+  if (!pr.known) return null;
+  return (
+    <span className={'seen' + (pr.active ? ' on' : '')}>
+      {prefix}
+      {pr.label}
     </span>
   );
 }

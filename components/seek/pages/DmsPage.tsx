@@ -11,7 +11,7 @@ import { Modal } from '../Dialogs';
 import { InviteDialog } from '../InviteDialog';
 import { Composer, Feed, type FeedRef } from '../Messages';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
-import { Avatar } from '../ui';
+import { Avatar, SeenText } from '../ui';
 import { FileList, useAttach } from '../Files';
 import { PinsList, useSchedule } from '../Extras';
 import { startHuddle } from '@/lib/seek/liveExtras';
@@ -92,7 +92,7 @@ function LiveDmsPage() {
 
   const person = (k: PersonKey, sub: string, onClick: () => void, extra?: React.ReactNode, on = false) => (
     <button key={k} type="button" className={'si' + (on ? ' on' : '')} aria-current={on ? 'page' : undefined} onClick={onClick}>
-      <Avatar k={k} size={30} />
+      <Avatar k={k} size={30} presence />
       <span className="x">
         <b>{nameOf(k)}</b>
         <small>{sub}</small>
@@ -162,7 +162,12 @@ function LiveDmsPage() {
   const header = dm ? (
     <MainHeader
       title={nameOf(dm)}
-      sub={PEOPLE[dm]?.role ?? ''}
+      sub={
+        <>
+          <SeenText id={dm} />
+          {PEOPLE[dm]?.role ? <span>{(dm !== 'AH' ? ' · ' : '') + PEOPLE[dm]?.role}</span> : null}
+        </>
+      }
       below={
         <div className="tabs" role="tablist">
           {(['Messages', 'Files', 'Pins'] as const).map((t) => (
@@ -201,9 +206,12 @@ function LiveDmsPage() {
     dm && ui.paneOpen ? (
       <Pane title="Profile" onClose={() => setUI({ paneOpen: false })}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}>
-          <Avatar k={dm} size={72} />
+          <Avatar k={dm} size={72} presence />
           <div>
             <b style={{ fontSize: 17 }}>{nameOf(dm)}</b>
+            <div style={{ fontSize: 13 }}>
+              <SeenText id={dm} />
+            </div>
             <div style={{ color: 'var(--sb)', fontSize: 13 }}>
               {[info?.title, info?.pronouns].filter(Boolean).join(' · ') || PEOPLE[dm]?.role}
             </div>

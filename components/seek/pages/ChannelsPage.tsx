@@ -233,14 +233,14 @@ export function ChannelsPage() {
             <button
               type="button"
               className="btn sm hide-m"
-              title={live ? 'Normal: mentions and replies notify · Digest: waits for the summary · Mute: only mentions' : undefined}
+              title={live ? 'Normal: your default (Account settings) · Everything: every new message · Digest: waits for the summary · Mute: only mentions' : undefined}
               onClick={async () => {
                 if (live) {
-                  // your level for this channel: Normal → Digest → Mute
-                  const cur = c.tier === 'Digest' ? 'digest' : c.tier === 'Muted' ? 'mute' : 'normal';
-                  const next = cur === 'normal' ? 'digest' : cur === 'digest' ? 'mute' : 'normal';
+                  // your level for this channel: Normal → Everything → Digest → Mute
+                  const cur = c.tier === 'Digest' ? 'digest' : c.tier === 'Muted' ? 'mute' : c.tier === 'Everything' ? 'all' : 'normal';
+                  const next = cur === 'normal' ? 'all' : cur === 'all' ? 'digest' : cur === 'digest' ? 'mute' : 'normal';
                   const err = await live.setLevel(ch, next);
-                  toast(err ?? (next === 'mute' ? '#' + ch + ' muted. Mentions still reach you' : next === 'digest' ? '#' + ch + ' set to Digest' : '#' + ch + ' notifies as normal'));
+                  toast(err ?? (next === 'mute' ? '#' + ch + ' muted. Mentions still reach you' : next === 'digest' ? '#' + ch + ' set to Digest' : next === 'all' ? 'Every new message in #' + ch + ' notifies you' : '#' + ch + ' follows your default'));
                   return;
                 }
                 const o = ['Normal', 'Digest', 'Mute'];

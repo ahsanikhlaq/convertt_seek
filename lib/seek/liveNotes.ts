@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { backendOn, DB_SCHEMA, sb } from './backend';
+import { backendOn, DB_SCHEMA, DEFAULT_NOTIFY, sb } from './backend';
+import { inSchedule } from './prefs';
 import { PEOPLE, type Note, type PersonKey, type State } from './data';
 import { keyFor, learnProfiles } from './live';
 import { ROUTES } from './routes';
@@ -65,6 +66,9 @@ export function useLiveNotes(me: string | null) {
   const pauseEnd = s.me.dnd ? (s.me.dndUntil ? Date.parse(s.me.dndUntil) : Infinity) : 0;
   const focusOnly = s.status.k === 'fc';
   const snd = s.me.sound ?? { key: 'chime', volume: 70, play: 'all' as const, alertSecs: 8 };
+  const np = s.me.notify ?? DEFAULT_NOTIFY;
+  const npKey = JSON.stringify(np);
+  const tz = s.me.tz;
 
   useEffect(() => {
     if (!on) return;
@@ -90,13 +94,14 @@ export function useLiveNotes(me: string | null) {
         });
         // sound (your choice and volume) and a desktop alert when Seek isn't in front (paused: none; Focus: only
         // mentions and DMs)
-        const important = n.kind === 'mention' || n.kind === 'dm' || n.kind === 'approval' || n.kind === 'reminder';
-        const paused = Date.now() < pauseEnd;
+        const important = n.kind === 'mention' || n.kind === 'dm' || n.kind === 'approval' || n.kind === 'reminder' || n.kind === 'keyword' || n.kind === 'huddle';
+        // quiet while paused, outside your notification schedule, or when you chose "Nothing"
+        const paused = Date.now() < pauseEnd || np.level === 'nothing' || !inSchedule(np.schedule, tz);
         if (!paused && (!focusOnly || important) && (snd.play === 'all' || (snd.play === 'important' && important))) playSound(snd.key as SoundKey, snd.volume);
         const away = typeof document !== 'undefined' && (document.hidden || !document.hasFocus());
-        if (away && !paused && (!focusOnly || n.kind === 'mention' || n.kind === 'dm') && 'Notification' in window && Notification.permission === 'granted') {
+        if (away && !paused && np.desktop && (!focusOnly || n.kind === 'mention' || n.kind === 'dm') && 'Notification' in window && Notification.permission === 'granted') {
           try {
-            const alert = new Notification(n.title, { body: n.body, tag: 'seek-' + n.id, requireInteraction: snd.alertSecs === 0, silent: true });
+            const alert = new Notification(n.title, { body: np.preview ? n.body : 'New activity in Seek', tag: 'seek-' + n.id, requireInteraction: snd.alertSecs === 0, silent: true });
             alert.onclick = () => window.focus();
             if (snd.alertSecs > 0) setTimeout(() => alert.close(), snd.alertSecs * 1000);
           } catch {}
@@ -107,5 +112,5 @@ export function useLiveNotes(me: string | null) {
       alive = false;
       sb().removeChannel(ch);
     };
-  }, [on, me, pauseEnd, focusOnly, snd.key, snd.volume, snd.play, snd.alertSecs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [on, me, pauseEnd, focusOnly, snd.key, snd.volume, snd.play, snd.alertSecs, npKey, tz]); // eslint-disable-line react-hooks/exhaustive-deps
 }

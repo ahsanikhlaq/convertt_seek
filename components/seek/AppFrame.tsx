@@ -9,6 +9,7 @@ import { prototypeName, ROUTES, routeFromPrototype, routeOf, type RouteKey } fro
 import { setMe, useSeek } from '@/lib/seek/store';
 import { useLiveSync } from '@/lib/seek/liveSync';
 import { useLiveNotes } from '@/lib/seek/liveNotes';
+import { usePresence } from '@/lib/seek/presence';
 import { useLiveDecisions } from '@/lib/seek/liveDecisions';
 import { useLiveSaved, useLiveTasks, useReminders } from '@/lib/seek/liveExtras';
 import { useWorkspaceEmoji } from '@/lib/seek/liveEmoji';
@@ -40,6 +41,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   }, [s.session]);
   useLiveSync(meId);
   useLiveNotes(meId);
+  usePresence(meId);
   useLiveDecisions(meId);
   useWorkspaceEmoji(meId);
   useSaveLook();

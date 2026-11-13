@@ -61,7 +61,7 @@ export type FeedItem = ChatMessage | DecisionCard | NewMarker;
 export type Channel = { id: string; unread: number; desc: string; tier?: string; private?: boolean; /** backend: the channel's database id */ cid?: string };
 
 /** A notification (backend mode): a DM, a mention, a thread reply or a client message. */
-export type Note = { id: number; kind: 'dm' | 'mention' | 'reply' | 'client' | 'team' | 'approval' | 'task' | 'reminder'; title: string; body: string; conv: string; actor: string | null; at: string; read: boolean };
+export type Note = { id: number; kind: 'dm' | 'mention' | 'reply' | 'client' | 'team' | 'approval' | 'task' | 'reminder' | 'channel' | 'keyword' | 'huddle'; title: string; body: string; conv: string; actor: string | null; at: string; read: boolean };
 export type DmThread = { last: string; unread: number; msgs: FeedItem[] };
 export type Space = { id: string; name: string; desc: string; wait: string; color: string };
 export type Decision = {
@@ -195,7 +195,7 @@ export type State = {
   seenNew: boolean;
   notif: string;
   status: { k: StatusKey; t: string };
-  me: { name: string; title: string; tz: string; email: string; dnd: boolean; dndUntil?: string | null; pronouns?: string; workHours?: string; notifyEmail?: 'instant' | 'daily' | 'off'; sound?: { key: string; volume: number; play: 'all' | 'important' | 'off'; alertSecs: number } };
+  me: { name: string; title: string; tz: string; email: string; dnd: boolean; dndUntil?: string | null; pronouns?: string; workHours?: string; notifyEmail?: 'instant' | 'daily' | 'off'; sound?: { key: string; volume: number; play: 'all' | 'important' | 'off'; alertSecs: number }; notify?: import('./backend').NotifyPrefs };
   theme: Theme;
   mode: Mode;
   custom: CustomEmoji[];

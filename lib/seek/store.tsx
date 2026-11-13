@@ -93,7 +93,7 @@ export function applyAccount(d: State, acc: Account | null) {
   d.meId = acc.id;
   d.email = acc.email;
   // your real profile replaces the prototype's sample person
-  d.me = { ...d.me, email: acc.email, name: acc.name.trim() || acc.email.split('@')[0] || 'You', title: acc.title, tz: acc.timeZone || d.me.tz, dnd: !!acc.dndUntil && new Date(acc.dndUntil) > new Date(), dndUntil: acc.dndUntil, pronouns: acc.pronouns, workHours: acc.workHours, notifyEmail: acc.notifyEmail, sound: acc.sound };
+  d.me = { ...d.me, email: acc.email, name: acc.name.trim() || acc.email.split('@')[0] || 'You', title: acc.title, tz: acc.timeZone || d.me.tz, dnd: !!acc.dndUntil && new Date(acc.dndUntil) > new Date(), dndUntil: acc.dndUntil, pronouns: acc.pronouns, workHours: acc.workHours, notifyEmail: acc.notifyEmail, sound: acc.sound, notify: acc.notify };
   const st = STATUSES.find((x) => x[0] === acc.status);
   if (st) d.status = { k: st[0], t: st[1] };
   setMe(d.me.name);

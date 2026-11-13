@@ -9,6 +9,7 @@ import { ROUTES } from '@/lib/seek/routes';
 import { setMe, useSeek } from '@/lib/seek/store';
 import { ConfirmDialog } from '../Dialogs';
 import { PauseSelect } from '../PauseSelect';
+import { AlsoNotify, ChannelExceptions, DesktopBanners, Keywords, Schedule, WhatToNotify } from '../NotifySettings';
 import { usePopovers } from '../Popovers';
 import { ClientRail, MainHeader, Shell, Sidebar } from '../Shell';
 import { SoundSettings } from '../SoundSettings';
@@ -20,7 +21,7 @@ import { Avatar, ModeSeg, Switch } from '../ui';
  */
 const TABS = [
   ['profile', 'Profile', 'Your name, photo and working hours'],
-  ['notifications', 'Notifications', 'Pause, sounds, desktop alerts and email'],
+  ['notifications', 'Notifications', 'What notifies you, keywords, schedule, sounds'],
   ['messages', 'Messages & media', 'How the message box and pictures behave'],
   ['appearance', 'Appearance', 'Light or dark, and your colours'],
   ['region', 'Language & region', 'Your time zone'],
@@ -214,9 +215,36 @@ function NotificationsTab() {
         <PauseSelect id="ac-pause" />
       </section>
       <section className="card acard">
-        <h3>Sound and desktop alerts</h3>
+        <h3>Notify me about</h3>
+        <WhatToNotify />
+      </section>
+      <section className="card acard">
+        <h3>Also notify me about</h3>
+        <AlsoNotify />
+      </section>
+      <section className="card acard">
+        <h3>Keywords</h3>
+        <Keywords />
+      </section>
+      <section className="card acard">
+        <h3>Notification schedule</h3>
+        <Schedule />
+      </section>
+      <section className="card acard">
+        <h3>Desktop notifications</h3>
+        <DesktopBanners />
+      </section>
+      <section className="card acard">
+        <h3>Sound</h3>
         <SoundSettings bare />
       </section>
+      {s.session === 'in' && (
+        <section className="card acard">
+          <h3>Channel-specific notifications</h3>
+          <p className="ahint">Exceptions to your default for single channels. You can also change it with 🔔 in the channel header.</p>
+          <ChannelExceptions />
+        </section>
+      )}
       <section className="card acard">
         <h3>Email</h3>
         <div className="fld">
