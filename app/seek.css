@@ -76,21 +76,29 @@ textarea.inp{height:auto;min-height:70px;padding:10px 13px;resize:vertical}
 .tb:hover{color:var(--ink)}
 .tb.on{color:var(--ink);border-bottom-color:var(--v)}
 .tb.on.gold{color:var(--gold);border-bottom-color:var(--gold)}
-.feed{flex:1;overflow:auto;padding:14px 0 10px}
+.feed{flex:1;overflow:auto;padding:8px 0 18px}
 .banner{margin:0 20px 10px;padding:10px 13px;border-radius:10px;font-size:14.5px;display:flex;gap:10px;align-items:center}
 .banner.gold{background:var(--golds);color:var(--gold);border:1px solid var(--goldl)}
 .banner.v{background:var(--vs);color:var(--vd)}
 .banner b{font-weight:700}
-.daysep{display:flex;align-items:center;gap:10px;margin:8px 20px;color:var(--sb);font-size:13px;font-weight:600}.daysep:before,.daysep:after{content:"";flex:1;height:1px;background:var(--ln)}
-.newsep{display:flex;align-items:center;gap:10px;margin:8px 20px;color:var(--red);font-size:12.5px;font-weight:700}.newsep:after{content:"";flex:1;height:1px;background:#e8b7b7}
+.daysep{position:sticky;top:6px;z-index:3;display:flex;justify-content:center;margin:20px 0 6px;pointer-events:none}
+.daysep:before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:var(--ln);z-index:-1}
+.daysep span{pointer-events:auto;background:var(--card,#fff);border:1px solid var(--ln2);border-radius:999px;padding:4px 14px;font-size:13.5px;font-weight:600;color:var(--ink);box-shadow:0 1px 2px rgba(38,19,37,.06)}
+.newsep{display:flex;align-items:center;gap:10px;margin:10px 24px 4px;color:var(--red);font-size:13px;font-weight:700}.newsep:before{content:"";flex:1;height:1px;background:#e8b7b7}
 /* messages */
-.msg{display:flex;gap:11px;padding:7px 20px;position:relative}
+.msg{display:flex;gap:12px;padding:8px 24px 6px;margin-top:8px;position:relative}
+.msg>.av,.msg>.pav .av{border-radius:10px!important}
+.msg.cmp{margin-top:0;padding-top:2px;padding-bottom:2px}
+.msg .gut{width:40px;flex:none;text-align:right;font-size:11.5px;color:var(--sb);padding-top:4px;opacity:0;white-space:nowrap}
+.msg.cmp:hover .gut,.msg.cmp.menu .gut{opacity:1}
+.msg .ed{color:var(--sb);font-size:12.5px}
 .msg:hover{background:#fbf9fb}
 .msg.ai{box-shadow:inset 3px 0 0 var(--ai);background:#fbfaff}
 .msg.client .tx{}
 .msg .bd{flex:1;min-width:0}
-.msg .nm{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.msg .nm b{font-weight:700}.msg .nm small{color:var(--sb);font-size:13px}
-.msg .tx{margin:2px 0 0;white-space:pre-wrap;word-wrap:break-word}
+.msg .nm{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;line-height:1.3}.msg .nm b{font-weight:700;font-size:16px;color:var(--ink)}.msg .nm small{color:var(--sb);font-size:12.5px}
+.msg .tx{margin:3px 0 0;white-space:pre-wrap;word-wrap:break-word;font-size:15.5px;line-height:1.55;color:var(--ink)}
+.msg.cmp .tx{margin-top:0}
 .msg .tx .at{color:var(--v);font-weight:600;background:var(--vs);border-radius:4px;padding:0 3px}
 .msg .src{font-size:13px;color:var(--ai);margin-top:3px;display:inline-block}
 .file{margin-top:7px;display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--ln);border-radius:10px;max-width:340px;background:#fff}
@@ -99,7 +107,10 @@ textarea.inp{height:auto;min-height:70px;padding:10px 13px;resize:vertical}
 .reacts{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}
 .rx{height:26px;padding:0 8px;border-radius:13px;border:1px solid var(--ln);background:#fff;font-size:13px;display:inline-flex;align-items:center;gap:5px}
 .rx.me{border-color:var(--v);background:var(--vs);color:var(--vd)}
-.rlink{margin-top:5px;border:0;background:none;padding:2px 0;color:var(--v);font-weight:600;font-size:14px;display:inline-flex;align-items:center;gap:7px}
+.rlink{margin-top:6px;border:1px solid transparent;background:none;padding:3px 8px 3px 3px;margin-left:-3px;border-radius:9px;color:var(--v);font-weight:700;font-size:14px;display:inline-flex;align-items:center;gap:8px}
+.rlink:hover{background:var(--card,#fff);border-color:var(--ln)}
+.rfaces{display:inline-flex;gap:3px}.rfaces .av{border-radius:6px!important}
+.rlink small{font-weight:400}
 .rlink small{color:var(--sb);font-weight:400}
 .mt{position:absolute;right:18px;top:-14px;display:none;background:#fff;border:1px solid var(--ln);border-radius:10px;box-shadow:0 6px 18px rgba(38,19,37,.1);padding:3px;gap:2px;z-index:4}
 .msg:hover .mt,.msg.menu .mt{display:flex}
@@ -280,8 +291,12 @@ textarea.inp{height:auto;min-height:70px;padding:10px 13px;resize:vertical}
  .mh .tt b{font-size:16px}.mh .tt small{font-size:12.5px}
  .mh .hide-m{display:none!important}
  .tabs{padding:0 8px}.tb{font-size:14px;padding:0 9px;height:38px}
- .msg{padding:7px 12px;gap:9px}
- .msg .av{width:30px!important;height:30px!important;font-size:12px!important}
+ .msg{padding:7px 14px 5px;gap:10px}
+ .msg.cmp{padding-top:2px;padding-bottom:2px}
+ .msg>.av,.msg>.pav .av{width:36px!important;height:36px!important;font-size:14px!important}
+ .msg .gut{width:36px}
+ .msg .tx{font-size:15.5px}
+ .daysep{margin-top:14px}
  .mt{right:8px;top:-12px}.mt button{padding:0 7px}
  .mm{right:8px}
  .banner,.dec,.daysep,.newsep{margin-left:12px;margin-right:12px}

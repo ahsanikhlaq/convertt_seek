@@ -21,6 +21,8 @@ export type ChatMessage = {
   id: number;
   who: PersonKey;
   time: string;
+  /** backend mode: when it was sent (ISO), for date dividers and grouping */
+  at?: string;
   text: string;
   ai?: boolean;
   client?: boolean;

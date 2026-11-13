@@ -38,7 +38,39 @@ const findMsg = (list: FeedItem[], id: number) => list.find((m): m is ChatMessag
 
 /* ---------------- one message ---------------- */
 
-function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inThread?: boolean }) {
+/** "3:45 PM" for a message (its date shows in the day divider above it). */
+/** When a message was sent: its saved time, or (sample chats) today at its "HH:MM". */
+export function atOf(m: { at?: string; time: string }): string | undefined {
+  if (m.at) return m.at;
+  const t = /^(\d{1,2}):(\d{2})$/.exec(m.time);
+  if (!t) return undefined;
+  const d = new Date();
+  d.setHours(Number(t[1]), Number(t[2]), 0, 0);
+  return d.toISOString();
+}
+
+export function clockOf12(m: { at?: string; time: string }) {
+  const at = atOf(m);
+  if (!at) return m.time;
+  return new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+/** "Today", "Yesterday", "Monday, June 15th" (with the year when it isn't this year). */
+export function dayLabel(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === y.toDateString()) return 'Yesterday';
+  const n = d.getDate();
+  const th = n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th';
+  const wd = d.toLocaleDateString('en-US', { weekday: 'long' });
+  const mo = d.toLocaleDateString('en-US', { month: 'long' });
+  return wd + ', ' + mo + ' ' + n + th + (d.getFullYear() !== today.getFullYear() ? ', ' + d.getFullYear() : '');
+}
+
+function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: FeedRef; inThread?: boolean; compact?: boolean }) {
   const { s, update, ui, setUI, toast, nextId } = useSeek();
   const pop = usePopovers();
   const menuOpen = ui.menu === m.id;
@@ -293,18 +325,24 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
   });
 
   return (
-    <div ref={rowRef} className={'msg' + (m.ai ? ' ai' : '') + (m.client ? ' client' : '') + (menuOpen ? ' menu' : '') + (m.flash ? ' flash' : '')} data-id={m.id}>
-      <Avatar k={m.who} size={36} />
+    <div ref={rowRef} className={'msg' + (compact ? ' cmp' : '') + (m.ai ? ' ai' : '') + (m.client ? ' client' : '') + (menuOpen ? ' menu' : '') + (m.flash ? ' flash' : '')} data-id={m.id}>
+      {compact ? (
+        <span className="gut" title={m.time}>
+          {clockOf12(m).replace(/\s?[AP]M$/i, '')}
+        </span>
+      ) : (
+        <Avatar k={m.who} size={40} />
+      )}
       <div className="bd">
-        <div className="nm">
-          <b>{p.name}</b>
-          {m.ai && <span className="tag ai">AI</span>}
-          {m.client && <span className="tag gold">client</span>}
-          <small>
-            {m.time}
-            {m.edited ? ' · edited' : ''}
-          </small>
-        </div>
+        {!compact && (
+          <div className="nm">
+            <b>{p.name}</b>
+            {m.ai && <span className="tag ai">AI</span>}
+            {m.client && <span className="tag gold">client</span>}
+            <small title={m.time}>{clockOf12(m)}</small>
+            {m.edited && <small className="ed">(edited)</small>}
+          </div>
+        )}
         <div className="tx" style={m.failed ? { opacity: 0.6 } : undefined}>
           <RichText text={m.text} />
         </div>
@@ -367,9 +405,18 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
             </button>
           </div>
         )}
+        {compact && m.edited && <small className="ed">(edited)</small>}
         {!inThread && feed.threads && m.thread && m.thread.length > 0 && (
           <button type="button" className="rlink" onClick={openThread}>
-            {m.thread.length} {m.thread.length === 1 ? 'reply' : 'replies'} <small>last {m.thread[m.thread.length - 1].time}</small>
+            <span className="rfaces">
+              {[...new Set(m.thread.map((r) => r.who))].slice(0, 4).map((k) => (
+                <Avatar key={k} k={k} size={24} />
+              ))}
+            </span>
+            <span className="rn">
+              {m.thread.length} {m.thread.length === 1 ? 'reply' : 'replies'}
+            </span>
+            <small>Last reply {m.thread[m.thread.length - 1].time}</small>
           </button>
         )}
         {(isSaved || (backendOn && m.pinned)) && (
@@ -623,20 +670,48 @@ function DecisionRow({ c }: { c: DecisionCard }) {
 
 /* ---------------- feed ---------------- */
 
-export function FeedItemView({ item, feed, inThread }: { item: FeedItem; feed: FeedRef; inThread?: boolean }) {
-  if (item.kind === 'new') return <div className="newsep">New</div>;
+export function FeedItemView({ item, feed, inThread, compact }: { item: FeedItem; feed: FeedRef; inThread?: boolean; compact?: boolean }) {
+  if (item.kind === 'new') return <div className="newsep"><span>New</span></div>;
   if (item.kind === 'dec') return <DecisionRow c={item} />;
-  if (backendOn) return <LiveMessage m={item} feed={feed} inThread={inThread} />;
-  return <MessageRow m={item} feed={feed} inThread={inThread} />;
+  if (backendOn) return <LiveMessage m={item} feed={feed} inThread={inThread} compact={compact} />;
+  return <MessageRow m={item} feed={feed} inThread={inThread} compact={compact} />;
+}
+
+const GROUP_MS = 5 * 60_000;
+/** Day dividers before each new day, and whether a message joins the one above (same person, within 5 minutes). */
+export function layoutFeed(items: FeedItem[]) {
+  const out: ({ day: string; key: string } | { item: FeedItem; compact: boolean })[] = [];
+  let prev: ChatMessage | null = null;
+  let lastDay = '';
+  for (const it of items) {
+    const at = it.kind === 'msg' ? atOf(it) : undefined;
+    if (at) {
+      const day = new Date(at).toDateString();
+      if (day !== lastDay) {
+        out.push({ day: dayLabel(at), key: 'day:' + day });
+        lastDay = day;
+        prev = null;
+      }
+    }
+    if (it.kind !== 'msg') {
+      out.push({ item: it, compact: false });
+      prev = null;
+      continue;
+    }
+    const compact = !!prev && prev.who === it.who && !it.ai && !prev.ai && !!at && !!atOf(prev) && Date.parse(at) - Date.parse(atOf(prev)!) < GROUP_MS && !(prev.thread && prev.thread.length);
+    out.push({ item: it, compact });
+    prev = it;
+  }
+  return out;
 }
 
 /** A saved message with the decisions logged from it underneath (clients only see Client chat ones). */
-function LiveMessage({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inThread?: boolean }) {
+function LiveMessage({ m, feed, inThread, compact }: { m: ChatMessage; feed: FeedRef; inThread?: boolean; compact?: boolean }) {
   const { s } = useSeek();
   const decs = decisionsFor(s, m.id);
   return (
     <>
-      <MessageRow m={m} feed={feed} inThread={inThread} />
+      <MessageRow m={m} feed={feed} inThread={inThread} compact={compact} />
       {decs.map((d) => (
         <LiveDecisionRow key={d.id} d={d} />
       ))}
@@ -662,9 +737,15 @@ export function Feed({ feed, banner, footer, children }: { feed: FeedRef; banner
   return (
     <div className="feed" id="feed" ref={ref}>
       {banner}
-      {items.map((m) => (
-        <FeedItemView key={m.kind + m.id} item={m} feed={feed} />
-      ))}
+      {layoutFeed(items).map((x) =>
+        'day' in x ? (
+          <div key={x.key} className="daysep" role="separator">
+            <span>{x.day}</span>
+          </div>
+        ) : (
+          <FeedItemView key={x.item.kind + x.item.id} item={x.item} feed={feed} compact={x.compact} />
+        ),
+      )}
       {children}
       {footer}
     </div>

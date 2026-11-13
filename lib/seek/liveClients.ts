@@ -82,6 +82,7 @@ export function useLiveClients(): LiveClients | null {
     id: toUiId(r.id),
     who: keyFor(r.user_id, me.current),
     time: timeLabel(r.created_at),
+    at: r.created_at,
     text: r.body,
     files: r.files?.length ? r.files : undefined,
     card: r.card ?? undefined,

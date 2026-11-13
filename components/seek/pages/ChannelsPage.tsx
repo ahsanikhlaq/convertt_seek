@@ -140,7 +140,7 @@ export function ChannelsPage() {
     const showJump = !live && wsId === 'C' && ch === 'launch-squad' && !s.seenNew;
     body = (
       <>
-        <Feed feed={feed} banner={<div className="daysep">Today</div>} />
+        <Feed feed={feed} />
         {showJump && (
           <button
             type="button"

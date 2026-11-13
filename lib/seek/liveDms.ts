@@ -40,7 +40,7 @@ export function useLiveDms(): LiveDms | null {
   currentRef.current = current;
 
   const key = (userId: string) => keyFor(userId, me.current);
-  const toMsg = (r: Row, flash = false): ChatMessage => ({ kind: 'msg', id: toUiId(r.id), who: key(r.user_id), time: timeLabel(r.created_at), text: r.body, files: r.files?.length ? r.files : undefined, pinned: !!r.pinned_at, edited: !!r.edited_at, card: r.card ?? undefined, flash });
+  const toMsg = (r: Row, flash = false): ChatMessage => ({ kind: 'msg', id: toUiId(r.id), who: key(r.user_id), time: timeLabel(r.created_at), at: r.created_at, text: r.body, files: r.files?.length ? r.files : undefined, pinned: !!r.pinned_at, edited: !!r.edited_at, card: r.card ?? undefined, flash });
 
   /** Registers a conversation so it shows in the list (with no messages loaded yet). */
   const remember = (thread: string, other: string, last = '') => {

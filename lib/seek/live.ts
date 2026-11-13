@@ -131,7 +131,7 @@ export function useLiveChat(): LiveChat | null {
     const byId = new Map<number, ChatMessage>();
     for (const r of rows) {
       if (r.parent_id == null) {
-        const m: ChatMessage = { kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), text: r.body, files: r.files?.length ? r.files : undefined, pinned: !!r.pinned_at, edited: !!r.edited_at, card: r.card ?? undefined };
+        const m: ChatMessage = { kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), at: r.created_at, text: r.body, files: r.files?.length ? r.files : undefined, pinned: !!r.pinned_at, edited: !!r.edited_at, card: r.card ?? undefined };
         roots.push(m);
         byId.set(r.id, m);
       }
@@ -164,7 +164,7 @@ export function useLiveChat(): LiveChat | null {
         const list = (w.msgs[name] ||= []);
         if (r.parent_id == null) {
           if (list.some((m) => m.id === toUiId(r.id))) return;
-          list.push({ kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), text: r.body, files: r.files?.length ? r.files : undefined, flash: r.user_id === meRef.current });
+          list.push({ kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), at: r.created_at, text: r.body, files: r.files?.length ? r.files : undefined, flash: r.user_id === meRef.current });
         } else {
           const root = list.find((m): m is ChatMessage => m.kind === 'msg' && m.id === toUiId(r.parent_id!));
           if (!root) return;
