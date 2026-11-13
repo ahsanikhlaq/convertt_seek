@@ -9,6 +9,7 @@ import { useSeek } from '@/lib/seek/store';
 import { CodeInput } from '../CodeInput';
 import { backendOn } from '@/lib/seek/backend';
 import { LiveClientsPage } from './LiveClientPages';
+import { Ic } from '../icons';
 
 export function InvitePage() {
   // with a backend: the Clients screen with the invite pop-up open; the demo keeps the prototype's walkthrough
@@ -43,7 +44,7 @@ function DemoInvitePage() {
       d.cs = 'HB';
       d.cTab = 'Client chat';
     });
-    toast('Chris joined Hollow & Bright ✓');
+    toast('Chris joined Hollow & Bright');
     router.push(ROUTES.clients);
   };
 
@@ -51,7 +52,7 @@ function DemoInvitePage() {
     <main className="inv">
       <div className="hd">
         <Link className="btn sm" href={ROUTES.clients}>
-          ← Clients
+          <Ic n="back" size={14} /> Clients
         </Link>
         <h1>Invite a client</h1>
         <div className="steps">
@@ -59,7 +60,7 @@ function DemoInvitePage() {
             <span key={t} style={{ display: 'contents' }}>
               {n > 0 && <hr />}
               <span className={i.step > n + 1 ? 'd' : i.step === n + 1 ? 'c' : ''}>
-                <i>{i.step > n + 1 ? '✓' : n + 1}</i>
+                <i>{i.step > n + 1 ? <Ic n="check" size={12} /> : n + 1}</i>
                 <span className="hide-m">{t}</span>
               </span>
             </span>
@@ -98,7 +99,7 @@ function DemoInvitePage() {
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" className="btn" onClick={() => toast('Invite link copied')}>
-                🔗 Copy invite link
+                <Ic n="link" /> Copy invite link
               </button>
               <button type="submit" className="btn pri" style={{ flex: 1 }}>
                 Send invite

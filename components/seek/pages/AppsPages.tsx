@@ -8,6 +8,7 @@ import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Switch } from '../ui';
+import { Ic } from '../icons';
 
 function AppsSide({ active }: { active: 'apps' | 'agents' }) {
   const { toast, setUI } = useSeek();
@@ -122,7 +123,7 @@ function LiveAgentsPage() {
           </div>
         </div>
         <div className="banner v" style={{ margin: 0 }}>
-          ✦{' '}
+          <Ic n="ai" size={14} />{' '}
           <span>
             Agents are set up but not running yet: they start once the AI connection is added (a Claude API key, saved on the
             server by an admin). Your choices here are kept and apply from then on.
@@ -130,7 +131,7 @@ function LiveAgentsPage() {
         </div>
         {pa && (
           <div className="banner gold" style={{ margin: 0 }}>
-            ⏸ <span>All AI is paused for everyone. Agents keep their settings and resume when you turn this off.</span>
+            <Ic n="pause" /> <span>All AI is paused for everyone. Agents keep their settings and resume when you turn this off.</span>
           </div>
         )}
         <div className="ag">
@@ -139,7 +140,7 @@ function LiveAgentsPage() {
             return (
               <div key={a.key} className={'agc' + (!st.enabled || pa ? ' off' : '')}>
                 <div className="ct">
-                  <span className="ic">✦</span>
+                  <span className="ic"><Ic n="ai" size={18} /></span>
                   <div>
                     <b>{a.name}</b>
                     <small>{a.does}</small>
@@ -200,7 +201,7 @@ function LiveAgentsPage() {
                 <small>Every action and change, with sources</small>
               </div>
               <button type="button" className="x" onClick={() => setLogOf(null)} aria-label="Close log">
-                ×
+                <Ic n="close" size={16} />
               </button>
             </div>
             <div className="pb">
@@ -318,14 +319,14 @@ function DemoAgentsPage() {
         </div>
         {pa && (
           <div className="banner gold" style={{ margin: 0 }}>
-            ⏸ <span>All AI is paused for everyone. Agents keep their settings and resume when you turn this off.</span>
+            <Ic n="pause" /> <span>All AI is paused for everyone. Agents keep their settings and resume when you turn this off.</span>
           </div>
         )}
         <div className="ag">
           {s.agents.map((a, i) => (
             <div key={a.n} className={'agc' + (!a.on || pa ? ' off' : '')}>
               <div className="ct">
-                <span className="ic">✦</span>
+                <span className="ic"><Ic n="ai" size={18} /></span>
                 <div>
                   <b>{a.n}</b>
                   <small>{a.d}</small>
@@ -408,7 +409,7 @@ function DemoAgentsPage() {
                 <small>Every action, with sources</small>
               </div>
               <button type="button" className="x" onClick={() => setUI({ logOf: null })} aria-label="Close log">
-                ×
+                <Ic n="close" size={16} />
               </button>
             </div>
             <div className="pb">
@@ -585,7 +586,7 @@ export function AppsPage() {
           ))}
         </div>}
         <div className="banner v" style={{ margin: 0 }}>
-          🛡{' '}
+          <Ic n="shield" size={14} />{' '}
           <span>
             Apps can't be given access to client spaces. Anything automatic that reaches a client is listed in <b>What reaches clients</b>.
           </span>

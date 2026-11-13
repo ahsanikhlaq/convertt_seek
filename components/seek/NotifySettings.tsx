@@ -5,6 +5,7 @@ import { backendOn, DEFAULT_NOTIFY, saveNotify, sb, type NotifyPrefs, type Notif
 import { inSchedule } from '@/lib/seek/prefs';
 import { useSeek } from '@/lib/seek/store';
 import { Switch } from './ui';
+import { Ic } from './icons';
 
 /**
  * Slack-style notification preferences: what notifies you, threads and huddles, keywords, a schedule, desktop
@@ -29,7 +30,7 @@ export function useNotifyPrefs() {
 const LEVELS: [NotifyPrefs['level'], string, string][] = [
   ['all', 'Everything', 'Every new message in channels you can see, plus DMs and mentions'],
   ['mentions', 'DMs, mentions and keywords', 'Recommended. Thread replies and huddles too, if they’re on below'],
-  ['nothing', 'Nothing', 'No sounds or banners. Everything still shows in 🔔'],
+  ['nothing', 'Nothing', 'No sounds or banners. Everything still shows under the bell'],
 ];
 
 export function WhatToNotify() {
@@ -92,7 +93,7 @@ export function Keywords() {
           <span key={k} className="kw">
             {k}
             <button type="button" aria-label={'Remove ' + k} onClick={() => void save({ keywords: np.keywords.filter((x) => x !== k) }, '“' + k + '” removed')}>
-              ×
+              <Ic n="close" size={16} />
             </button>
           </span>
         ))}
@@ -252,7 +253,7 @@ export function ChannelExceptions() {
       {chans.map((c) => (
         <div key={c.cid} className="nchan">
           <b>
-            {c.private ? '🔒 ' : '# '}
+            {c.private ? <Ic n="lock" size={13} /> : <Ic n="hash" size={13} />}
             {c.id}
           </b>
           <select className="inp" aria-label={'Notifications for #' + c.id} value={levelOf(c.tier)} onChange={(e) => void set(c.cid!, c.id, e.target.value as Level)}>

@@ -5,6 +5,7 @@ import { PEOPLE, type FileRef } from '@/lib/seek/data';
 import { extOf, fileUrl, isAudio, isImage, isVideo, sendFiles, sizeLabel, type FileTarget, type SharedFile } from '@/lib/seek/liveFiles';
 import { useSeek } from '@/lib/seek/store';
 import { showPreviews } from '@/lib/seek/prefs';
+import { Ic } from './icons';
 
 /** The composer's attach handler for a conversation (null target: attaching isn't available there). */
 export function useAttach(target: FileTarget | null) {
@@ -61,7 +62,7 @@ function Media({ f }: { f: FileRef }) {
     <div className="fmedia">
       {src ? video ? <video src={src} controls playsInline preload="metadata" /> : <audio src={src} controls preload="metadata" /> : <small>Loading…</small>}
       <small>
-        {video ? '🎥 Video message' : '🎤 Voice message'} · {sizeLabel(f.size)}
+        {video ? <><Ic n="video" size={14} /> Video message</> : <><Ic n="mic" size={14} /> Voice message</>} · {sizeLabel(f.size)}
       </small>
     </div>
   );
@@ -116,7 +117,7 @@ export function FileList({ files, empty, lanes, me }: { files: SharedFile[] | nu
             Open
           </button>
           <button type="button" className="btn sm ghost" onClick={() => void open(f, true)} aria-label={'Download ' + f.name}>
-            ⇩
+            <Ic n="download" />
           </button>
         </div>
       ))}

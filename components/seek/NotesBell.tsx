@@ -7,8 +7,9 @@ import type { Note } from '@/lib/seek/data';
 import { markNotesRead, openNote } from '@/lib/seek/liveNotes';
 import { useSeek } from '@/lib/seek/store';
 import { Avatar } from './ui';
+import { Ic, type IconKey } from './icons';
 
-const ICON: Record<Note['kind'], string> = { dm: '✉', mention: '@', reply: '↩', client: '◆', team: '◆', approval: '✓', task: '☐', reminder: '⏰', channel: '#', keyword: '★', huddle: '🎧' };
+const ICON: Record<Note['kind'], IconKey> = { dm: 'mail', mention: 'at', reply: 'reply', client: 'users', team: 'users', approval: 'check', task: 'task', reminder: 'alarm', channel: 'hash', keyword: 'star', huddle: 'huddle' };
 
 function ago(iso: string) {
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -86,7 +87,7 @@ export function NotesBell({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
         aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'}
         aria-expanded={open}
       >
-        🔔{unread > 0 && <span className="badge" style={{ marginLeft: 2 }}>{unread > 99 ? '99+' : unread}</span>}
+        <Ic n="bell" size={18} />{unread > 0 && <span className="badge" style={{ marginLeft: 2 }}>{unread > 99 ? '99+' : unread}</span>}
       </button>
       {open && (
         <div className="notes" role="dialog" aria-label="Notifications">
@@ -100,14 +101,14 @@ export function NotesBell({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
           </div>
           {perm === 'default' && (
             <button type="button" className="ndesk" onClick={askDesktop}>
-              🖥 Get desktop alerts when Seek isn’t in front
+              <Ic n="monitor" /> Get desktop alerts when Seek isn’t in front
             </button>
           )}
           <div className="nl">
             {notes.length ? (
               notes.map((n) => (
                 <button key={n.id} type="button" className={'ni' + (n.read ? '' : ' unread')} onClick={() => void go(n)}>
-                  {n.actor ? <Avatar k={n.actor} size={30} /> : <span className="av" style={{ width: 30, height: 30 }}>{ICON[n.kind]}</span>}
+                  {n.actor ? <Avatar k={n.actor} size={30} /> : <span className="av" style={{ width: 30, height: 30 }}><Ic n={ICON[n.kind]} /></span>}
                   <span className="x">
                     <b>{n.title}</b>
                     <small>{n.body}</small>

@@ -9,6 +9,7 @@ import { useSeek } from '@/lib/seek/store';
 import { NotesBell } from './NotesBell';
 import { usePopovers } from './Popovers';
 import { Avatar, Icon, Logo, ModeSeg, OrgMark, StatusDot, type IconName } from './ui';
+import { Ic } from './icons';
 
 export function useWorkspaceSwitch() {
   const { s, update, setUI, toast } = useSeek();
@@ -86,7 +87,7 @@ function Rail({ active }: { active: RouteKey }) {
         </button>
       ))}
       <button type="button" className="wsb add" onClick={() => toast('Create or join another workspace')} aria-label="Add a workspace">
-        ＋
+        <Ic n="plus" size={18} />
       </button>
       <span className="sep"></span>
       {NAV.map(([r, i, l]) => {
@@ -122,7 +123,7 @@ function TopBar() {
         Theme
       </button>
       <button type="button" className="tsearch" onClick={() => setUI({ palette: true })}>
-        ⌕ <span>Search {backendOn ? s.ws.name || 'Seek' : WORKSPACES[s.wsId].name}</span>
+        <Ic n="search" /> <span>Search {backendOn ? s.ws.name || 'Seek' : WORKSPACES[s.wsId].name}</span>
         <kbd>⌘K</kbd>
       </button>
       <div className="tr">
@@ -138,16 +139,16 @@ function TopBar() {
             toast(dark ? 'Light mode on' : 'Dark mode on');
           }}
         >
-          {dark ? '☀' : '☾'}
+          {dark ? <Ic n="sun" /> : <Ic n="moon" />}
         </button>
         <button type="button" className="btn sm ghost" onClick={() => toast('Help centre opens in a new tab')}>
-          ? Help
+          <Ic n="help" /> Help
         </button>
         {backendOn ? (
           <NotesBell />
         ) : (
           <button type="button" className="btn sm ghost" onClick={() => toast('3 new notifications')} aria-label="Notifications, 3 new">
-            🔔<span className="badge" style={{ marginLeft: 2 }}>3</span>
+            <Ic n="bell" size={18} /><span className="badge" style={{ marginLeft: 2 }}>3</span>
           </button>
         )}
         <button type="button" className="tme" onClick={() => setUI((u) => ({ profile: !u.profile }))} aria-label="Your profile">
@@ -170,7 +171,7 @@ export function Sidebar({ title, sub, action, children }: { title: string; sub: 
         <div className="dbrand">
           <Logo />
           <button type="button" className="btn sm" style={{ marginLeft: 'auto' }} onClick={(e) => pop.toggleTheme(e.currentTarget)}>
-            🎨 Theme
+            <Ic n="palette" /> Theme
           </button>
         </div>
         <div className="mrow">
@@ -192,12 +193,12 @@ export function Sidebar({ title, sub, action, children }: { title: string; sub: 
           </b>
           {action}
           <button type="button" className="btn sm ghost close" style={{ display: 'none' }} onClick={() => setUI({ sideOpen: false })} aria-label="Close menu">
-            ✕
+            <Ic n="close" />
           </button>
         </div>
         <small>{sub}</small>
         <button type="button" className="search" onClick={() => setUI({ palette: true, sideOpen: false })} style={{ width: '100%', textAlign: 'left' }}>
-          ⌕ Search {backendOn ? s.ws.name || 'Seek' : WORKSPACES[s.wsId].name} <kbd>⌘K</kbd>
+          <Ic n="search" /> Search {backendOn ? s.ws.name || 'Seek' : WORKSPACES[s.wsId].name} <kbd>⌘K</kbd>
         </button>
       </div>
       <div className="sl">{children}</div>
@@ -212,7 +213,7 @@ export function MainHeader({ title, sub, right, below }: { title: React.ReactNod
     <>
       <div className="mh">
         <button type="button" className="menu" onClick={() => setUI((u) => ({ sideOpen: !u.sideOpen }))} aria-label="Menu">
-          ☰
+          <Ic n="menu" size={20} />
         </button>
         <span className="mlogo" aria-hidden="true">
           S
@@ -248,7 +249,7 @@ export function Pane({ title, sub, icon, onClose, children }: { title: React.Rea
           {sub && <small>{sub}</small>}
         </div>
         <button type="button" className="x" onClick={onClose} aria-label="Close panel">
-          ×
+          <Ic n="close" size={16} />
         </button>
       </div>
       <div className="pb">{children}</div>

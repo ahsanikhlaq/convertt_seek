@@ -16,6 +16,7 @@ import { FileList, useAttach } from '../Files';
 import { startHuddle } from '@/lib/seek/liveExtras';
 import { CanvasEditor, PinsList, SavedDialog, ScheduledDialog, TasksDialog, useSchedule } from '../Extras';
 import { channelFiles, type SharedFile } from '@/lib/seek/liveFiles';
+import { Ic } from '../icons';
 
 const TEAM: PersonKey[] = ['AH', 'SY', 'MO', 'ZA'];
 const TABS = ['Messages', 'Files', 'Canvas', 'Pins'];
@@ -55,14 +56,14 @@ export function ChannelsPage() {
       sub={backendOn ? `Team · ${ws.channels.length} channels · ${team.length} ${team.length === 1 ? 'person' : 'people'}` : WORKSPACES[wsId].sub}
       action={
         <button type="button" className="btn sm" onClick={() => setCreating(true)} aria-label="New channel">
-          ＋
+          <Ic n="plus" size={18} />
         </button>
       }
     >
       <div className="sg lbl">Channels</div>
       {ws.channels.map((x) => (
         <button key={x.id} type="button" className={'si' + (x.id === ch ? ' on' : '') + (x.unread ? ' unread' : '')} aria-current={x.id === ch ? 'page' : undefined} onClick={() => open(x.id)}>
-          <span className="h" title={x.private ? 'Private channel' : undefined}>{x.private ? '🔒' : '#'}</span>
+          <span className="h" title={x.private ? 'Private channel' : undefined}>{x.private ? <Ic n="lock" size={14} /> : <Ic n="hash" size={14} />}</span>
           <span className="x">
             <b>{x.id}</b>
           </span>
@@ -71,23 +72,23 @@ export function ChannelsPage() {
       ))}
       {!live && (
         <button type="button" className="si" onClick={() => toast('Browse all ' + ws.channels.length + ' channels')}>
-          ＋ Browse channels
+          <Ic n="plus" size={14} /> Browse channels
         </button>
       )}
       {live && (
         <button type="button" className="si" onClick={() => setCreating(true)}>
-          ＋ New channel
+          <Ic n="plus" size={14} /> New channel
         </button>
       )}
       {live && (
         <button type="button" className="si" onClick={() => setInviting(true)}>
-          ＋ Invite people
+          <Ic n="plus" size={14} /> Invite people
         </button>
       )}
       {live && <div className="sg lbl">You</div>}
       {live && (
         <button type="button" className="si" onClick={() => setListing('tasks')}>
-          <span className="h">☐</span>
+          <span className="h"><Ic n="task" size={14} /></span>
           <span className="x">
             <b>Tasks</b>
           </span>
@@ -96,7 +97,7 @@ export function ChannelsPage() {
       )}
       {live && (
         <button type="button" className="si" onClick={() => setListing('saved')}>
-          <span className="h">★</span>
+          <span className="h"><Ic n="star" size={14} /></span>
           <span className="x">
             <b>Saved</b>
           </span>
@@ -105,7 +106,7 @@ export function ChannelsPage() {
       )}
       {live && (
         <button type="button" className="si" onClick={() => setListing('scheduled')}>
-          <span className="h">⏱</span>
+          <span className="h"><Ic n="clock" size={14} /></span>
           <span className="x">
             <b>Scheduled</b>
           </span>
@@ -114,7 +115,7 @@ export function ChannelsPage() {
       {!live && <div className="sg lbl">Starred</div>}
       {!live && (
         <button type="button" className="si" onClick={() => open(ws.channels[0].id)}>
-          <span className="h">★</span>
+          <span className="h"><Ic n="star" size={14} /></span>
           <span className="x">
             <b>{ws.channels[0].id}</b>
             <small>pinned brief</small>
@@ -152,7 +153,7 @@ export function ChannelsPage() {
               if (f) f.scrollTop = f.scrollHeight;
             }}
           >
-            ↓ 2 new messages
+            <Ic n="down" size={14} /> 2 new messages
           </button>
         )}
         <Composer key={wsId + ch} placeholder={'Message #' + ch} people={team} onSend={(t) => (live ? void live.send(ch, t) : send(t))} onAttach={attach} onSchedule={schedule} />
@@ -221,7 +222,7 @@ export function ChannelsPage() {
   return (
     <Shell active="channels" side={side} pane={ui.thread != null ? <ThreadPane feed={feed} people={team} onReply={live ? (root, t, also) => void live.reply(ch, root, t, also) : undefined} /> : undefined}>
       <MainHeader
-        title={(c.private ? '🔒 ' : '# ') + ch}
+        title={<span className="mtl">{c.private ? <Ic n="lock" size={16} /> : <Ic n="hash" size={16} />}{ch}</span>}
         sub={c.desc}
         right={
           <>
@@ -251,20 +252,20 @@ export function ChannelsPage() {
                 toast('Notifications: ' + n);
               }}
             >
-              🔔 {live ? (c.tier === 'Muted' ? 'Mute' : c.tier ?? 'Normal') : s.notif}
+              <Ic n="bell" /> {live ? (c.tier === 'Muted' ? 'Mute' : c.tier ?? 'Normal') : s.notif}
             </button>
             {live && c.private && (
               <button type="button" className="btn sm" onClick={() => setMembersOf(ch)} aria-label={'Members of #' + ch}>
-                👥 <span className="hide-m">Members</span>
+                <Ic n="users" /> <span className="hide-m">Members</span>
               </button>
             )}
             <button type="button" className="btn sm" onClick={async () => {
-                if (!live) return toast('🎧 Huddle started · others can join');
+                if (!live) return toast('Huddle started · others can join');
                 if (!c.cid) return;
                 const err = await startHuddle({ channel: c.cid });
-                toast(err ?? '🎧 Huddle started · everyone in #' + ch + ' can join');
+                toast(err ?? 'Huddle started · everyone in #' + ch + ' can join');
               }}>
-              🎧 Huddle
+              <Ic n="huddle" /> Huddle
             </button>
           </>
         }
@@ -336,5 +337,5 @@ function ChannelFiles({ cid, me, name }: { cid: string | null; me: string | null
       alive = false;
     };
   }, [cid, withFiles]);
-  return <FileList files={cid ? files : []} me={me} empty={'No files yet. Use ＋ in the message box (or drop files on it) to share one in #' + name + '.'} />;
+  return <FileList files={cid ? files : []} me={me} empty={'No files yet. Use the + button in the message box (or drop files on it) to share one in #' + name + '.'} />;
 }

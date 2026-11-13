@@ -33,7 +33,7 @@ export function PauseSelect({ id = 'pause' }: { id?: string }) {
           </option>
         ))}
       </select>
-      <em>No sounds or desktop alerts while paused; everything still shows in 🔔. They come back on by themselves.</em>
+      <em>No sounds or desktop alerts while paused; everything still shows under the bell. They come back on by themselves.</em>
     </div>
   );
 }

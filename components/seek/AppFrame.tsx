@@ -23,6 +23,7 @@ import { WorkspaceSettings } from './WorkspaceSettings';
 import { PauseSelect } from './PauseSelect';
 import { usePopovers } from './Popovers';
 import { Avatar, OrgMark } from './ui';
+import { Ic, StatusMark } from './icons';
 
 /**
  * Wraps every screen and hosts the palette, profile and shortcuts. In demo mode, as in the product prototype,
@@ -372,7 +373,7 @@ function ProfileDrawer() {
         <div className="ph">
           <b>Profile</b>
           <button type="button" className="x" onClick={close} aria-label="Close profile">
-            ×
+            <Ic n="close" size={16} />
           </button>
         </div>
         <div className="pb">
@@ -383,7 +384,7 @@ function ProfileDrawer() {
               {backendOn && (
                 <>
                   <button type="button" className="pf-photo" disabled={uploading} onClick={() => photoIn.current?.click()} aria-label="Change your photo" title="Change your photo">
-                    ✎
+                    <Ic n="edit" size={14} />
                   </button>
                   <input
                     ref={photoIn}
@@ -402,7 +403,7 @@ function ProfileDrawer() {
               <b className="pf-n">{s.me.name}</b>
               <small>{s.me.title}</small>
               <span className="pf-s">
-                {st[2]} {s.status.t}
+                <StatusMark k={s.status.k} /> {s.status.t}
               </span>
             </div>
           </div>
@@ -411,7 +412,7 @@ function ProfileDrawer() {
               Set a status
             </div>
             <div className="pf-st">
-              {STATUSES.map(([k, t, i]) => (
+              {STATUSES.map(([k, t]) => (
                 <button
                   key={k}
                   type="button"
@@ -425,7 +426,7 @@ function ProfileDrawer() {
                     toast('Status: ' + t);
                   }}
                 >
-                  {i} {t}
+                  <StatusMark k={k} /> {t}
                 </button>
               ))}
             </div>
@@ -460,17 +461,17 @@ function ProfileDrawer() {
           <PauseSelect id="pf-pause" />
           <div className="pf-ac">
             <button type="button" className="btn" onClick={(e) => pop.toggleTheme(e.currentTarget)}>
-              🎨 Theme & branding
+              <Ic n="palette" /> Theme & branding
             </button>
             {backendOn ? (
               org && (
                 <button type="button" className="btn" onClick={() => setWsOpen(true)}>
-                  ⚙ Workspace settings
+                  <Ic n="settings" /> Workspace settings
                 </button>
               )
             ) : (
               <button type="button" className="btn ghost" onClick={() => setConfirmReset(true)}>
-                ↺ Reset workspace data
+                <Ic n="reset" /> Reset workspace data
               </button>
             )}
           </div>
@@ -482,11 +483,12 @@ function ProfileDrawer() {
               router.push(ROUTES.account);
             }}
           >
+            <Ic n="settings" size={18} />
             <span>
-              ⚙ Account settings
+              Account settings
               <small>Notifications, sounds, messages, time zone, sign-in</small>
             </span>
-            <i aria-hidden="true">›</i>
+            <Ic n="chevron" />
           </button>
         </div>
         <div className="mf" style={{ display: 'flex', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--ln)' }}>

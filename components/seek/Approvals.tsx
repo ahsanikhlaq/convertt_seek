@@ -14,6 +14,7 @@ import {
 } from '@/lib/seek/liveApprovals';
 import { useSeek } from '@/lib/seek/store';
 import { Modal, PromptDialog } from './Dialogs';
+import { Ic } from './icons';
 
 export type Approver = { userId: string; name: string };
 
@@ -163,7 +164,7 @@ export function ApprovalsTab({
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <p style={{ margin: 0, color: 'var(--mu)', flex: 1, minWidth: 220 }}>Formal sign-off on exact versions. A “yes” in Client chat is a decision, not an approval.</p>
           <button type="button" className="btn gold" onClick={ask}>
-            ＋ Request approval
+            <Ic n="plus" size={14} /> Request approval
           </button>
         </div>
       )}
@@ -194,7 +195,7 @@ export function ApprovalsTab({
               </small>
               {a.status === 'approved' && a.respondedAt && (
                 <small style={{ color: 'var(--ok)', fontWeight: 600 }}>
-                  ✓ Approved by {nameFor(a.approver, me)} · {dayTime(a.respondedAt)} · logged as a decision
+                  <Ic n="check" size={14} /> Approved by {nameFor(a.approver, me)} · {dayTime(a.respondedAt)} · logged as a decision
                 </small>
               )}
               {a.status === 'changes' && (
@@ -213,7 +214,7 @@ export function ApprovalsTab({
                       done(await respondApproval(a.id, true), 'Approved · the team has been told');
                     }}
                   >
-                    ✓ Approve
+                    <Ic n="check" /> Approve
                   </button>
                   <button type="button" className="btn big" onClick={() => setChanging(a)}>
                     Request changes

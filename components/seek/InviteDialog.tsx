@@ -6,6 +6,7 @@ import { isEmail } from '@/lib/seek/format';
 import { useSeek } from '@/lib/seek/store';
 import { Modal } from './Dialogs';
 import { OrgMark } from './ui';
+import { Ic } from './icons';
 
 /** Copies text, with a fallback for browsers that block the clipboard API. */
 export async function copyText(text: string): Promise<boolean> {
@@ -44,7 +45,7 @@ export function EmailTags({ emails, onChange, placeholder = 'Add email, press En
         <span key={e}>
           {e}
           <button type="button" aria-label={'Remove ' + e} onClick={() => onChange(emails.filter((x) => x !== e))}>
-            ×
+            <Ic n="close" size={16} />
           </button>
         </span>
       ))}
@@ -205,7 +206,7 @@ export function InviteDialog({
                   const on = picked.includes(c.id);
                   return (
                     <button key={c.id} type="button" className={'chip' + (on ? ' on' : '')} aria-pressed={on} onClick={() => setPicked((xs) => (on ? xs.filter((x) => x !== c.id) : [...xs, c.id]))}>
-                      {on ? '✓ ' : '🔒 '}
+                      {on ? <Ic n="check" size={14} /> : <Ic n="lock" size={14} />}
                       {c.name}
                     </button>
                   );

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { backendOn, saveSound } from '@/lib/seek/backend';
 import { playSound, SOUNDS, type SoundKey } from '@/lib/seek/sounds';
 import { useSeek } from '@/lib/seek/store';
+import { Ic } from './icons';
 
 /**
  * Notification settings: the sound (six to choose from, with a preview), its volume, which notifications play it,
@@ -60,7 +61,7 @@ export function SoundSettings({ bare }: { bare?: boolean }) {
             ))}
           </select>
           <button type="button" className="btn" aria-label="Play the sound" title="Play" onClick={() => playSound(v.key as SoundKey, v.volume)}>
-            ▶
+            <Ic n="play" size={14} />
           </button>
         </div>
       </div>

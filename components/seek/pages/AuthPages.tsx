@@ -30,6 +30,7 @@ import { applyAccount, setMe, useSeek } from '@/lib/seek/store';
 import { CodeInput, codeComplete } from '../CodeInput';
 import { Avatar, Logo, OrgMark } from '../ui';
 import { THEMES } from '@/lib/seek/data';
+import { Ic } from '../icons';
 
 function Brand({ children }: { children?: React.ReactNode }) {
   return (
@@ -146,7 +147,7 @@ export function SignupPage() {
       return;
     }
     if (!backendOn) {
-      toast('Email verified ✓');
+      toast('Email verified');
       toSetup();
       return;
     }
@@ -159,7 +160,7 @@ export function SignupPage() {
       return;
     }
     update((d) => applyAccount(d, account));
-    toast('Email verified ✓');
+    toast('Email verified');
     // a new owner goes straight to organisation setup; invited people set up their profile first
     router.push(!account.workspace && !account.clientSpaces.length ? ROUTES.setup : !account.onboarded ? ROUTES.welcome : homeOf(account));
   };
@@ -259,7 +260,7 @@ export function SignupPage() {
                 </button>
               </form>
               <div className="note">
-                ✉ <span>We'll email you a 6-digit code. There is no password to remember.</span>
+                <Ic n="mail" /> <span>We'll email you a 6-digit code. There is no password to remember.</span>
               </div>
               <p className="fine">
                 By continuing, you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy policy</a>.
@@ -268,7 +269,7 @@ export function SignupPage() {
           ) : (
             <>
               <button type="button" className="btn sm ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setStep('email')}>
-                ← Change email
+                <Ic n="back" size={14} /> Change email
               </button>
               <div>
                 <h1>Check your email</h1>
@@ -501,7 +502,7 @@ export function SetupPage() {
     });
     toast(
       failed
-        ? `${n} is ready. ${failed} invite email${failed === 1 ? '' : 's'} couldn’t be sent; use ＋ Invite people to try again`
+        ? `${n} is ready. ${failed} invite email${failed === 1 ? '' : 's'} couldn’t be sent; use Invite people to try again`
         : `Workspace ${n} is ready${sent ? ` · ${sent} invite${sent === 1 ? '' : 's'} sent` : ''}`,
     );
     router.push(ROUTES.channels);
@@ -537,7 +538,7 @@ export function SetupPage() {
           <div className="creates">
             {creates.map(([a, b]) => (
               <div key={a}>
-                {a === 'Clients' || a === 'Decisions' ? '◆' : '#'} {a}
+                {a === 'Clients' || a === 'Decisions' ? <Ic n="decision" size={13} /> : <Ic n="hash" size={13} />} {a}
                 <small>{b}</small>
               </div>
             ))}
@@ -555,11 +556,11 @@ export function SetupPage() {
         <div className="in">
           <div className="steps">
             <span className="d">
-              <i>✓</i>Account
+              <i><Ic n="check" size={12} /></i>Account
             </span>
             <hr />
             <span className="d">
-              <i>✓</i>Verify
+              <i><Ic n="check" size={12} /></i>Verify
             </span>
             <hr />
             <span className="c">
@@ -665,7 +666,7 @@ export function SetupPage() {
                   />
                   <em className="mono" style={{ color: free === false ? 'var(--red)' : free ? 'var(--ok)' : undefined }}>
                     {slug || 'your-team'}.seek.app
-                    {backendOn && slug ? (!/^[a-z0-9]{2,40}$/.test(slug) ? ' · use at least 2 letters' : free === null ? ' · checking…' : free ? ' ✓' : ' · taken, try another name') : ''}
+                    {backendOn && slug ? (!/^[a-z0-9]{2,40}$/.test(slug) ? ' · use at least 2 letters' : free === null ? ' · checking…' : free ? ' · available' : ' · taken, try another name') : ''}
                   </em>
                 </div>
                 <div className="fld">
@@ -727,7 +728,7 @@ export function SetupPage() {
                       })
                     }
                   >
-                    ×
+                    <Ic n="close" size={16} />
                   </button>
                 </span>
               ))}
@@ -757,7 +758,7 @@ export function SetupPage() {
           <button type="button" className="btn lg pri" onClick={() => void submit()} disabled={saving}>
             {saving ? 'Setting up your workspace…' : 'Continue to #general'}
           </button>
-          <p className="fine">🔒 Secure sign-in · Your data is encrypted</p>
+          <p className="fine"><Ic n="lock" size={13} /> Secure sign-in · Your data is encrypted</p>
         </div>
       </div>
     </main>
@@ -817,7 +818,7 @@ export function WelcomePage() {
       await saveProfile({ name: acc.name.trim() || acc.email.split('@')[0], title: acc.title, timeZone: acc.timeZone || undefined });
       const fresh = await currentAccount(true);
       if (fresh) update((d) => applyAccount(d, fresh));
-      toast('Welcome to ' + client.name + ' 👋');
+      toast('Welcome to ' + client.name);
       router.replace(ROUTES.clients);
       return;
     }
@@ -962,7 +963,7 @@ export function WelcomePage() {
       applyAccount(d, acc);
       if (acc.workspace) d.workspaces.C.ch = 'general';
     });
-    toast(invite ? `Welcome to ${invite.workspace} 👋` : 'Profile saved');
+    toast(invite ? `Welcome to ${invite.workspace}` : 'Profile saved');
     router.push(homeOf(acc));
   };
 
@@ -1053,7 +1054,7 @@ export function WelcomePage() {
           {phase === 'code' && clientJoin && (
             <div className="cjoin">
               <span className="av" style={{ width: 52, height: 52, background: 'var(--gold)', borderRadius: 14, fontSize: 20 }}>
-                ✦
+                <Ic n="ai" size={22} />
               </span>
               <div>
                 <b style={{ fontSize: 13, color: 'var(--sb)' }}>Your project space</b>
@@ -1125,7 +1126,7 @@ export function WelcomePage() {
             <>
               <div className="steps">
                 <span className="d">
-                  <i>✓</i>
+                  <i><Ic n="check" size={12} /></i>
                   {invite ? 'Invite' : 'Account'}
                 </span>
                 <hr />
@@ -1176,7 +1177,7 @@ export function WelcomePage() {
                   {busy ? 'Saving…' : hasWorkspace ? `Continue to ${ws ?? 'your workspace'}` : 'Continue'}
                 </button>
               </form>
-              <p className="fine">🔒 Only people in your organization can see your profile.</p>
+              <p className="fine"><Ic n="lock" size={13} /> Only people in your organization can see your profile.</p>
             </>
           )}
         </div>
@@ -1249,7 +1250,7 @@ export function JoinPage() {
       applyAccount(d, account);
       d.workspaces.C.ch = 'general';
     });
-    if (account.onboarded) toast(`Welcome to ${org?.name ?? 'the team'} 👋`);
+    if (account.onboarded) toast(`Welcome to ${org?.name ?? 'the team'}`);
     router.replace(account.onboarded ? ROUTES.channels : ROUTES.welcome);
   };
 
@@ -1384,7 +1385,7 @@ export function JoinPage() {
           {phase === 'code' && (
             <>
               <button type="button" className="btn sm ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setPhase('email')}>
-                ← Change email
+                <Ic n="back" size={14} /> Change email
               </button>
               <div>
                 <h1>Check your email</h1>

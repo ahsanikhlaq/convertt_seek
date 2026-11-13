@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSeek } from '@/lib/seek/store';
 import { Modal } from './Dialogs';
+import { Ic } from './icons';
 
 /**
  * Voice and video messages, recorded in the browser (MediaRecorder) and sent as a file in the conversation, where
@@ -223,7 +224,7 @@ export function VideoRecorder({ onSend, onClose }: { onSend: (file: File, secs: 
           </>
         ) : state === 'recording' ? (
           <button type="button" className="btn pri" style={{ flex: 1, background: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => rec.current?.stop()}>
-            ■ Stop ({clockOf(secs)} / {clockOf(VIDEO_MAX)})
+            <Ic n="stop" size={12} /> Stop ({clockOf(secs)} / {clockOf(VIDEO_MAX)})
           </button>
         ) : (
           <>
@@ -231,7 +232,7 @@ export function VideoRecorder({ onSend, onClose }: { onSend: (file: File, secs: 
               Cancel
             </button>
             <button type="button" className="btn pri" style={{ flex: 1 }} disabled={state !== 'ready'} onClick={start}>
-              ● Start recording
+              <Ic n="dot" size={10} className="recdot" /> Start recording
             </button>
           </>
         )
@@ -247,7 +248,7 @@ export function VideoRecorder({ onSend, onClose }: { onSend: (file: File, secs: 
           {state === 'starting'
             ? 'Starting your camera…'
             : state === 'recording'
-              ? '● Recording. Press Stop when you’re done.'
+              ? 'Recording. Press Stop when you’re done.'
               : state === 'done'
                 ? 'Watch it back, then send it or record again.'
                 : 'Up to 2 minutes. It’s sent to this conversation, and plays right in the chat.'}

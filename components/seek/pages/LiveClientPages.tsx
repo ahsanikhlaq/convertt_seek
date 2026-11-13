@@ -23,6 +23,7 @@ import { FileList, useAttach } from '../Files';
 import { PinsList, useSchedule } from '../Extras';
 import { useApprovals } from '@/lib/seek/liveApprovals';
 import { spaceFiles, type SharedFile } from '@/lib/seek/liveFiles';
+import { Ic } from '../icons';
 
 /**
  * Client spaces with a real backend. The agency's team sees every client with Client chat, Team notes, Status,
@@ -69,7 +70,7 @@ function ClientList({ live, current, onOpen, waits, onNew }: { live: LiveClients
       sub="one space per client"
       action={
         <NewClientButton className="btn sm" onNew={onNew}>
-          ＋ New
+          <Ic n="plus" size={14} /> New
         </NewClientButton>
       }
     >
@@ -103,7 +104,7 @@ function ClientList({ live, current, onOpen, waits, onNew }: { live: LiveClients
         </div>
       )}
       <NewClientButton className="si" onNew={onNew}>
-        ＋ New client
+        <Ic n="plus" size={14} /> New client
       </NewClientButton>
     </Sidebar>
   );
@@ -173,7 +174,7 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
               <br />
               <br />
               <button type="button" className="btn pri" onClick={() => setNewClient(true)}>
-                ＋ New client
+                <Ic n="plus" size={14} /> New client
               </button>
             </div>
           ) : (
@@ -221,14 +222,14 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
           banner={
             team ? (
               <div className="banner v">
-                🔒{' '}
+                <Ic n="lock" size={13} />{' '}
                 <span>
                   <b>Team notes</b> are private to your team. {readers} never see this.
                 </span>
               </div>
             ) : (
               <div className="banner gold">
-                👁{' '}
+                <Ic n="eye" size={13} />{' '}
                 <span>
                   <b>{readers}</b> {clients.length > 1 || !clients.length ? 'see' : 'sees'} everything in Client chat
                   {joined.length < clients.length ? ` (${pending(sp).length} still to join)` : ''}. For internal discussion, use{' '}
@@ -353,12 +354,12 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
         ) : (
           <div className="timer ok">
             <b>Reply target: {sp.replyTarget}</b>
-            {waits.get(sp.id)?.lastReply ? 'Replied ✓ Nobody is waiting.' : 'Nobody is waiting. Shown to ' + readers + ' in their space.'}
+            {waits.get(sp.id)?.lastReply ? 'Replied. Nobody is waiting.' : 'Nobody is waiting. Shown to ' + readers + ' in their space.'}
           </div>
         );
       })()}
       <button type="button" className="btn pri" onClick={() => setScheduling(true)}>
-        ▤ Schedule a call
+        <Ic n="calendar" /> Schedule a call
       </button>
       {waiting.length > 0 && (
         <div className="card">
@@ -403,10 +404,10 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
               ))}
             </span>
             <button type="button" className="btn sm" onClick={() => setScheduling(true)} title="Schedule a call">
-              ▤ <span className="hide-m">Schedule</span>
+              <Ic n="calendar" /> <span className="hide-m">Schedule</span>
             </button>
             <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Space details" aria-pressed={ui.paneOpen}>
-              ⓘ
+              <Ic n="info" />
             </button>
           </>
         }
@@ -488,13 +489,13 @@ function Checklist({ live, sp, client }: { live: LiveClients; sp: Space; client?
                   className={'btn sm' + (x.doneAt ? '' : client ? ' gold' : ' pri')}
                   onClick={async () => {
                     await live.tick(x.id, !x.doneAt);
-                    toast(x.doneAt ? 'Marked as not done' : 'Done ✓');
+                    toast(x.doneAt ? 'Marked as not done' : 'Done');
                   }}
                 >
                   {x.doneAt ? 'Undo' : 'Mark done'}
                 </button>
               )}
-              {x.kind === 'profile' && <span className={'tag' + (x.doneAt ? ' ok' : '')}>{x.doneAt ? '✓ Done' : 'When they sign in'}</span>}
+              {x.kind === 'profile' && <span className={'tag' + (x.doneAt ? ' ok' : '')}>{x.doneAt ? <><Ic n="check" size={12} /> Done</> : 'When they sign in'}</span>}
             </div>
           );
         })}
@@ -666,7 +667,7 @@ function LiveMeetings({ live }: { live: LiveClients }) {
         right={
           sp ? (
             <button type="button" className="btn sm pri" onClick={() => setScheduling(true)}>
-              ▤ Schedule with {sp.name}
+              <Ic n="calendar" /> Schedule with {sp.name}
             </button>
           ) : undefined
         }
@@ -837,7 +838,7 @@ function ClientPortal({ live }: { live: LiveClients }) {
           feed={feed}
           banner={
             <div className="banner gold">
-              🕑 <span>{replyLine}</span>
+              <Ic n="clock" /> <span>{replyLine}</span>
             </div>
           }
         />
@@ -971,7 +972,7 @@ function SpaceFiles({ space, me, lanes }: { space: string; me: string | null; la
       files={files}
       me={me}
       lanes={lanes}
-      empty={lanes ? 'No files yet. Share one with ＋ in Client chat (the client sees it) or Team notes (they never do).' : 'No files yet. Files you and the team share in the conversation show here.'}
+      empty={lanes ? 'No files yet. Share one with the + button in Client chat (the client sees it) or Team notes (they never do).' : 'No files yet. Files you and the team share in the conversation show here.'}
     />
   );
 }
@@ -998,7 +999,7 @@ function UpcomingCalls({ space }: { space: string }) {
         return (
           <div key={m.id} className="frow">
             <span className="av" style={{ width: 36, height: 36, borderRadius: 9, background: 'var(--v)', fontSize: 15, flex: 'none' }}>
-              ▤
+              <Ic n="calendar" />
             </span>
             <span className="x">
               <b>{m.title}</b>
@@ -1052,7 +1053,7 @@ function ClientSettings({ agency }: { agency: string }) {
           <option value="daily">Once a day (summary)</option>
           <option value="off">Never (I’ll check Seek)</option>
         </select>
-        <em>Saved now; email starts once {agency}’s Seek email sending is set up. You always see updates here and in 🔔.</em>
+        <em>Saved now; email starts once {agency}’s Seek email sending is set up. You always see updates here and under the bell.</em>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button

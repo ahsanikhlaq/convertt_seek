@@ -16,6 +16,7 @@ import { FileList, useAttach } from '../Files';
 import { PinsList, useSchedule } from '../Extras';
 import { startHuddle } from '@/lib/seek/liveExtras';
 import { dmFiles, type SharedFile } from '@/lib/seek/liveFiles';
+import { Ic, StatusMark } from '../icons';
 
 export function DmsPage() {
   // with a backend, DMs are real (lib/seek/liveDms.ts); the demo below stays exactly like the prototype
@@ -107,7 +108,7 @@ function LiveDmsPage() {
       sub="private conversations"
       action={
         <button type="button" className="btn sm" onClick={() => setPicking(true)} aria-label="New message">
-          ✎
+          <Ic n="compose" />
         </button>
       }
     >
@@ -124,7 +125,7 @@ function LiveDmsPage() {
       {others.length > 0 && <div className="sg lbl">Teammates</div>}
       {others.map((k) => person(k, 'Start a conversation', () => void open(k)))}
       <button type="button" className="si" onClick={() => setInviting(true)}>
-        ＋ Invite people
+        <Ic n="plus" size={14} /> Invite people
       </button>
     </Sidebar>
   );
@@ -186,14 +187,14 @@ function LiveDmsPage() {
               className="btn sm"
               onClick={async () => {
                 const err = await startHuddle({ dmWith: dm });
-                toast(err ?? '📞 Call started · ' + nameOf(dm) + ' can join from the chat');
+                toast(err ?? 'Call started · ' + nameOf(dm) + ' can join from the chat');
               }}
             >
-              📞 Call
+              <Ic n="phone" /> Call
             </button>
           )}
           <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Profile details" aria-pressed={ui.paneOpen}>
-            ⓘ
+            <Ic n="info" />
           </button>
         </>
       }
@@ -221,7 +222,7 @@ function LiveDmsPage() {
           <div className="kv" style={{ marginTop: 12 }}>
             <div>
               <span>Status</span>
-              <b>{(STATUSES.find((x) => x[0] === info.status) ?? STATUSES[0])[2]} {(STATUSES.find((x) => x[0] === info.status) ?? STATUSES[0])[1]}</b>
+              <b className="mtl"><StatusMark k={info.status} /> {(STATUSES.find((x) => x[0] === info.status) ?? STATUSES[0])[1]}</b>
             </div>
             <div>
               <span>Local time</span>
@@ -248,7 +249,7 @@ function LiveDmsPage() {
       {header}
       {dm && tab === 'Files' ? (
         <div className="pg">
-          <FileList files={files} me={s.meId ?? null} empty={'No files yet. Share one with ＋ in the message box.'} />
+          <FileList files={files} me={s.meId ?? null} empty={'No files yet. Share one with the + button in the message box.'} />
         </div>
       ) : dm && tab === 'Pins' ? (
         <div className="pg">
@@ -256,7 +257,7 @@ function LiveDmsPage() {
         </div>
       ) : dm ? (
         <>
-          <Feed key={dm} feed={feed} banner={<div className="banner v">🔒 This conversation is just between you and {nameOf(dm)}.</div>} />
+          <Feed key={dm} feed={feed} banner={<div className="banner v"><Ic n="lock" size={14} /> This conversation is just between you and {nameOf(dm)}.</div>} />
           <Composer key={'c' + dm} placeholder={'Message ' + nameOf(dm)} people={[dm, 'AH']} onSend={(t) => void live?.send(t)} onAttach={attach} onSchedule={schedule} />
         </>
       ) : (
@@ -264,7 +265,7 @@ function LiveDmsPage() {
           <div className="empty" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
             <span>{live?.ready ? 'Pick a teammate to start a private conversation.' : 'Loading your conversations…'}</span>
             <button type="button" className="btn pri" onClick={() => setPicking(true)}>
-              ✎ New message
+              <Ic n="compose" /> New message
             </button>
           </div>
         </div>
@@ -313,7 +314,7 @@ function DemoDmsPage() {
       sub="private conversations"
       action={
         <button type="button" className="btn sm" onClick={() => toast('Pick people to message')} aria-label="New message">
-          ✎
+          <Ic n="compose" />
         </button>
       }
     >
@@ -354,7 +355,7 @@ function DemoDmsPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" className="btn sm" onClick={() => toast('🎧 Huddle started · others can join')}>
+          <button type="button" className="btn sm" onClick={() => toast('Huddle started · others can join')}>
             Call
           </button>
           <button type="button" className="btn sm" onClick={() => toast('Muted for 1 hour')}>
@@ -397,11 +398,11 @@ function DemoDmsPage() {
         sub={`${p.role} · available · 14:10 in Lahore`}
         right={
           <>
-            <button type="button" className="btn sm" onClick={() => toast('🎧 Huddle started · others can join')}>
-              🎧 Huddle
+            <button type="button" className="btn sm" onClick={() => toast('Huddle started · others can join')}>
+              <Ic n="huddle" /> Huddle
             </button>
             <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Profile details" aria-pressed={ui.paneOpen}>
-              ⓘ
+              <Ic n="info" />
             </button>
           </>
         }
@@ -415,7 +416,7 @@ function DemoDmsPage() {
           </div>
         }
       />
-      <Feed key={dm} feed={feed} banner={<div className="banner v">🔒 This conversation is just between you and {p.name}.</div>} />
+      <Feed key={dm} feed={feed} banner={<div className="banner v"><Ic n="lock" size={14} /> This conversation is just between you and {p.name}.</div>} />
       <Composer key={'c' + dm} placeholder={'Message ' + p.name} people={[dm, 'AH']} onSend={send} />
     </Shell>
   );

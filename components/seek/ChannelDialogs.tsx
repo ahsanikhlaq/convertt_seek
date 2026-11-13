@@ -7,6 +7,7 @@ import type { LiveChat } from '@/lib/seek/live';
 import { useSeek } from '@/lib/seek/store';
 import { Modal } from './Dialogs';
 import { Avatar, SeenText } from './ui';
+import { Ic } from './icons';
 
 const nameOf = (k: PersonKey) => PEOPLE[k]?.name ?? 'Someone';
 
@@ -98,7 +99,7 @@ export function NewChannelDialog({ live, onClose, onCreated }: { live: LiveChat;
           <label>Who can see it</label>
           <div className="chips">
             <button type="button" className={'chip' + (priv ? ' on' : '')} aria-pressed={priv} onClick={() => setPriv(true)}>
-              🔒 Only people I add
+              <Ic n="lock" size={14} /> Only people I add
             </button>
             <button type="button" className={'chip' + (!priv ? ' on' : '')} aria-pressed={!priv} onClick={() => setPriv(false)}>
               # Everyone in {s.ws.name || 'the workspace'}
@@ -146,7 +147,7 @@ export function ChannelMembersDialog({ live, channel, onClose }: { live: LiveCha
   };
 
   return (
-    <Modal title={`🔒 #${channel} · members`} onClose={onClose} width={460} footer={<button type="button" className="btn" onClick={onClose}>Done</button>}>
+    <Modal title={<span className="mtl"><Ic n="lock" />#{channel} · members</span>} onClose={onClose} width={460} footer={<button type="button" className="btn" onClick={onClose}>Done</button>}>
       <div className="mb">
         <em>Only these people {live.admin ? '(and admins)' : 'and admins'} can see #{channel}.</em>
         {members === null ? (

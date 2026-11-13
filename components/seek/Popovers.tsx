@@ -7,6 +7,7 @@ import { backendOn } from '@/lib/seek/backend';
 import { addEmoji, clearEmoji, reloadEmoji } from '@/lib/seek/liveEmoji';
 import { Emoji, ModeSeg } from './ui';
 import { PromptDialog, ConfirmDialog } from './Dialogs';
+import { Ic } from './icons';
 
 type EmojiReq = { anchor: HTMLElement; onPick: (k: string) => void };
 
@@ -195,7 +196,7 @@ function EmojiPicker({ req, onClose }: { req: EmojiReq; onClose: () => void }) {
         </div>
         <div className="emf">
           <label className="btn sm">
-            <input type="file" accept="image/*" hidden onChange={(e) => onFile(e.target.files?.[0])} />⬆ Add your emoji / icon
+            <input type="file" accept="image/*" hidden onChange={(e) => onFile(e.target.files?.[0])} /><Ic n="upload" size={14} /> Add your emoji / icon
           </label>
           {cat === 'Custom' && s.custom.length > 0 && (
             <button type="button" className="btn sm ghost danger" onClick={() => setClearing(true)}>

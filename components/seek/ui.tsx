@@ -4,6 +4,7 @@ import { Fragment } from 'react';
 import { PEOPLE, type PersonKey, type Mode } from '@/lib/seek/data';
 import { useSeek } from '@/lib/seek/store';
 import { usePresenceOf } from '@/lib/seek/presence';
+import { Ic, type IconKey } from './icons';
 
 /** A person's picture or initials. With `presence`, a green dot shows when they're active (grey ring when not). */
 export function Avatar({ k, size = 32, className = '', presence }: { k: PersonKey; size?: number; className?: string; presence?: boolean }) {
@@ -16,7 +17,7 @@ export function Avatar({ k, size = 32, className = '', presence }: { k: PersonKe
       aria-hidden="true"
       title={p.name}
     >
-      {p.photo ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit', display: 'block' }} /> : k === 'AI' ? '✦' : (p.initials ?? k)}
+      {p.photo ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit', display: 'block' }} /> : k === 'AI' ? <Ic n="ai" size={Math.round(size * 0.5)} /> : (p.initials ?? k)}
     </span>
   );
   if (!pr.known) return av;
@@ -116,10 +117,10 @@ export function Switch({ on, onClick, disabled, label, danger }: { on: boolean; 
 
 export function ModeSeg() {
   const { s, update, toast } = useSeek();
-  const opts: [Mode, string, string][] = [
-    ['light', '☀', 'Light'],
-    ['dark', '☾', 'Dark'],
-    ['system', '◐', 'System'],
+  const opts: [Mode, IconKey, string][] = [
+    ['light', 'sun', 'Light'],
+    ['dark', 'moon', 'Dark'],
+    ['system', 'system', 'System'],
   ];
   return (
     <div className="modeseg" role="group" aria-label="Appearance">
@@ -136,7 +137,7 @@ export function ModeSeg() {
             toast(k === 'system' ? 'Appearance follows your device' : k === 'dark' ? 'Dark mode on' : 'Light mode on');
           }}
         >
-          {i} <span>{l}</span>
+          <Ic n={i} size={14} /> <span>{l}</span>
         </button>
       ))}
     </div>

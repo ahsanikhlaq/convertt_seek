@@ -17,11 +17,11 @@ import {
   type OrgPerson,
   type PendingInvite,
 } from '@/lib/seek/backend';
-import { STATUSES } from '@/lib/seek/data';
 import { useSeek } from '@/lib/seek/store';
 import { Modal } from './Dialogs';
 import { InviteLink } from './InviteDialog';
 import { OrgMark, Switch } from './ui';
+import { StatusMark } from './icons';
 
 type Tab = 'General' | 'People' | 'Invites';
 
@@ -97,7 +97,6 @@ export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
     toast('Logo updated');
   };
 
-  const statusOf = (k: string) => STATUSES.find((x) => x[0] === k)?.[2] ?? '🟢';
   const label = (p: OrgPerson) => p.name.trim() || p.email.split('@')[0];
 
   return (
@@ -199,7 +198,7 @@ export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <b>
                         {label(p)}
-                        {you ? ' (you)' : ''} <small style={{ fontWeight: 400 }}>{statusOf(p.status)}</small>
+                        {you ? ' (you)' : ''} <StatusMark k={p.status} />
                       </b>
                       <small>
                         {p.email}

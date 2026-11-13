@@ -14,18 +14,19 @@ import { usePopovers } from '../Popovers';
 import { ClientRail, MainHeader, Shell } from '../Shell';
 import { SoundSettings } from '../SoundSettings';
 import { Avatar, ModeSeg, Switch } from '../ui';
+import { Ic } from '../icons';
 
 /**
  * Account settings: everything about you that isn't in the quick profile panel, in tabs like Slack's preferences.
  * Most settings are saved to your account (they follow you to other devices); "Messages & media" are per device.
  */
 const TABS = [
-  ['profile', 'Profile', 'Your name, photo and working hours', '👤'],
-  ['notifications', 'Notifications', 'What notifies you, keywords, schedule and sounds', '🔔'],
-  ['messages', 'Messages & media', 'How the message box and pictures behave', '💬'],
-  ['appearance', 'Appearance', 'Light or dark, and your colours', '🎨'],
-  ['region', 'Language & region', 'Your time zone', '🌐'],
-  ['security', 'Account & security', 'Sign-in and devices', '🔒'],
+  ['profile', 'Profile', 'Your name, photo and working hours', 'user'],
+  ['notifications', 'Notifications', 'What notifies you, keywords, schedule and sounds', 'bell'],
+  ['messages', 'Messages & media', 'How the message box and pictures behave', 'message'],
+  ['appearance', 'Appearance', 'Light or dark, and your colours', 'palette'],
+  ['region', 'Language & region', 'Your time zone', 'globe'],
+  ['security', 'Account & security', 'Sign-in and devices', 'lock'],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -38,7 +39,6 @@ export function AccountPage() {
     router.replace(ROUTES.account + '?tab=' + t, { scroll: false });
     setUI({ sideOpen: false });
   };
-  const cur = TABS.find((t) => t[0] === tab)!;
   // keep the open tab in view on narrow screens, where the tab bar scrolls sideways
   useEffect(() => {
     document.querySelector('.acct-tabs [aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
@@ -52,7 +52,7 @@ export function AccountPage() {
           <div className="tabs acct-tabs" role="tablist" aria-label="Account settings">
             {TABS.map(([k, l, , icon]) => (
               <button key={k} type="button" role="tab" id={'at-' + k} aria-selected={tab === k} aria-controls="acct-panel" className={'tb' + (tab === k ? ' on' : '')} onClick={() => go(k)}>
-                <span aria-hidden="true">{icon}</span>
+                <Ic n={icon} />
                 {l}
               </button>
             ))}
@@ -61,10 +61,6 @@ export function AccountPage() {
       />
       <div className="pg">
         <div className="acct" role="tabpanel" id="acct-panel" aria-labelledby={'at-' + tab}>
-          <div className="acct-hd">
-            <h2>{cur[1]}</h2>
-            <p>{cur[2]}</p>
-          </div>
           {tab === 'profile' && <ProfileTab />}
           {tab === 'notifications' && <NotificationsTab />}
           {tab === 'messages' && <MessagesTab />}
@@ -129,8 +125,9 @@ function ProfileTab() {
 
   return (
     <>
-      <section className="card acard">
+      <section className="acard">
         <h3>Photo</h3>
+<div className="abody">
         <div className="aphoto">
           <Avatar k="AH" size={72} />
           {backendOn ? (
@@ -159,9 +156,11 @@ function ProfileTab() {
             }}
           />
         </div>
-      </section>
-      <section className="card acard">
+      </div>
+</section>
+      <section className="acard">
         <h3>About you</h3>
+<div className="abody">
         <div className="grid2">
           <div className="fld">
             <label htmlFor="ac-n">Display name</label>
@@ -186,7 +185,8 @@ function ProfileTab() {
             Save changes
           </button>
         </div>
-      </section>
+      </div>
+</section>
     </>
   );
 }
@@ -207,43 +207,60 @@ function NotificationsTab() {
   };
   return (
     <>
-      <section className="card acard">
+      <section className="acard">
         <h3>Pause</h3>
+<div className="abody">
         <PauseSelect id="ac-pause" />
-      </section>
-      <section className="card acard">
+      </div>
+</section>
+      <section className="acard">
         <h3>Notify me about</h3>
+<div className="abody">
         <WhatToNotify />
-      </section>
-      <section className="card acard">
+      </div>
+</section>
+      <section className="acard">
         <h3>Also notify me about</h3>
+<div className="abody">
         <AlsoNotify />
-      </section>
-      <section className="card acard">
+      </div>
+</section>
+      <section className="acard">
         <h3>Keywords</h3>
+<div className="abody">
         <Keywords />
-      </section>
-      <section className="card acard">
+      </div>
+</section>
+      <section className="acard">
         <h3>Notification schedule</h3>
+<div className="abody">
         <Schedule />
-      </section>
-      <section className="card acard">
+      </div>
+</section>
+      <section className="acard">
         <h3>Desktop notifications</h3>
+<div className="abody">
         <DesktopBanners />
-      </section>
-      <section className="card acard">
+      </div>
+</section>
+      <section className="acard">
         <h3>Sound</h3>
+<div className="abody">
         <SoundSettings bare />
-      </section>
+      </div>
+</section>
       {s.session === 'in' && (
-        <section className="card acard">
+        <section className="acard">
           <h3>Channel-specific notifications</h3>
-          <p className="ahint">Exceptions to your default for single channels. You can also change it with 🔔 in the channel header.</p>
+<div className="abody">
+          <p className="ahint">Exceptions to your default for single channels. You can also change it with the bell in the channel header.</p>
           <ChannelExceptions />
-        </section>
+        </div>
+</section>
       )}
-      <section className="card acard">
+      <section className="acard">
         <h3>Email</h3>
+<div className="abody">
         <div className="fld">
           <label htmlFor="ac-e">Email me about notifications</label>
           <select id="ac-e" className="inp" value={email} onChange={(e) => void saveEmail(e.target.value as typeof email)}>
@@ -251,9 +268,10 @@ function NotificationsTab() {
             <option value="daily">Once a day (summary)</option>
             <option value="off">Never</option>
           </select>
-          <em>Emails go to {s.me.email}. Your choice is saved now; emails start once Seek’s email sending is set up. In-app notifications always show in 🔔.</em>
+          <em>Emails go to {s.me.email}. Your choice is saved now; emails start once Seek’s email sending is set up. In-app notifications always show under the bell.</em>
         </div>
-      </section>
+      </div>
+</section>
     </>
   );
 }
@@ -267,8 +285,9 @@ function MessagesTab() {
     setPrev(showPreviews());
   }, []);
   return (
-    <section className="card acard">
+    <section className="acard">
       <h3>On this device</h3>
+<div className="abody">
       <div className="fld">
         <label htmlFor="ac-enter">When I press Enter in the message box</label>
         <select
@@ -301,7 +320,8 @@ function MessagesTab() {
           }}
         />
       </div>
-    </section>
+    </div>
+</section>
   );
 }
 
@@ -309,20 +329,24 @@ function AppearanceTab() {
   const pop = usePopovers();
   return (
     <>
-      <section className="card acard">
+      <section className="acard">
         <h3>Light or dark</h3>
+<div className="abody">
         <ModeSeg />
         <em className="ahint">System follows your computer&apos;s setting.</em>
-      </section>
-      <section className="card acard">
+      </div>
+</section>
+      <section className="acard">
         <h3>Theme and branding</h3>
+<div className="abody">
         <p className="ahint">Sidebar, background and accent colours. Saved to your account, so they follow you to other devices.</p>
         <div>
           <button type="button" className="btn" onClick={(e) => pop.toggleTheme(e.currentTarget)}>
-            🎨 Change colours
+            <Ic n="palette" /> Change colours
           </button>
         </div>
-      </section>
+      </div>
+</section>
     </>
   );
 }
@@ -360,8 +384,9 @@ function RegionTab() {
     }
   })();
   return (
-    <section className="card acard">
+    <section className="acard">
       <h3>Time zone</h3>
+<div className="abody">
       <div className="fld">
         <label htmlFor="ac-tz">Your time zone</label>
         {all.length ? (
@@ -386,7 +411,8 @@ function RegionTab() {
           </button>
         </div>
       )}
-    </section>
+    </div>
+</section>
   );
 }
 
@@ -408,8 +434,9 @@ function SecurityTab() {
   };
   return (
     <>
-      <section className="card acard">
+      <section className="acard">
         <h3>Sign-in</h3>
+<div className="abody">
         <div className="kv">
           <div>
             <span>Email</span>
@@ -424,9 +451,11 @@ function SecurityTab() {
             <b>None. Seek emails you a 6-digit code, so there&apos;s no password to steal.</b>
           </div>
         </div>
-      </section>
-      <section className="card acard">
+      </div>
+</section>
+      <section className="acard">
         <h3>Devices</h3>
+<div className="abody">
         <p className="ahint">Lost a laptop or used a shared computer? Sign out everywhere except here.</p>
         <div className="aact" style={{ justifyContent: 'flex-start' }}>
           {backendOn && (
@@ -438,7 +467,8 @@ function SecurityTab() {
             Sign out
           </button>
         </div>
-      </section>
+      </div>
+</section>
       {confirm === 'others' && (
         <ConfirmDialog
           title="Sign out of other devices?"

@@ -13,6 +13,7 @@ import { Modal } from '../Dialogs';
 import { Composer, Feed, type FeedRef } from '../Messages';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar, Switch } from '../ui';
+import { Ic } from '../icons';
 
 const TABS: ClientTab[] = ['Client chat', 'Team notes', 'Status', 'Approvals', 'People'];
 const CLIENT_PEOPLE: PersonKey[] = ['CH', 'PR', 'AH', 'MO'];
@@ -67,7 +68,7 @@ function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
       sub="one space per client"
       action={
         <Link className="btn sm" href={ROUTES.invite}>
-          ＋ New
+          <Ic n="plus" size={14} /> New
         </Link>
       }
     >
@@ -148,14 +149,14 @@ function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
           banner={
             team ? (
               <div className="banner v">
-                🔒{' '}
+                <Ic n="lock" size={13} />{' '}
                 <span>
                   <b>Team notes</b> are private to your team. Chris and Priya never see this.
                 </span>
               </div>
             ) : (
               <div className="banner gold">
-                👁{' '}
+                <Ic n="eye" size={13} />{' '}
                 <span>
                   <b>Chris and Priya</b> see everything in Client chat. For internal discussion, use{' '}
                   <button type="button" className="linkbtn" style={{ color: 'inherit', textDecoration: 'underline' }} onClick={() => setTab('Team notes')}>
@@ -199,7 +200,7 @@ function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
           <small style={{ color: 'var(--sb)' }}>Approver: Chris · due Thursday</small>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {s.approval === 'done' ? (
-              <span className="tag ok">✓ Approved by Chris · logged as decision</span>
+              <span className="tag ok"><Ic n="check" size={12} /> Approved by Chris · logged as decision</span>
             ) : (
               <>
                 <button type="button" className="btn sm" onClick={nudge}>
@@ -266,7 +267,7 @@ function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
         </div>
         {s.replied ? (
           <div className="timer ok">
-            <b>Replied ✓</b>Timer stopped when the team replied.
+            <b>Replied</b>Timer stopped when the team replied.
           </div>
         ) : (
           <div className="timer">
@@ -290,7 +291,7 @@ function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
           )}
         </div>
         <Link className="btn pri" href={ROUTES.meetings}>
-          ▤ Schedule a call
+          <Ic n="calendar" /> Schedule a call
         </Link>
       </Pane>
     ) : undefined;
@@ -307,10 +308,10 @@ function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
               <Avatar k="PR" size={26} />
             </span>
             <Link className="btn sm" href={ROUTES.meetings}>
-              ▤ <span className="hide-m">Schedule</span>
+              <Ic n="calendar" /> <span className="hide-m">Schedule</span>
             </Link>
             <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Space details" aria-pressed={ui.paneOpen}>
-              ⓘ
+              <Ic n="info" />
             </button>
           </>
         }

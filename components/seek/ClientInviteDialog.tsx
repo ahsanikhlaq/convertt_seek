@@ -8,6 +8,7 @@ import { learnProfiles } from '@/lib/seek/live';
 import { useSeek } from '@/lib/seek/store';
 import { Modal } from './Dialogs';
 import { copyText } from './InviteDialog';
+import { Ic } from './icons';
 
 /**
  * Invite a client (backend mode): the pop-up from Clients → ＋ New. The client's email, the name of their space, an
@@ -131,7 +132,7 @@ export function ClientInviteDialog({ onClose, onCreated }: { onClose: () => void
       footer={
         <>
           <button type="button" className="btn" disabled={busy || !org} onClick={() => void copyLink()}>
-            🔗 Copy invite link
+            <Ic n="link" /> Copy invite link
           </button>
           <button type="button" className="btn pri" style={{ flex: 1 }} disabled={busy || !org} onClick={() => void send()}>
             {busy ? 'Sending…' : 'Send invite'}
@@ -171,7 +172,7 @@ export function ClientInviteDialog({ onClose, onCreated }: { onClose: () => void
                 const on = team.includes(id);
                 return (
                   <button key={id} type="button" className={'chip' + (on ? ' on' : '')} aria-pressed={on} disabled={!!made} onClick={() => setTeam((t) => (on ? t.filter((x) => x !== id) : [...t, id]))}>
-                    {on ? '✓ ' : ''}
+                    {on ? <Ic n="check" size={14} /> : null}
                     {PEOPLE[id]?.name ?? 'Teammate'}
                   </button>
                 );

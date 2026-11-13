@@ -36,6 +36,7 @@ import { useSeek } from '@/lib/seek/store';
 import { Modal } from './Dialogs';
 import { FileCards } from './Files';
 import { Avatar, RichText } from './ui';
+import { Ic } from './icons';
 
 const nameFor = (id: string, me: string | null) => (id === me ? 'You' : (PEOPLE[id]?.name ?? 'Someone'));
 const when = (iso: string) => {
@@ -160,7 +161,7 @@ export function RemindDialog({ target, onClose }: { target: { uiId?: number; tas
             </button>
           </div>
         </div>
-        <small style={{ color: 'var(--sb)' }}>The reminder arrives in your 🔔 (and as a desktop alert if you turned those on).</small>
+        <small style={{ color: 'var(--sb)' }}>The reminder arrives in your notifications (and as a desktop alert if you turned those on).</small>
       </div>
     </Modal>
   );
@@ -187,7 +188,7 @@ export function SavedDialog({ me, onClose }: { me: string | null; onClose: () =>
     void savedItems().then((l) => setItems(l ?? []));
   }, []);
   return (
-    <Modal title="★ Saved" onClose={onClose} width={560}>
+    <Modal title="Saved" icon={<Ic n="star" />} onClose={onClose} width={560}>
       <div className="mb" style={{ minHeight: 200 }}>
         {!items ? (
           <p className="sub">Loading…</p>
@@ -228,7 +229,7 @@ export function SavedDialog({ me, onClose }: { me: string | null; onClose: () =>
                   });
                 }}
               >
-                ✕
+                <Ic n="close" size={14} />
               </button>
             </div>
           ))
@@ -257,12 +258,13 @@ export function TasksDialog({ me, onClose }: { me: string | null; onClose: () =>
   };
   return (
     <Modal
-      title="☐ Tasks"
+      title="Tasks"
+      icon={<Ic n="task" />}
       onClose={onClose}
       width={580}
       footer={
         <button type="button" className="btn pri" onClick={() => setMaking(true)}>
-          ＋ New task
+          <Ic n="plus" size={14} /> New task
         </button>
       }
     >
@@ -315,7 +317,7 @@ export function TasksDialog({ me, onClose }: { me: string | null; onClose: () =>
                 )}
                 {t.status === 'open' && (
                   <button type="button" className="btn sm ghost" aria-label="Remind me" title="Remind me" onClick={() => setReminding(t.id)}>
-                    ⏰
+                    <Ic n="alarm" size={14} />
                   </button>
                 )}
                 {(t.by === me || t.owner === me) && (
@@ -327,7 +329,7 @@ export function TasksDialog({ me, onClose }: { me: string | null; onClose: () =>
                       if (confirm(`Delete the task “${t.title}”?`)) void act(deleteTask(t.id), 'Task deleted');
                     }}
                   >
-                    ✕
+                    <Ic n="close" size={14} />
                   </button>
                 )}
               </div>
@@ -363,7 +365,7 @@ export function PinsList({ target, me, where, reloadKey = 0, canUnpin = true }: 
       {pins.map((p) => (
         <div key={p.id} className="dec" style={{ margin: 0, boxShadow: 'inset 4px 0 0 var(--v)' }}>
           <div className="k">
-            <span>📌 PINNED</span>
+            <span className="mtl"><Ic n="pin" size={12} /> PINNED</span>
             {p.lane === 'client' && <span className="tag gold">Client chat</span>}
             {p.lane === 'team' && <span className="tag">Team notes</span>}
             <small style={{ marginLeft: 'auto' }}>
@@ -554,12 +556,12 @@ export function ScheduledDialog({ onClose }: { onClose: () => void }) {
     void myScheduled().then((l) => setItems(l ?? []));
   }, []);
   return (
-    <Modal title="⏱ Scheduled" onClose={onClose} width={520}>
+    <Modal title="Scheduled" icon={<Ic n="clock" />} onClose={onClose} width={520}>
       <div className="mb" style={{ minHeight: 160 }}>
         {!items ? (
           <p className="sub">Loading…</p>
         ) : !items.length ? (
-          <div className="empty">Nothing scheduled. Write a message and press ⏱ Later to send it at a set time.</div>
+          <div className="empty">Nothing scheduled. Write a message and press Later to send it at a set time.</div>
         ) : (
           items.map((it) => (
             <div key={it.id} className="frow" style={{ alignItems: 'flex-start' }}>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
+import { Ic } from './icons';
 
 /** Centred modal (bottom sheet on phones). Closes on Escape and on a click outside. */
 export function Modal({
@@ -52,7 +53,7 @@ export function Modal({
             {icon}
             <b id={id}>{title}</b>
             <button type="button" className="btn sm ghost" onClick={onClose} aria-label="Close">
-              ✕
+              <Ic n="close" />
             </button>
           </div>
         )}

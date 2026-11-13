@@ -727,9 +727,9 @@ html.dark :is(.frow,.appr){background-color:var(--card)!important;border-color:v
 .fmedia small{font-size:11.5px;color:var(--sb)}
 
 /* account settings */
-.acct{display:flex;flex-direction:column;gap:14px;max-width:720px;width:100%;margin:0 auto}
-.acard{display:flex;flex-direction:column;gap:12px;padding:16px 18px}
-.acard h3{margin:0;font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+
+
+
 .acard .ahint{margin:0;color:var(--mu);font-size:12.5px;font-style:normal}
 .aphoto{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .aphoto .acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -774,10 +774,45 @@ html.dark :is(.frow,.appr){background-color:var(--card)!important;border-color:v
 /* account settings: full width, sections as tabs along the top */
 .app.wide{grid-template-columns:68px minmax(0,1fr) auto!important}
 .app.wide .mh .menu{display:none}
-.acct-tabs{justify-content:center;gap:4px}
-.acct-tabs .tb{height:44px;padding:0 14px;gap:7px;font-size:13.5px}
-.acct-tabs .tb span{font-size:15px}
-.acct-hd h2{margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em}
-.acct-hd p{margin:2px 0 0;color:var(--mu)}
-@media (max-width:900px){.acct-tabs{justify-content:flex-start}}
-@media (max-width:760px){.acct-tabs .tb{height:40px;padding:0 10px;font-size:12.5px}.acct-tabs .tb span{display:none}}
+
+
+
+
+
+
+
+
+/* icons (Lucide) */
+.lic{flex:none;display:inline-block;vertical-align:-3px}
+.mtl{display:inline-flex;align-items:center;gap:6px}
+.btn .lic{margin:0 -1px}
+.mm button .lic{color:var(--mu)}
+.si .h .lic{vertical-align:-2px}
+.recdot{fill:#d93636;color:#d93636}
+/* status marks */
+.smark{display:inline-block;width:9px;height:9px;border-radius:50%;background:#2eb67d;flex:none;vertical-align:0}
+.smark.mt{background:#e8912d}.smark.fc{background:#8b5cf6}.smark.aw{background:transparent;box-shadow:inset 0 0 0 2px #9a8f9a}
+.pf-st button{display:flex;align-items:center;gap:8px}
+.pf-s{align-items:center;gap:6px}
+
+/* account settings: left-aligned, settings rows */
+.app.wide .pg{padding:8px 28px 40px}
+.acct{display:flex;flex-direction:column;max-width:920px;width:100%}
+.acct-tabs{gap:2px;padding:0 20px}
+.acct-tabs .tb{height:46px;padding:0 12px;gap:8px;font-size:13.5px}
+.acct-tabs .tb .lic{color:var(--sb)}
+.acct-tabs .tb.on .lic{color:var(--v)}
+.acard{display:flex;gap:40px;padding:24px 0;border-bottom:1px solid var(--ln);align-items:flex-start}
+.acard:last-child{border-bottom:0}
+.acard>h3{flex:none;width:220px;margin:0;font-size:14px;font-weight:600;letter-spacing:-.01em;color:var(--ink);line-height:1.4;padding-top:2px}
+.abody{flex:1;min-width:0;display:flex;flex-direction:column;gap:14px}
+.acard .fld{max-width:520px}
+.acard .grid2{max-width:620px}
+.acard .trow{max-width:620px}
+.acard .modeseg{max-width:360px}
+.acard .kv{max-width:620px}
+.acard .aact{justify-content:flex-start}
+.acard .nlevels,.acard .nchans,.acard .kwbox{max-width:620px}
+.acard .sndset{max-width:620px}
+@media (max-width:900px){.acard{flex-direction:column;gap:12px;padding:20px 0}.acard>h3{width:auto}}
+@media (max-width:760px){.app.wide .pg{padding:4px 14px 30px}.acct-tabs{padding:0 6px}.acct-tabs .tb{height:42px;padding:0 10px;font-size:12.5px}.acct-tabs .tb .lic{display:none}}

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Logo } from '../ui';
+import { Ic } from '../icons';
 
 /** Plain public pages that sign-up and Google's sign-in screen link to. */
 function Legal({ title, updated, children }: { title: string; updated: string; children: React.ReactNode }) {
@@ -12,7 +13,7 @@ function Legal({ title, updated, children }: { title: string; updated: string; c
       <p style={{ margin: 0, color: 'var(--sb)', fontSize: 13 }}>Last updated {updated}</p>
       <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 6 }}>{children}</div>
       <p style={{ marginTop: 32 }}>
-        <Link href="/signup">← Back to Seek</Link>
+        <Link href="/signup"><Ic n="back" size={14} /> Back to Seek</Link>
       </p>
     </main>
   );

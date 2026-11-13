@@ -22,6 +22,7 @@ import { editMessage, messageLink, pinMessage, saveMessage } from '@/lib/seek/li
 import { approvalDraft } from '@/lib/seek/liveApprovals';
 import { usePopovers } from './Popovers';
 import { Avatar, Emoji, RichText } from './ui';
+import { Ic } from './icons';
 
 /** Where a feed lives in the state, so actions can write back to it. */
 export type FeedRef = {
@@ -362,7 +363,7 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
               </button>
             ))}
             <button type="button" className="rx add" title="Add reaction" aria-label="Add reaction" onClick={(ev) => pop.openEmoji(ev.currentTarget, react)}>
-              ☺＋
+              <Ic n="react" size={16} />
             </button>
           </div>
         )}
@@ -373,8 +374,8 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
         )}
         {(isSaved || (backendOn && m.pinned)) && (
           <div style={{ fontSize: 11.5, color: 'var(--v)', marginTop: 4, fontWeight: 600, display: 'flex', gap: 10 }}>
-            {backendOn && m.pinned && <span>📌 Pinned</span>}
-            {isSaved && <span>★ Saved</span>}
+            {backendOn && m.pinned && <span className="mtl"><Ic n="pin" size={12} /> Pinned</span>}
+            {isSaved && <span className="mtl"><Ic n="star" size={12} /> Saved</span>}
           </div>
         )}
       </div>
@@ -423,7 +424,7 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
                 setDialog('task');
               }}
             >
-              ☐ Make task <kbd>T</kbd>
+              <Ic n="task" /> Make task <kbd>T</kbd>
             </button>
           )}
           {live && canLog && (
@@ -435,7 +436,7 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
                 setLogging(true);
               }}
             >
-              ◇ Log decision <kbd>D</kbd>
+              <Ic n="decision" /> Log decision <kbd>D</kbd>
             </button>
           )}
           {live && (
@@ -447,22 +448,22 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
                 setDialog('remind');
               }}
             >
-              ⏰ Remind me <kbd>R</kbd>
+              <Ic n="alarm" /> Remind me <kbd>R</kbd>
             </button>
           )}
           {live && canLog && (
             <button type="button" role="menuitem" onClick={() => void togglePin()}>
-              📌 {m.pinned ? 'Unpin' : 'Pin'} <kbd>P</kbd>
+              <Ic n="pin" /> {m.pinned ? 'Unpin' : 'Pin'} <kbd>P</kbd>
             </button>
           )}
           {live && (
             <button type="button" role="menuitem" onClick={() => void toggleSave()}>
-              ★ {isSaved ? 'Remove from saved' : 'Save'} <kbd>S</kbd>
+              <Ic n="star" /> {isSaved ? 'Remove from saved' : 'Save'} <kbd>S</kbd>
             </button>
           )}
           {live && (
             <button type="button" role="menuitem" onClick={() => void copyLink()}>
-              🔗 Copy link <kbd>L</kbd>
+              <Ic n="link" /> Copy link <kbd>L</kbd>
             </button>
           )}
           <button type="button" role="menuitem" onClick={() => void copyText()}>
@@ -478,12 +479,12 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
                 setDialog('edit');
               }}
             >
-              ✎ Edit message <kbd>E</kbd>
+              <Ic n="edit" /> Edit message <kbd>E</kbd>
             </button>
           )}
           {live && m.who === 'AH' && (
             <button type="button" role="menuitem" onClick={() => void remove()} style={{ color: 'var(--red)' }}>
-              🗑 Delete message
+              <Ic n="trash" /> Delete message
             </button>
           )}
         </div>
@@ -491,10 +492,10 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
       {menuOpen && !backendOn && (
         <div className="mm" role="menu">
           <button type="button" role="menuitem" onClick={makeTask}>
-            ☐ Make task <kbd>T</kbd>
+            <Ic n="task" /> Make task <kbd>T</kbd>
           </button>
           <button type="button" role="menuitem" onClick={logDecision}>
-            ◇ Log decision <kbd>D</kbd>
+            <Ic n="decision" /> Log decision <kbd>D</kbd>
           </button>
           <button
             type="button"
@@ -504,7 +505,7 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
               toast('Reminder set for tomorrow 09:00');
             }}
           >
-            ⏰ Remind me <kbd>R</kbd>
+            <Ic n="alarm" /> Remind me <kbd>R</kbd>
           </button>
           <button
             type="button"
@@ -514,7 +515,7 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
               toast('Link copied');
             }}
           >
-            🔗 Copy link <kbd>L</kbd>
+            <Ic n="link" /> Copy link <kbd>L</kbd>
           </button>
         </div>
       )}
@@ -878,7 +879,7 @@ export function Composer({
                 <Avatar k={x.k} size={26} />
               ) : (
                 <span className="av" style={{ width: 26, height: 26, background: 'var(--soft)', color: 'var(--v)', fontSize: 13 }}>
-                  @
+                  <Ic n="at" size={19} />
                 </span>
               )}
               <span className="x">
@@ -891,10 +892,10 @@ export function Composer({
         </div>
       )}
       {recording === 'voice' && (
-        <VoiceRecorder onCancel={() => setRecording(null)} onSend={(f, secs) => void sendRecorded(f, '🎤 Voice message · ' + clockOf(secs))} />
+        <VoiceRecorder onCancel={() => setRecording(null)} onSend={(f, secs) => void sendRecorded(f, 'Voice message · ' + clockOf(secs))} />
       )}
       {recording === 'video' &&
-        createPortal(<VideoRecorder onClose={() => setRecording(null)} onSend={(f, secs) => void sendRecorded(f, '🎥 Video message · ' + clockOf(secs))} />, document.body)}
+        createPortal(<VideoRecorder onClose={() => setRecording(null)} onSend={(f, secs) => void sendRecorded(f, 'Video message · ' + clockOf(secs))} />, document.body)}
       <div className="cr">
         {thread ? (
           <label style={{ fontSize: 12, color: 'var(--sb)', display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -910,7 +911,7 @@ export function Composer({
               title="Attach files (up to 100 MB each)"
               disabled={!!uploading}
             >
-              ＋
+              <Ic n="plus" size={20} />
             </button>
             {onAttach && (
               <input
@@ -926,25 +927,19 @@ export function Composer({
             )}
             {uploading > 0 && <small className="up">Uploading {uploading === 1 ? 'file' : uploading + ' files'}…</small>}
             <button type="button" className="ic" onClick={(e) => pop.openEmoji(e.currentTarget, (k) => insert(k))} aria-label="Emoji">
-              ☺
+              <Ic n="smile" size={20} />
             </button>
             <button type="button" className="ic" onClick={() => insert('', true)} aria-label="Mention someone">
-              @
+              <Ic n="at" size={19} />
             </button>
             {recordable && (
               <button type="button" className="ic" aria-label="Record a voice message" title="Voice message" disabled={!!uploading || !!recording} onClick={() => setRecording('voice')}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="9" y="2" width="6" height="12" rx="3" />
-                  <path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8" />
-                </svg>
+                <Ic n="mic" size={19} />
               </button>
             )}
             {recordable && (
               <button type="button" className="ic" aria-label="Record a video message" title="Video message" disabled={!!uploading || !!recording} onClick={() => setRecording('video')}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="2" y="6" width="14" height="12" rx="2" />
-                  <path d="M16 10l6-3v10l-6-3z" />
-                </svg>
+                <Ic n="video" size={19} />
               </button>
             )}
             {note && <small>{note}</small>}
@@ -963,7 +958,7 @@ export function Composer({
             title="Send later"
             onClick={() => (v.trim() ? setLater(true) : toast('Write the message first, then pick when to send it'))}
           >
-            ⏱ Later
+            <Ic n="clock" /> Later
           </button>
         )}
         {later && onSchedule &&
@@ -1028,7 +1023,7 @@ export function ThreadPane({
           <small>{root.text.slice(0, 34)}…</small>
         </div>
         <button type="button" className="x" onClick={() => setUI({ thread: null })} aria-label="Close thread">
-          ×
+          <Ic n="close" size={16} />
         </button>
       </div>
       <div className="pb" ref={bodyRef}>

@@ -21,6 +21,7 @@ import {
 import { useSeek } from '@/lib/seek/store';
 import { Modal } from './Dialogs';
 import { Switch } from './ui';
+import { Ic } from './icons';
 
 const myZone = () => {
   try {
@@ -263,7 +264,7 @@ export function MeetingCardView({ c }: { c: MeetingCard }) {
         {c.title} · {dayLabel(start)} {clock(start, null)}–{clock(end, null)}
       </b>
       {c.agenda && <small style={{ whiteSpace: 'pre-wrap' }}>{c.agenda}</small>}
-      {c.tool === 'person' && c.link && <small>📍 {c.link}</small>}
+      {c.tool === 'person' && c.link && <small className="mtl"><Ic n="place" size={12} /> {c.link}</small>}
       {!c.cancelled && !over && (
         <div className="a">
           {canJoin && (
@@ -300,7 +301,7 @@ export function HuddleCardView({ c, call }: { c: HuddleCard; call?: boolean }) {
   return (
     <div className="dec meet" style={{ boxShadow: 'inset 4px 0 0 var(--ok)', marginLeft: 0, marginRight: 0 }}>
       <div className="k">
-        <span style={{ color: 'var(--ok)' }}>{call ? '📞 CALL' : '🎧 HUDDLE'}</span>
+        <span style={{ color: 'var(--ok)' }}>{call ? <><Ic n="phone" size={12} /> CALL</> : <><Ic n="huddle" size={12} /> HUDDLE</>}</span>
         {live ? <span className="tag ok">live</span> : <span className="tag">ended</span>}
         <small style={{ marginLeft: 'auto' }}>started {clock(start, null)}</small>
       </div>

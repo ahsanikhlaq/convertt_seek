@@ -10,6 +10,7 @@ import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { PromptDialog } from '../Dialogs';
 import { MainHeader, Shell, Sidebar } from '../Shell';
+import { Ic } from '../icons';
 
 const whereLabel = (w: string) => (w === 'HB' ? 'Hollow & Bright' : w.startsWith('DM ') ? w : '#' + w);
 
@@ -122,7 +123,7 @@ function LiveDecisionsPage() {
           all.length ? (
             <button type="button" className="btn sm" onClick={exportCsv}>
               <span aria-hidden="true" style={{ marginRight: 4 }}>
-                ⇩
+                <Ic n="download" />
               </span>
               Export
             </button>
@@ -320,7 +321,7 @@ function DemoDecisionsPage() {
           none ? undefined : (
             <button type="button" className="btn sm" onClick={exportCsv}>
               <span aria-hidden="true" style={{ marginRight: 4 }}>
-                ⇩
+                <Ic n="download" />
               </span>
               Export
             </button>
