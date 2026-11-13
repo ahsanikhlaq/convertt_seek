@@ -397,8 +397,6 @@ export function SetupPage() {
 
   const creates: [string, string][] = [
     ['general', 'everyone'],
-    ['announcements', 'team news'],
-    ['random', 'off-topic'],
   ];
   if (w.use.includes('Client work')) creates.push(['Clients', 'ready for your first client']);
   if (w.use.includes('Tasks and decisions')) creates.push(['Decisions', 'log and approvals']);
