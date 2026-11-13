@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { saveSound } from '@/lib/seek/backend';
+import { backendOn, saveSound } from '@/lib/seek/backend';
 import { playSound, SOUNDS, type SoundKey } from '@/lib/seek/sounds';
 import { useSeek } from '@/lib/seek/store';
 
@@ -9,7 +9,7 @@ import { useSeek } from '@/lib/seek/store';
  * Notification settings: the sound (six to choose from, with a preview), its volume, which notifications play it,
  * and how long desktop alerts stay on screen. Saved to your account a moment after each change.
  */
-export function SoundSettings() {
+export function SoundSettings({ bare }: { bare?: boolean }) {
   const { s, update, toast } = useSeek();
   const cur = s.me.sound ?? { key: 'chime', volume: 70, play: 'all' as const, alertSecs: 8 };
   const [v, setV] = useState(cur);
@@ -24,7 +24,7 @@ export function SoundSettings() {
       return;
     }
     const id = setTimeout(async () => {
-      const err = await saveSound(v);
+      const err = backendOn ? await saveSound(v) : null;
       if (err) return toast(err);
       update((d) => {
         d.me.sound = v;
@@ -36,9 +36,11 @@ export function SoundSettings() {
 
   return (
     <div className="sndset">
-      <div className="lbl" style={{ marginBottom: 2 }}>
-        Notifications
-      </div>
+      {!bare && (
+        <div className="lbl" style={{ marginBottom: 2 }}>
+          Notifications
+        </div>
+      )}
       <div className="fld">
         <label htmlFor="snd-k">Sound</label>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -112,7 +114,7 @@ export function SoundSettings() {
           Turn on desktop alerts
         </button>
       )}
-      <em style={{ fontSize: 12, color: 'var(--sb)' }}>Pause notifications and Focus status still silence everything except DMs and mentions.</em>
+      <em style={{ fontSize: 12, color: 'var(--sb)' }}>While your status is Focus time, only DMs and mentions make a sound or alert.</em>
     </div>
   );
 }

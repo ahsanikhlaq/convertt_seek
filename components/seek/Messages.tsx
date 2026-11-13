@@ -8,6 +8,7 @@ import { now } from '@/lib/seek/format';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { backendOn } from '@/lib/seek/backend';
+import { enterSends } from '@/lib/seek/prefs';
 import { toDbId } from '@/lib/seek/live';
 import { canRetry, deleteMessage, discardUnsent, removeEverywhere, retryUnsent, setReaction } from '@/lib/seek/liveSync';
 import { decisionFrom, decisionsFor, loadDecisions, logDecision as saveDecision, undoDecision } from '@/lib/seek/liveDecisions';
@@ -849,7 +850,9 @@ export function Composer({
               return;
             }
           }
-          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+          // Enter sends (Shift+Enter: new line), or, if you chose so in Account settings, Ctrl/⌘+Enter sends
+          const sendKey = enterSends() ? !e.shiftKey && !e.ctrlKey && !e.metaKey : e.ctrlKey || e.metaKey;
+          if (e.key === 'Enter' && sendKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             send();
           }

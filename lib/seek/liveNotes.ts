@@ -61,7 +61,8 @@ export async function markNotesRead(ids: number[] | 'all') {
 export function useLiveNotes(me: string | null) {
   const { s, update } = useSeek();
   const on = backendOn && !!me && (s.session === 'in' || s.session === 'client');
-  const paused = s.me.dnd;
+  // a pause ends by itself at its time, even if nothing else changes on screen
+  const pauseEnd = s.me.dnd ? (s.me.dndUntil ? Date.parse(s.me.dndUntil) : Infinity) : 0;
   const focusOnly = s.status.k === 'fc';
   const snd = s.me.sound ?? { key: 'chime', volume: 70, play: 'all' as const, alertSecs: 8 };
 
@@ -90,6 +91,7 @@ export function useLiveNotes(me: string | null) {
         // sound (your choice and volume) and a desktop alert when Seek isn't in front (paused: none; Focus: only
         // mentions and DMs)
         const important = n.kind === 'mention' || n.kind === 'dm' || n.kind === 'approval' || n.kind === 'reminder';
+        const paused = Date.now() < pauseEnd;
         if (!paused && (!focusOnly || important) && (snd.play === 'all' || (snd.play === 'important' && important))) playSound(snd.key as SoundKey, snd.volume);
         const away = typeof document !== 'undefined' && (document.hidden || !document.hasFocus());
         if (away && !paused && (!focusOnly || n.kind === 'mention' || n.kind === 'dm') && 'Notification' in window && Notification.permission === 'granted') {
@@ -105,5 +107,5 @@ export function useLiveNotes(me: string | null) {
       alive = false;
       sb().removeChannel(ch);
     };
-  }, [on, me, paused, focusOnly, snd.key, snd.volume, snd.play, snd.alertSecs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [on, me, pauseEnd, focusOnly, snd.key, snd.volume, snd.play, snd.alertSecs]); // eslint-disable-line react-hooks/exhaustive-deps
 }

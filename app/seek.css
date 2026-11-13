@@ -725,3 +725,19 @@ html.dark :is(.frow,.appr){background-color:var(--card)!important;border-color:v
 .fmedia audio{width:100%;max-width:320px}
 .fmedia video{width:100%;max-width:320px;max-height:260px;border-radius:12px;background:#000}
 .fmedia small{font-size:11.5px;color:var(--sb)}
+
+/* account settings */
+.acct{display:flex;flex-direction:column;gap:14px;max-width:640px;width:100%}
+.acard{display:flex;flex-direction:column;gap:12px;padding:16px 18px}
+.acard h3{margin:0;font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.acard .ahint{margin:0;color:var(--mu);font-size:12.5px;font-style:normal}
+.aphoto{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.aphoto .acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.aphoto .acts small{flex-basis:100%;color:var(--mu)}
+.aact{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.acct-tabs{display:none}
+@media (max-width:760px){.acct-tabs{display:flex}}
+.pf-acct{display:flex;align-items:center;justify-content:space-between;text-align:left;height:auto;padding:10px 12px;width:100%}
+.pf-acct span{display:flex;flex-direction:column;gap:1px;font-weight:600}
+.pf-acct small{font-weight:400;color:var(--mu);font-size:12px}
+.pf-acct i{font-style:normal;font-size:20px;color:var(--mu)}

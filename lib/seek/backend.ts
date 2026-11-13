@@ -539,6 +539,19 @@ export async function saveStatus(s: { status?: string; dndUntil?: string | null 
   return error ? friendly(error.message) : null;
 }
 
+/** How you sign in: 'Google', 'Email code', or both. */
+export async function signInMethods(): Promise<string[]> {
+  const { data } = await sb().auth.getUser();
+  const ps = ((data.user?.app_metadata?.providers as string[] | undefined) ?? [data.user?.app_metadata?.provider as string]).filter(Boolean);
+  return ps.map((p) => (p === 'google' ? 'Google' : p === 'email' ? 'Email code' : p[0].toUpperCase() + p.slice(1)));
+}
+
+/** Signs you out everywhere except this browser. */
+export async function signOutOthers(): Promise<string | null> {
+  const { error } = await sb().auth.signOut({ scope: 'others' });
+  return error ? friendly(error.message) : null;
+}
+
 export async function signOut(): Promise<void> {
   forgetAccount();
   dropAccountSnapshot();

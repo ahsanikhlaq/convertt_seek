@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PEOPLE, STATUSES, WORKSPACES, type PersonKey } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
-import { backendOn, currentAccount, saveLook, saveProfile, saveStatus, signOut, uploadAvatar, uploadLogo } from '@/lib/seek/backend';
+import { backendOn, currentAccount, saveLook, saveProfile, saveStatus, signOut, uploadAvatar } from '@/lib/seek/backend';
 import { prototypeName, ROUTES, routeFromPrototype, routeOf, type RouteKey } from '@/lib/seek/routes';
 import { setMe, useSeek } from '@/lib/seek/store';
 import { useLiveSync } from '@/lib/seek/liveSync';
@@ -19,9 +19,9 @@ import { toUiId } from '@/lib/seek/live';
 import { useOpenFile } from './Files';
 import { ConfirmDialog, Modal } from './Dialogs';
 import { WorkspaceSettings } from './WorkspaceSettings';
-import { SoundSettings } from './SoundSettings';
+import { PauseSelect } from './PauseSelect';
 import { usePopovers } from './Popovers';
-import { Avatar, ModeSeg, OrgMark, Switch } from './ui';
+import { Avatar, OrgMark } from './ui';
 
 /**
  * Wraps every screen and hosts the palette, profile and shortcuts. In demo mode, as in the product prototype,
@@ -57,7 +57,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     setup: ['setup', 'signup', 'welcome'],
     out: ['signup', 'welcome'],
     // a client only ever sees their own client space
-    client: ['clients', 'open'],
+    client: ['clients', 'open', 'account'],
   };
   const home = { in: ROUTES.channels, profile: ROUTES.welcome, setup: ROUTES.setup, out: ROUTES.signup, client: ROUTES.clients }[s.session];
   const ok = allowed[s.session];
@@ -333,17 +333,13 @@ function ProfileDrawer() {
   const pop = usePopovers();
   const [name, setName] = useState(s.me.name);
   const [title, setTitle] = useState(s.me.title);
-  const [pronouns, setPronouns] = useState(s.me.pronouns ?? '');
-  const [hours, setHours] = useState(s.me.workHours ?? '09:00–18:00');
-  const [notify, setNotify] = useState<'instant' | 'daily' | 'off'>(s.me.notifyEmail ?? 'instant');
   const [confirmReset, setConfirmReset] = useState(false);
   const close = () => setUI({ profile: false });
   const st = STATUSES.find((x) => x[0] === s.status.k)!;
-  // admins can change the organization's logo from here
+  // admins open workspace settings (name, logo, …) from here
   const [org, setOrg] = useState<{ id: string; admin: boolean } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [wsOpen, setWsOpen] = useState(false);
-  const logoIn = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!backendOn) return;
     void currentAccount().then((a) => a?.workspace && setOrg({ id: a.workspace.id, admin: ['owner', 'admin'].includes(a.workspace.role) }));
@@ -365,24 +361,6 @@ function ProfileDrawer() {
     PEOPLE.AH = { ...PEOPLE.AH, photo: r.url };
     update(() => {});
     toast('Photo updated');
-  };
-  const changeLogo = async (f: File | undefined) => {
-    if (!f || !org) return;
-    if (!/^image\/(png|jpe?g|webp|gif)$/.test(f.type)) {
-      toast('Choose a PNG, JPG or WebP image');
-      return;
-    }
-    setUploading(true);
-    const r = await uploadLogo(org.id, f);
-    setUploading(false);
-    if (r.error || !r.url) {
-      toast(r.error ?? 'Couldn’t upload the logo');
-      return;
-    }
-    update((d) => {
-      d.ws.logo = r.url!;
-    });
-    toast('Logo updated');
   };
 
   return (
@@ -458,32 +436,9 @@ function ProfileDrawer() {
             <label htmlFor="pft">Title</label>
             <input className="inp" id="pft" value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
-          {backendOn && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div className="fld">
-                <label htmlFor="pfp">Pronouns</label>
-                <input className="inp" id="pfp" maxLength={30} placeholder="e.g. she/her" value={pronouns} onChange={(e) => setPronouns(e.target.value)} />
-              </div>
-              <div className="fld">
-                <label htmlFor="pfh">Working hours</label>
-                <input className="inp" id="pfh" maxLength={40} value={hours} onChange={(e) => setHours(e.target.value)} />
-              </div>
-            </div>
-          )}
-          {backendOn && (
-            <div className="fld">
-              <label htmlFor="pfe">Email notifications</label>
-              <select id="pfe" className="inp" value={notify} onChange={(e) => setNotify(e.target.value as typeof notify)}>
-                <option value="instant">As they happen</option>
-                <option value="daily">Once a day (summary)</option>
-                <option value="off">Off</option>
-              </select>
-              <em>Saved now; emails start once Seek’s email sending is set up. In-app notifications always show in 🔔.</em>
-            </div>
-          )}
           <div className="kv">
             <div>
-              <span>Email</span>
+              <span>Signed in as</span>
               <b>{s.me.email}</b>
             </div>
             <div>
@@ -500,52 +455,7 @@ function ProfileDrawer() {
               </b>
             </div>
           </div>
-          {org?.admin && (
-            <div className="logopick">
-              <OrgMark name={s.ws.name} logo={s.ws.logo} size={44} />
-              <div className="acts">
-                <button type="button" className="btn sm" disabled={uploading} onClick={() => logoIn.current?.click()}>
-                  {uploading ? 'Uploading…' : s.ws.logo ? 'Change organization logo' : 'Add organization logo'}
-                </button>
-                <small>Shown to everyone in {s.ws.name}.</small>
-              </div>
-              <input
-                ref={logoIn}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                hidden
-                onChange={(e) => {
-                  void changeLogo(e.target.files?.[0]);
-                  e.target.value = '';
-                }}
-              />
-            </div>
-          )}
-          <div>
-            <div className="lbl" style={{ marginBottom: 8 }}>
-              Appearance
-            </div>
-            <ModeSeg />
-          </div>
-          <div className="trow">
-            <div>
-              <b>Pause notifications</b>
-              <small>Mute everything except urgent for 1 hour</small>
-            </div>
-            <Switch
-              on={s.me.dnd}
-              label="Pause notifications"
-              onClick={() => {
-                update((d) => {
-                  d.me.dnd = !d.me.dnd;
-                });
-                // paused for an hour; saved so it follows you to other devices
-                if (backendOn) void saveStatus({ dndUntil: s.me.dnd ? null : new Date(Date.now() + 3600_000).toISOString() });
-                toast(s.me.dnd ? 'Notifications on' : 'Notifications paused for 1 hour');
-              }}
-            />
-          </div>
-          {backendOn && <SoundSettings />}
+          <PauseSelect id="pf-pause" />
           <div className="pf-ac">
             <button type="button" className="btn" onClick={(e) => pop.toggleTheme(e.currentTarget)}>
               🎨 Theme & branding
@@ -557,16 +467,25 @@ function ProfileDrawer() {
                 </button>
               )
             ) : (
-              <>
-                <button type="button" className="btn" onClick={() => toast('Preferences saved')}>
-                  ⚙ Preferences
-                </button>
-                <button type="button" className="btn ghost" onClick={() => setConfirmReset(true)}>
-                  ↺ Reset workspace data
-                </button>
-              </>
+              <button type="button" className="btn ghost" onClick={() => setConfirmReset(true)}>
+                ↺ Reset workspace data
+              </button>
             )}
           </div>
+          <button
+            type="button"
+            className="btn pf-acct"
+            onClick={() => {
+              close();
+              router.push(ROUTES.account);
+            }}
+          >
+            <span>
+              ⚙ Account settings
+              <small>Notifications, sounds, messages, time zone, sign-in</small>
+            </span>
+            <i aria-hidden="true">›</i>
+          </button>
         </div>
         <div className="mf" style={{ display: 'flex', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--ln)' }}>
           <button
@@ -592,7 +511,7 @@ function ProfileDrawer() {
               const n = name.trim() || s.me.name;
               const ti = title.trim() || s.me.title;
               if (backendOn) {
-                const err = await saveProfile({ name: n, title: ti, pronouns: pronouns.trim(), workHours: hours.trim() || '09:00–18:00', notifyEmail: notify });
+                const err = await saveProfile({ name: n, title: ti });
                 if (err) {
                   toast(err);
                   return;
@@ -602,9 +521,6 @@ function ProfileDrawer() {
               update((d) => {
                 d.me.name = n;
                 d.me.title = ti;
-                d.me.pronouns = pronouns.trim();
-                d.me.workHours = hours.trim() || '09:00–18:00';
-                d.me.notifyEmail = notify;
               });
               close();
               toast('Profile saved');

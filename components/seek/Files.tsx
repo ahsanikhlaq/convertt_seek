@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { PEOPLE, type FileRef } from '@/lib/seek/data';
 import { extOf, fileUrl, isAudio, isImage, isVideo, sendFiles, sizeLabel, type FileTarget, type SharedFile } from '@/lib/seek/liveFiles';
 import { useSeek } from '@/lib/seek/store';
+import { showPreviews } from '@/lib/seek/prefs';
 
 /** The composer's attach handler for a conversation (null target: attaching isn't available there). */
 export function useAttach(target: FileTarget | null) {
@@ -69,12 +70,13 @@ function Media({ f }: { f: FileRef }) {
 /** The files on a message: image previews and file cards. */
 export function FileCards({ files }: { files: FileRef[] }) {
   const open = useOpenFile();
+  const previews = showPreviews();
   return (
     <div className="files">
       {files.map((f) =>
         isAudio(f) || isVideo(f) ? (
           <Media key={f.path} f={f} />
-        ) : isImage(f) ? (
+        ) : isImage(f) && previews ? (
           <button key={f.path} type="button" className="fpic" onClick={() => void open(f)} title={f.name} aria-label={'Open ' + f.name}>
             <Thumb f={f} />
           </button>
