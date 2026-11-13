@@ -447,7 +447,7 @@ export function SetupPage() {
       }
     }
     // an email still being typed counts too
-    const typed = invite.split(/[s,;]+/).map((x) => x.trim().toLowerCase()).filter(isEmail);
+    const typed = invite.split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter(isEmail);
     const list = [...new Set([...w.invites, ...typed])];
     if (!backendOn) {
       update((d) => {
@@ -461,7 +461,7 @@ export function SetupPage() {
     }
     if (saving) return;
     setSaving(true);
-    let url: string | null = null;
+    let newOrg: string | null = null;
     if (!created) {
       const { error: err, id } = await createOrganisation({ name: w.name, slug, tz: w.tz, size: w.size, use: w.use, accent, website: w.website ?? '', allowDomain: false });
       if (err || !id) {
@@ -469,15 +469,11 @@ export function SetupPage() {
         toast(err || 'Couldn’t create the workspace. Try again');
         return;
       }
+      newOrg = id;
       // if anything below fails, a retry only sends the invites
       ws((x) => {
         x.step = 'invite';
       });
-      if (logoFile) {
-        const r = await uploadLogo(id, logoFile);
-        if (r.error) toast(r.error + '. You can add it later from Workspace settings');
-        url = r.url;
-      }
     }
     // the owner's profile starts from their email; they can change it any time from their profile
     let acc = await currentAccount(true);
@@ -485,27 +481,33 @@ export function SetupPage() {
       await saveProfile({ name: acc.name.trim() || acc.email.split('@')[0], title: '' });
       acc = await currentAccount(true);
     }
-    const id = acc?.workspace?.id;
-    let sent = 0;
-    let failed = 0;
-    for (const e of id ? list : []) {
-      if ((await sendInvite(id!, e, { role: 'member' })).ok) sent++;
-      else failed++;
-    }
+    const id = acc?.workspace?.id ?? newOrg;
     setSaving(false);
     update((d) => {
       if (acc) applyAccount(d, acc);
-      if (url) d.ws.logo = url;
       d.workspaces.C.ch = 'general';
       d.ws.step = undefined;
       d.ws.invites = [];
     });
-    toast(
-      failed
-        ? `${n} is ready. ${failed} invite email${failed === 1 ? '' : 's'} couldn’t be sent; use Invite people to try again`
-        : `Workspace ${n} is ready${sent ? ` · ${sent} invite${sent === 1 ? '' : 's'} sent` : ''}`,
-    );
+    // straight into #general; the logo and the invite emails finish in the background
     router.push(ROUTES.channels);
+    toast(`Workspace ${n} is ready${id && list.length ? ` · sending ${list.length} invite${list.length === 1 ? '' : 's'}` : ''}`);
+    if (newOrg && logoFile)
+      void uploadLogo(newOrg, logoFile).then((r) => {
+        if (r.error || !r.url) return toast((r.error ?? 'Couldn’t upload the logo') + '. You can add it later from Workspace settings');
+        update((d) => {
+          d.ws.logo = r.url!;
+        });
+      });
+    if (id && list.length)
+      void Promise.all(list.map((e) => sendInvite(id, e, { role: 'member' }).then((r) => r.ok, () => false))).then((res) => {
+        const failed = res.filter((ok) => !ok).length;
+        toast(
+          failed
+            ? `${failed} invite email${failed === 1 ? '' : 's'} couldn’t be sent. Use Invite people to try again`
+            : `${res.length} invite${res.length === 1 ? '' : 's'} sent`,
+        );
+      });
   };
 
   const rail = darken(accent, 0.28);
