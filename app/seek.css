@@ -883,3 +883,7 @@ html.dark .mlink{color:#5fa8f0}html.dark .icode{color:#f08bb0}
 .si.dmi{gap:9px}
 .si.dmi .pav .pdot{right:-3px;bottom:-3px}
 .notews{display:block;color:var(--v);font-size:12px;font-weight:600}
+
+/* the assistant in a channel's members */
+.aimember{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px dashed var(--ln2);border-radius:10px;background:var(--ais)}
+.aimember b{display:block}.aimember small{color:var(--mu);font-size:12.5px;line-height:1.4;display:block}

@@ -216,6 +216,25 @@ export function ChannelMembersDialog({ live, channel, onClose }: { live: LiveCha
             })}
           </div>
         )}
+        <div className="aimember">
+          <Avatar k="AI" size={30} />
+          <span style={{ flex: 1 }}>
+            <b>Seek assistant</b>
+            <small>{info?.assistant ? 'In this channel · replies when nobody on the team is around, or when someone writes @assistant' : 'AI that replies when the team is away. Teach it in Apps → AI agents'}</small>
+          </span>
+          {(live.admin || info?.createdBy === live.me) && (
+            <button
+              type="button"
+              className={'btn sm' + (info?.assistant ? ' ghost' : ' pri')}
+              onClick={async () => {
+                const err = await live.setAssistant(channel, !info?.assistant);
+                toast(err ?? (info?.assistant ? 'Assistant removed from #' + channel : 'Assistant added to #' + channel));
+              }}
+            >
+              {info?.assistant ? 'Remove' : 'Add'}
+            </button>
+          )}
+        </div>
         {!general && (
         <div className="fld">
           <label>Add people</label>

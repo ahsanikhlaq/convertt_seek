@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { backendOn, currentAccount } from '@/lib/seek/backend';
-import { AGENTS, agentLog, levelName, LEVELS, loadAgents, setAgent, setAiPaused, type AgentKey, type AgentState, type Level, type LogEntry } from '@/lib/seek/liveAgents';
+import { AGENTS, agentLog, levelName, LEVELS, loadAgents, loadTraining, RUNNING, saveTraining, setAgent, setAiPaused, type AgentKey, type AgentState, type Level, type LogEntry } from '@/lib/seek/liveAgents';
+import { Modal } from '../Dialogs';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
@@ -62,6 +63,7 @@ function LiveAgentsPage() {
   const [data, setData] = useState<{ settings: Map<AgentKey, AgentState>; paused: boolean } | null>(null);
   const [logOf, setLogOf] = useState<AgentKey | 'all' | null>(null);
   const [log, setLog] = useState<LogEntry[] | null>(null);
+  const [teaching, setTeaching] = useState<AgentKey | null>(null);
   const reload = async () => {
     if (!ws) return;
     const d = await loadAgents(ws);
@@ -180,7 +182,12 @@ function LiveAgentsPage() {
                   <span>Posts via What reaches clients</span>
                 </div>
                 <div className="ft">
-                  <span>{pa ? 'Paused' : !st.enabled ? 'Off' : a.needs ? 'Needs ' + a.needs : 'Waiting for the AI connection'}</span>
+                  <span>{pa ? 'Paused' : !st.enabled ? 'Off' : RUNNING.includes(a.key) ? 'Running on Gemini (free, for testing)' : a.needs ? 'Needs ' + a.needs : 'Coming soon'}</span>
+                  {a.key === 'away_assistant' && admin && (
+                    <button type="button" className="btn sm" onClick={() => setTeaching(a.key)}>
+                      <Ic n="edit" size={14} /> Teach
+                    </button>
+                  )}
                   <button type="button" className="btn sm" onClick={() => setLogOf(a.key)}>
                     Log
                   </button>
@@ -191,6 +198,7 @@ function LiveAgentsPage() {
         </div>
         <RuleBoxes />
       </div>
+      {teaching && ws && <TeachDialog ws={ws} agent={teaching} onClose={() => setTeaching(null)} />}
       {logOf && (
         <>
           <div className="scrim" style={{ background: 'rgba(28,14,28,.3)' }} onClick={() => setLogOf(null)}></div>
@@ -623,5 +631,75 @@ export function AppsPage() {
         </div>
       </div>
     </Shell>
+  );
+}
+
+/** Teach the assistant: how to reply (instructions) and what it can answer from (knowledge). Admins only. */
+function TeachDialog({ ws, agent, onClose }: { ws: string; agent: AgentKey; onClose: () => void }) {
+  const { toast } = useSeek();
+  const [v, setV] = useState<{ instructions: string; knowledge: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void loadTraining(ws, agent).then(setV);
+  }, [ws, agent]);
+  const save = async () => {
+    if (!v) return;
+    setBusy(true);
+    const err = await saveTraining(ws, agent, v.instructions.trim(), v.knowledge.trim());
+    setBusy(false);
+    toast(err ?? 'Saved. The assistant uses this from its next reply');
+    if (!err) onClose();
+  };
+  return (
+    <Modal
+      title="Teach the assistant"
+      icon={<Ic n="ai" />}
+      onClose={onClose}
+      width={620}
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="btn pri" disabled={!v || busy} onClick={() => void save()}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </>
+      }
+    >
+      <div className="mb">
+        {!v ? (
+          <p className="sub">Loading…</p>
+        ) : (
+          <>
+            <div className="fld">
+              <label htmlFor="t-ins">How it should reply</label>
+              <textarea
+                id="t-ins"
+                className="inp"
+                rows={4}
+                maxLength={4000}
+                placeholder={'e.g. Be friendly and brief. Our hours are Mon–Fri 9:00–18:00 (Lahore). For urgent issues tell people to email support@yourcompany.com.'}
+                value={v.instructions}
+                onChange={(e) => setV({ ...v, instructions: e.target.value })}
+              />
+            </div>
+            <div className="fld">
+              <label htmlFor="t-kn">What it knows</label>
+              <textarea
+                id="t-kn"
+                className="inp"
+                rows={9}
+                maxLength={20000}
+                placeholder={'Facts and answers it can give, e.g.\n- Homepage launch: Friday 11:00\n- Revisions: 2 rounds are included\n- Invoices are sent on the 1st of each month'}
+                value={v.knowledge}
+                onChange={(e) => setV({ ...v, knowledge: e.target.value })}
+              />
+              <em>{v.knowledge.length.toLocaleString()} / 20,000 characters. It only answers from this; anything else, it says the team will get back to them.</em>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
   );
 }

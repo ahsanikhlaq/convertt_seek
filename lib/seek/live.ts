@@ -16,7 +16,7 @@ import { onLiveStatus, useResync } from './resync';
  * thread pane and composer render it unchanged. You are always person 'AH'; teammates are keyed by user id.
  */
 
-type Row = { id: number; channel_id: string; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; pinned_at?: string | null; edited_at?: string | null; card?: MessageCard | null };
+type Row = { id: number; channel_id: string; user_id: string | null; agent?: string | null; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; pinned_at?: string | null; edited_at?: string | null; card?: MessageCard | null };
 type ChannelRow = { id: string; name: string; description: string; private?: boolean; created_by?: string | null };
 
 /** Database ids are offset so they never collide with ids the app hands out locally (decision cards, etc.). */
@@ -39,6 +39,8 @@ export function timeLabel(iso: string) {
 export const keyFor = (userId: string, me: string | null): PersonKey => (userId === me ? 'AH' : userId);
 
 const learned = new Set<string>();
+// the AI assistant (an agent, not a person) shows as "Seek assistant" in real workspaces
+if (backendOn) PEOPLE.AI = { name: 'Seek assistant', color: '#5a48c0', role: 'AI assistant', initials: 'AI' };
 
 // Names and photos of people you've seen, remembered on this device so saved chats show who wrote what at once
 // (they're refreshed from the server once per visit).
@@ -57,7 +59,7 @@ if (typeof window !== 'undefined')
 
 /** Makes sure these people have a name, colour and initials before their messages render (shared by every screen). */
 export async function learnProfiles(ids: string[], me: string | null) {
-  const missing = [...new Set(ids)].filter((id) => !learned.has(id));
+  const missing = [...new Set(ids)].filter((id) => id && !learned.has(id));
   if (!missing.length) return;
   const { data } = await sb().from('profiles').select('id, name, email, avatar_url').in('id', missing);
   const known = knownPeople();
@@ -86,7 +88,7 @@ export async function inviteByEmail(
   return (await sendInvite(workspaceId, email, opts)).message;
 }
 
-export type ChannelInfo = { id: string; name: string; private: boolean; createdBy: string | null; description?: string; joined: boolean };
+export type ChannelInfo = { id: string; name: string; private: boolean; createdBy: string | null; description?: string; joined: boolean; assistant?: boolean };
 
 export type LiveChat = {
   ready: boolean;
@@ -110,6 +112,8 @@ export type LiveChat = {
   leave: (channel: string) => Promise<string | null>;
   /** delete a channel and its messages (admins; not #general) */
   deleteChannel: (channel: string) => Promise<string | null>;
+  /** add or remove the AI assistant (admins and the channel's creator) */
+  setAssistant: (channel: string, on: boolean) => Promise<string | null>;
   addMember: (channel: string, userId: string) => Promise<string | null>;
   removeMember: (channel: string, userId: string) => Promise<string | null>;
   /** your notification level for a channel */
@@ -130,6 +134,7 @@ export function useLiveChat(): LiveChat | null {
   const chans = useRef(new Map<string, string>(s.workspaces.C.channels.filter((c) => c.cid).map((c) => [c.id, c.cid!]))); // channel name → id
   const loadedFor = useRef('');
   const allChans = useRef(new Map<string, string>()); // every channel you can see (joined or not), name → id
+  const agentChans = useRef(new Set<string>()); // channel ids that have the AI assistant
   const syncSeen = useRef(0);
   const current = s.workspaces.C.ch;
   const currentRef = useRef(current);
@@ -138,12 +143,14 @@ export function useLiveChat(): LiveChat | null {
   const keyOf = (userId: string): PersonKey => keyFor(userId, meRef.current);
   const learnPeople = useCallback((ids: string[]) => learnProfiles(ids, meRef.current), []);
 
+  const whoOf = (r: { user_id: string | null; agent?: string | null }): PersonKey => (r.agent || !r.user_id ? 'AI' : keyOf(r.user_id));
+
   const toFeed = useCallback((rows: Row[]): FeedItem[] => {
     const roots: ChatMessage[] = [];
     const byId = new Map<number, ChatMessage>();
     for (const r of rows) {
       if (r.parent_id == null) {
-        const m: ChatMessage = { kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), at: r.created_at, text: r.body, files: r.files?.length ? r.files : undefined, pinned: !!r.pinned_at, edited: !!r.edited_at, card: r.card ?? undefined };
+        const m: ChatMessage = { kind: 'msg', id: toUiId(r.id), who: whoOf(r), ai: !!r.agent || undefined, time: timeLabel(r.created_at), at: r.created_at, text: r.body, files: r.files?.length ? r.files : undefined, pinned: !!r.pinned_at, edited: !!r.edited_at, card: r.card ?? undefined };
         roots.push(m);
         byId.set(r.id, m);
       }
@@ -152,7 +159,7 @@ export function useLiveChat(): LiveChat | null {
       if (r.parent_id == null) continue;
       const root = byId.get(r.parent_id);
       // dbId lets a deleted reply disappear live
-      const reply = { who: keyOf(r.user_id), time: timeLabel(r.created_at), text: r.body, dbId: r.id };
+      const reply = { who: whoOf(r), time: timeLabel(r.created_at), text: r.body, dbId: r.id };
       if (root) (root.thread ||= []).push(reply);
     }
     return roots;
@@ -176,11 +183,11 @@ export function useLiveChat(): LiveChat | null {
         const list = (w.msgs[name] ||= []);
         if (r.parent_id == null) {
           if (list.some((m) => m.id === toUiId(r.id))) return;
-          list.push({ kind: 'msg', id: toUiId(r.id), who: keyOf(r.user_id), time: timeLabel(r.created_at), at: r.created_at, text: r.body, files: r.files?.length ? r.files : undefined, flash: r.user_id === meRef.current });
+          list.push({ kind: 'msg', id: toUiId(r.id), who: whoOf(r), ai: !!r.agent || undefined, time: timeLabel(r.created_at), at: r.created_at, text: r.body, files: r.files?.length ? r.files : undefined, flash: r.user_id === meRef.current });
         } else {
           const root = list.find((m): m is ChatMessage => m.kind === 'msg' && m.id === toUiId(r.parent_id!));
           if (!root) return;
-          const reply = { who: keyOf(r.user_id), time: timeLabel(r.created_at), text: r.body, dbId: r.id };
+          const reply = { who: whoOf(r), time: timeLabel(r.created_at), text: r.body, dbId: r.id };
           root.thread ||= [];
           if (root.thread.some((x) => (x as { dbId?: number }).dbId === r.id)) return;
           root.thread.push(reply);
@@ -194,12 +201,14 @@ export function useLiveChat(): LiveChat | null {
   const loadChannels = useCallback(async () => {
     const ws = wsRef.current;
     if (!ws) return;
-    const [{ data: channels }, counts, { data: prefs }, { data: mine }] = await Promise.all([
+    const [{ data: channels }, counts, { data: prefs }, { data: mine }, { data: agents }] = await Promise.all([
       sb().from('channels').select('id, name, description, private, created_by').eq('workspace_id', ws).order('created_at'),
       unreadCounts(ws).catch(() => new Map<string, number>()),
       sb().from('channel_prefs').select('channel_id, level, muted_until'),
       sb().from('channel_members').select('channel_id').eq('user_id', meRef.current ?? ''),
+      sb().from('channel_agents').select('channel_id'),
     ]);
+    agentChans.current = new Set(((agents ?? []) as { channel_id: string }[]).map((a) => a.channel_id));
     // your channels are the ones you're a member of; the rest of the public ones are under Browse channels
     const joined = new Set(((mine ?? []) as { channel_id: string }[]).map((m) => m.channel_id));
     // your notification level per channel: Digest or Muted show as a tag
@@ -212,7 +221,7 @@ export function useLiveChat(): LiveChat | null {
     const list = all.filter((c) => joined.has(c.id));
     chans.current = new Map(list.map((c) => [c.name, c.id]));
     allChans.current = new Map(all.map((c) => [c.name, c.id]));
-    setInfo(new Map(all.map((c) => [c.name, { id: c.id, name: c.name, private: !!c.private, createdBy: c.created_by ?? null, description: c.description, joined: joined.has(c.id) }])));
+    setInfo(new Map(all.map((c) => [c.name, { id: c.id, name: c.name, private: !!c.private, createdBy: c.created_by ?? null, description: c.description, joined: joined.has(c.id), assistant: agentChans.current.has(c.id) }])));
     update((d) => {
       const w = d.workspaces.C;
       w.channels = list.map((c) => ({ id: c.name, cid: c.id, unread: c.name === w.ch ? 0 : counts.get('ch:' + c.id) ?? 0, desc: c.description, private: !!c.private, tier: tierOf.get(c.id) }));
@@ -249,7 +258,7 @@ export function useLiveChat(): LiveChat | null {
         .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'messages', filter: `workspace_id=eq.${ws}` }, async (p) => {
           const r = p.new as Row;
           if (!r.channel_id) return;
-          await learnPeople([r.user_id]);
+          if (r.user_id) await learnPeople([r.user_id]);
           addRow(r);
         })
         // new channels you can see, and private channels you're added to or removed from
@@ -257,6 +266,7 @@ export function useLiveChat(): LiveChat | null {
         .on('postgres_changes', { event: '*', schema: DB_SCHEMA, table: 'channel_members', filter: `user_id=eq.${acc.id}` }, () => void loadChannels())
         // a channel deleted, or someone removed from one (deletes can't be filtered, so any of them reloads the list)
         .on('postgres_changes', { event: 'DELETE', schema: DB_SCHEMA, table: 'channels' }, () => void loadChannels())
+        .on('postgres_changes', { event: '*', schema: DB_SCHEMA, table: 'channel_agents' }, () => void loadChannels())
         .on('postgres_changes', { event: 'DELETE', schema: DB_SCHEMA, table: 'channel_members' }, () => void loadChannels())
         .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'workspace_members', filter: `workspace_id=eq.${ws}` }, async (p) => {
           const m = p.new as { user_id: string; role: string };
@@ -296,7 +306,7 @@ export function useLiveChat(): LiveChat | null {
     (async () => {
       const { data, error } = await sb()
         .from('messages')
-        .select('id, channel_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at, card')
+        .select('id, channel_id, user_id, agent, parent_id, body, created_at, files, pinned_at, edited_at, card')
         .eq('channel_id', id)
         .order('created_at', { ascending: false })
         .limit(300);
@@ -315,7 +325,7 @@ export function useLiveChat(): LiveChat | null {
       });
       done = true;
       // names and reactions load together, after the messages are on screen
-      await Promise.all([learnPeople(rows.map((r) => r.user_id)), hydrateReactions(update, feed.map((m) => m.id), meRef.current)]);
+      await Promise.all([learnPeople(rows.map((r) => r.user_id).filter((x): x is string => !!x)), hydrateReactions(update, feed.map((m) => m.id), meRef.current)]);
       if (alive) update(() => {});
     })();
     return () => {
@@ -337,7 +347,7 @@ export function useLiveChat(): LiveChat | null {
     const { data, error } = await sb()
       .from('messages')
       .insert({ channel_id, body, parent_id: parent, mentions: mentionIds(body, people.filter((k) => k !== 'AH')) })
-      .select('id, channel_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at, card')
+      .select('id, channel_id, user_id, agent, parent_id, body, created_at, files, pinned_at, edited_at, card')
       .single();
     if (error) {
       if (parent == null) {
@@ -347,6 +357,10 @@ export function useLiveChat(): LiveChat | null {
       return;
     }
     addRow(data as Row);
+    if (parent == null && agentChans.current.has(channel_id))
+      void sb()
+        .functions.invoke('seek-ai', { body: { action: 'away', message_id: (data as Row).id } })
+        .then(() => {});
   };
 
   const idOf = (channel: string) => chans.current.get(channel) ?? allChans.current.get(channel) ?? null;
@@ -438,6 +452,17 @@ export function useLiveChat(): LiveChat | null {
       if (channel === 'general') return 'Everyone on the team is in #general';
       const { error } = await sb().from('channel_members').delete().eq('channel_id', id).eq('user_id', meRef.current);
       if (error) return /general/i.test(error.message) ? 'Everyone on the team is in #general' : 'Couldn’t leave. Try again';
+      await loadChannels();
+      return null;
+    },
+    setAssistant: async (channel, on) => {
+      const id = idOf(channel);
+      if (!id) return 'Channel not found';
+      const q = on
+        ? sb().from('channel_agents').insert({ channel_id: id, agent: 'away_assistant', added_by: meRef.current }).select('channel_id')
+        : sb().from('channel_agents').delete().eq('channel_id', id).eq('agent', 'away_assistant').select('channel_id');
+      const { data, error } = await q;
+      if ((error && error.code !== '23505') || (!error && !data?.length && !on)) return 'Only admins and the channel’s creator can change the assistant';
       await loadChannels();
       return null;
     },

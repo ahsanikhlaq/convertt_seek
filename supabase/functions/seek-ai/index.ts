@@ -110,6 +110,62 @@ Deno.serve(async (req) => {
     return json({ error: 'Bad request' }, 400);
   }
 
+  // ---- the assistant as a channel member: reply when nobody else in the channel is around (or it's @mentioned)
+  if (body.action === 'away') {
+    const { data: m } = await admin.from('messages').select('id, channel_id, workspace_id, user_id, body, parent_id, agent, created_at').eq('id', Number(body.message_id)).maybeSingle();
+    // only for the sender's own, fresh, top-level channel message
+    if (!m || !m.channel_id || m.agent || m.user_id !== user.id || m.parent_id || Date.now() - Date.parse(m.created_at) > 120_000) return json({ replied: false, why: 'not applicable' });
+    const [{ data: ca }, { data: w }, { data: setting }, { data: ch }] = await Promise.all([
+      admin.from('channel_agents').select('agent').eq('channel_id', m.channel_id).eq('agent', 'away_assistant').maybeSingle(),
+      admin.from('workspaces').select('name, ai_paused').eq('id', m.workspace_id).single(),
+      admin.from('agent_settings').select('enabled, instructions, knowledge').eq('workspace_id', m.workspace_id).eq('agent', 'away_assistant').maybeSingle(),
+      admin.from('channels').select('name').eq('id', m.channel_id).single(),
+    ]);
+    if (!ca) return json({ replied: false, why: 'no assistant in this channel' });
+    if (w?.ai_paused || (setting && !setting.enabled)) return json({ replied: false, why: 'assistant is off' });
+    const mentioned = /(^|\s)@(assistant|seek|ai)\b/i.test(m.body);
+    if (!mentioned) {
+      // is anyone else in the channel around? (not Away, not paused, active in the last 5 minutes)
+      const { data: mem } = await admin.from('channel_members').select('user_id').eq('channel_id', m.channel_id).neq('user_id', user.id);
+      const ids = ((mem ?? []) as { user_id: string }[]).map((x) => x.user_id);
+      if (ids.length) {
+        const { data: ps } = await admin.from('profiles').select('id, status, dnd_until, last_seen_at').in('id', ids);
+        const here = ((ps ?? []) as { status: string; dnd_until: string | null; last_seen_at: string | null }[]).some(
+          (p) => p.status !== 'aw' && !(p.dnd_until && Date.parse(p.dnd_until) > Date.now()) && !!p.last_seen_at && Date.now() - Date.parse(p.last_seen_at) < 5 * 60_000,
+        );
+        if (here) return json({ replied: false, why: 'someone is here' });
+      }
+      // one holding reply per channel every 15 minutes, not one per message
+      const { count: recent } = await admin.from('messages').select('id', { count: 'exact', head: true }).eq('channel_id', m.channel_id).eq('agent', 'away_assistant').gte('created_at', new Date(Date.now() - 15 * 60_000).toISOString());
+      if ((recent ?? 0) > 0) return json({ replied: false, why: 'replied recently' });
+    }
+    // the conversation so far (last 12 posts), with names
+    const { data: rows } = await admin.from('messages').select('user_id, agent, body, created_at').eq('channel_id', m.channel_id).is('parent_id', null).order('created_at', { ascending: false }).limit(12);
+    const list = ((rows ?? []) as { user_id: string | null; agent: string | null; body: string; created_at: string }[]).reverse();
+    const pids = [...new Set(list.map((r) => r.user_id).filter((x): x is string => !!x))];
+    const { data: ppl } = await admin.from('profiles').select('id, name, email').in('id', pids.length ? pids : ['00000000-0000-0000-0000-000000000000']);
+    const who = new Map(((ppl ?? []) as { id: string; name: string; email: string }[]).map((p) => [p.id, (p.name || '').trim() || p.email.split('@')[0]]));
+    const transcript = list.map((r) => `${r.agent ? 'Assistant' : who.get(r.user_id ?? '') ?? 'Someone'}: ${r.body.replace(/\s+/g, ' ').slice(0, 800)}`).join('\n');
+    const sender = who.get(user.id) ?? 'there';
+    const sys =
+      `You are the Seek assistant, a member of the #${ch?.name ?? 'channel'} channel for the ${w?.name ?? ''} team. ` +
+      (mentioned ? 'Someone asked you directly. ' : 'Nobody from the team is available right now. ') +
+      'Reply to the latest message in 1 to 3 short sentences, warm and professional, addressed to ' + sender + '. ' +
+      'If the answer is clearly in KNOWLEDGE, give it. Otherwise say the team is away right now and will get back to them as soon as they can. ' +
+      'Never invent facts, prices, dates, deadlines or promises. No sign-off, no emojis.' +
+      (setting?.instructions ? '\n\nINSTRUCTIONS FROM THE TEAM:\n' + setting.instructions : '') +
+      (setting?.knowledge ? '\n\nKNOWLEDGE:\n' + setting.knowledge : '');
+    try {
+      const text = (await gemini(sys, transcript)).slice(0, 2000);
+      const { error } = await admin.from('messages').insert({ channel_id: m.channel_id, body: text, agent: 'away_assistant' });
+      if (error) return json({ error: 'The assistant couldn’t post its reply' }, 500);
+      await admin.from('agent_log').insert({ workspace_id: m.workspace_id, agent: 'away_assistant', action: `Replied in #${ch?.name ?? 'channel'} to ${sender}${mentioned ? ' (asked directly)' : ' while the team was away'}`, conv: 'ch:' + m.channel_id, sources: [m.id], actor_id: user.id });
+      return json({ replied: true, model: used });
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : 'Something went wrong' }, 502);
+    }
+  }
+
   // a little guard against runaway use of the free quota: 12 runs a minute per person
   const { count } = await admin.from('agent_log').select('id', { count: 'exact', head: true }).eq('actor_id', user.id).gte('at', new Date(Date.now() - 60_000).toISOString()).in('agent', ['summariser', 'task_suggester']);
   if ((count ?? 0) >= 12) return json({ error: 'That’s a lot of AI requests in a minute. Try again shortly.' }, 429);
