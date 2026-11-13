@@ -156,7 +156,7 @@ function LiveAgentsPage() {
                   {admin ? (
                     <select
                       className="inp"
-                      style={{ width: 'auto', height: 28, fontSize: 12.5, padding: '0 8px' }}
+                      style={{ width: 'auto', height: 28, fontSize: 14, padding: '0 8px' }}
                       aria-label={'Permission level for ' + a.name}
                       value={st.level}
                       disabled={pa || !data}
@@ -363,7 +363,7 @@ function DemoAgentsPage() {
           ))}
           <div className="agc later">
             <span className="tag">Later</span>
-            <b style={{ fontSize: 14.5, color: 'var(--ink)' }}>Build your own agent</b>
+            <b style={{ fontSize: 15.5, color: 'var(--ink)' }}>Build your own agent</b>
             <small>Type, instructions, data, permissions, dry test.</small>
           </div>
         </div>
@@ -443,7 +443,7 @@ export function AppsPage() {
         title={a.n}
         sub={'Installed by ' + a.by}
         icon={
-          <span className="lg" style={{ background: a.c, width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 12, color: '#fff', flex: 'none' }}>
+          <span className="lg" style={{ background: a.c, width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 13, color: '#fff', flex: 'none' }}>
             {a.id}
           </span>
         }
@@ -484,7 +484,7 @@ export function AppsPage() {
             <b className={a.on ? 'oktxt' : undefined} style={a.on ? undefined : { color: 'var(--sb)' }}>{a.on ? '● On' : 'Off'}</b>
           </div>
         </div>
-        <p style={{ margin: 0, fontSize: 12.5, color: 'var(--mu)' }}>Digest waits for the next summary. Normal notifies as usual. Urgent can break through Focus.</p>
+        <p style={{ margin: 0, fontSize: 14, color: 'var(--mu)' }}>Digest waits for the next summary. Normal notifies as usual. Urgent can break through Focus.</p>
         <button type="button" className="btn" onClick={() => toast('Test post sent to ' + a.to)}>
           Send test post
         </button>

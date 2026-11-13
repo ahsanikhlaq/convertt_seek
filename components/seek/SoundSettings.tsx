@@ -115,7 +115,7 @@ export function SoundSettings({ bare }: { bare?: boolean }) {
           Turn on desktop alerts
         </button>
       )}
-      <em style={{ fontSize: 12, color: 'var(--sb)' }}>While your status is Focus time, only DMs and mentions make a sound or alert.</em>
+      <em style={{ fontSize: 13, color: 'var(--sb)' }}>While your status is Focus time, only DMs and mentions make a sound or alert.</em>
     </div>
   );
 }

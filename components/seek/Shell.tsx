@@ -180,7 +180,7 @@ export function Sidebar({ title, sub, action, children }: { title: string; sub: 
         <div className="wsrow">
           {items.map((w) => (
             <button key={w.key} type="button" className={'si' + (w.on ? ' on' : '')} style={{ flex: 1, justifyContent: 'center', border: '1px solid var(--sln)' }} onClick={w.open}>
-              <span className={'wsb' + (w.on ? ' on' : '')} style={{ width: 24, height: 24, fontSize: 12, borderRadius: 7 }}>
+              <span className={'wsb' + (w.on ? ' on' : '')} style={{ width: 24, height: 24, fontSize: 13, borderRadius: 7 }}>
                 {w.mark}
               </span>
               {w.name}

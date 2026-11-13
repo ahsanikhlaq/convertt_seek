@@ -115,7 +115,7 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
     <Modal
       title={`Schedule a meeting with ${sp.name}`}
       icon={
-        <span className="av" style={{ width: 34, height: 34, borderRadius: 9, background: sp.color, fontSize: 12 }}>
+        <span className="av" style={{ width: 34, height: 34, borderRadius: 9, background: sp.color, fontSize: 13 }}>
           {sp.code}
         </span>
       }

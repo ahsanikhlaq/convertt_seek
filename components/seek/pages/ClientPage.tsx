@@ -86,7 +86,7 @@ function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
             setUI({ sideOpen: false });
           }}
         >
-          <span className="av" style={{ width: 30, height: 30, borderRadius: 8, background: x.color, fontSize: 11 }}>
+          <span className="av" style={{ width: 30, height: 30, borderRadius: 8, background: x.color, fontSize: 12 }}>
             {x.id}
           </span>
           <span className="x">
@@ -123,7 +123,7 @@ function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
   if (!isHB) {
     body = (
       <div className="empty">
-        <b style={{ display: 'block', fontSize: 16, color: 'var(--ink)' }}>{sp.name}</b>
+        <b style={{ display: 'block', fontSize: 17, color: 'var(--ink)' }}>{sp.name}</b>
         {sp.desc} · Client chat is quiet.
         <br />
         <br />
@@ -350,7 +350,7 @@ function ScheduleDialog({ onClose }: { onClose: () => void }) {
     <Modal
       title="Schedule a meeting with Hollow & Bright"
       icon={
-        <span className="av" style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--gold)', fontSize: 12 }}>
+        <span className="av" style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--gold)', fontSize: 13 }}>
           HB
         </span>
       }

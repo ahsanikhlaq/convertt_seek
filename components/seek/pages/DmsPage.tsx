@@ -209,11 +209,11 @@ function LiveDmsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}>
           <Avatar k={dm} size={72} presence />
           <div>
-            <b style={{ fontSize: 17 }}>{nameOf(dm)}</b>
-            <div style={{ fontSize: 13 }}>
+            <b style={{ fontSize: 18 }}>{nameOf(dm)}</b>
+            <div style={{ fontSize: 14.5 }}>
               <SeenText id={dm} />
             </div>
-            <div style={{ color: 'var(--sb)', fontSize: 13 }}>
+            <div style={{ color: 'var(--sb)', fontSize: 14.5 }}>
               {[info?.title, info?.pronouns].filter(Boolean).join(' · ') || PEOPLE[dm]?.role}
             </div>
           </div>
@@ -347,10 +347,10 @@ function DemoDmsPage() {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}>
         <Avatar k={dm} size={72} />
         <div>
-          <b style={{ fontSize: 17 }}>
+          <b style={{ fontSize: 18 }}>
             {p.name} {dm === 'MO' ? 'Omar' : ''}
           </b>
-          <div style={{ color: 'var(--sb)', fontSize: 13 }}>
+          <div style={{ color: 'var(--sb)', fontSize: 14.5 }}>
             {p.role} · {dm === 'MO' ? 'she/her' : 'they/them'}
           </div>
         </div>

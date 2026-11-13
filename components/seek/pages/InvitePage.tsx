@@ -80,8 +80,8 @@ function DemoInvitePage() {
             }}
           >
             <div>
-              <b style={{ fontSize: 17 }}>Invite a client</b>
-              <div style={{ color: 'var(--mu)', fontSize: 13 }}>They get their own private space.</div>
+              <b style={{ fontSize: 18 }}>Invite a client</b>
+              <div style={{ color: 'var(--mu)', fontSize: 14.5 }}>They get their own private space.</div>
             </div>
             <div className="fld">
               <label htmlFor="ie">Client email</label>
@@ -114,11 +114,11 @@ function DemoInvitePage() {
           </div>
           <div className="c email">
             <div className="fr">
-              <span className="av" style={{ width: 34, height: 34, background: 'var(--v)', borderRadius: 10, fontSize: 14 }}>
+              <span className="av" style={{ width: 34, height: 34, background: 'var(--v)', borderRadius: 10, fontSize: 15 }}>
                 S
               </span>
               <div>
-                <b style={{ fontSize: 13.5, display: 'block' }}>Ahsan at Convertt</b>
+                <b style={{ fontSize: 15, display: 'block' }}>Ahsan at Convertt</b>
                 <small style={{ color: 'var(--sb)' }}>to {i.email}</small>
               </div>
             </div>
@@ -144,12 +144,12 @@ function DemoInvitePage() {
             <b>3 · THE CLIENT JOINS</b>
           </div>
           <div className="c" style={{ alignItems: 'center', textAlign: 'center' }}>
-            <span className="av" style={{ width: 52, height: 52, background: 'var(--gold)', borderRadius: 14, fontSize: 18 }}>
+            <span className="av" style={{ width: 52, height: 52, background: 'var(--gold)', borderRadius: 14, fontSize: 19 }}>
               HB
             </span>
             <div>
-              <b style={{ fontSize: 13, color: 'var(--sb)' }}>{i.space} · Your project space</b>
-              <h2 style={{ margin: '4px 0 0', fontSize: 21 }}>Welcome, Chris</h2>
+              <b style={{ fontSize: 14.5, color: 'var(--sb)' }}>{i.space} · Your project space</b>
+              <h2 style={{ margin: '4px 0 0', fontSize: 22 }}>Welcome, Chris</h2>
             </div>
             <p style={{ margin: 0, color: 'var(--mu)' }}>Enter the 6-digit code we just emailed you.</p>
             <CodeInput key={i.step} disabled={i.step < 3} onComplete={openSpace} label="Client sign-in code" />

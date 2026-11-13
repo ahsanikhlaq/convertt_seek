@@ -172,7 +172,7 @@ export function ApprovalsTab({
         <p className="sub">Loading…</p>
       ) : !list.length ? (
         <div className="empty">
-          <b style={{ display: 'block', fontSize: 16, color: 'var(--ink)' }}>No approvals yet</b>
+          <b style={{ display: 'block', fontSize: 17, color: 'var(--ink)' }}>No approvals yet</b>
           {team
             ? approvers.length
               ? 'Ask ' + approvers.map((a) => a.name.split(' ')[0]).join(' or ') + ' to sign off a deliverable. Their answer is logged as a decision.'

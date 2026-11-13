@@ -526,7 +526,7 @@ export function SetupPage() {
           </div>
           <div style={{ padding: '12px 14px', flex: 1, minWidth: 0 }}>
             <b style={{ display: 'block' }}>{w.name.trim() || 'Your workspace'}</b>
-            <div style={{ color: 'var(--sb)', fontSize: 12 }} className="mono">
+            <div style={{ color: 'var(--sb)', fontSize: 13 }} className="mono">
               {slug || 'your-team'}.seek.app
             </div>
           </div>
@@ -544,7 +544,7 @@ export function SetupPage() {
             ))}
           </div>
         </div>
-        <p style={{ fontSize: 13 }}>
+        <p style={{ fontSize: 14.5 }}>
           Notifications start on <b style={{ color: '#fff' }}>Balanced</b>.
         </p>
       </div>
@@ -977,7 +977,7 @@ export function WelcomePage() {
         {ws && (
           <div className="joinorg">
             <OrgMark name={ws} logo={invite?.logo} size={44} />
-            <b style={{ fontSize: 17 }}>{ws}</b>
+            <b style={{ fontSize: 18 }}>{ws}</b>
           </div>
         )}
         <h2>
@@ -1005,12 +1005,12 @@ export function WelcomePage() {
         {phase === 'profile' && (
           <div className="pc" style={{ maxWidth: 420 }}>
             <div className="r">
-              <span className="av" style={{ width: 40, height: 40, background: 'var(--v)', fontSize: 15, borderRadius: 12 }}>
+              <span className="av" style={{ width: 40, height: 40, background: 'var(--v)', fontSize: 16, borderRadius: 12 }}>
                 {initialsOf(shown)}
               </span>
               <div>
                 <b>{shown}</b>
-                <div style={{ color: 'var(--sb)', fontSize: 12 }}>{[title.trim() || 'Your role', tz].join(' · ')}</div>
+                <div style={{ color: 'var(--sb)', fontSize: 13 }}>{[title.trim() || 'Your role', tz].join(' · ')}</div>
               </div>
             </div>
           </div>
@@ -1053,11 +1053,11 @@ export function WelcomePage() {
 
           {phase === 'code' && clientJoin && (
             <div className="cjoin">
-              <span className="av" style={{ width: 52, height: 52, background: 'var(--gold)', borderRadius: 14, fontSize: 20 }}>
+              <span className="av" style={{ width: 52, height: 52, background: 'var(--gold)', borderRadius: 14, fontSize: 21 }}>
                 <Ic n="ai" size={22} />
               </span>
               <div>
-                <b style={{ fontSize: 13, color: 'var(--sb)' }}>Your project space</b>
+                <b style={{ fontSize: 14.5, color: 'var(--sb)' }}>Your project space</b>
                 <h1 style={{ margin: '4px 0 0' }}>Welcome</h1>
               </div>
               <p className="sub" style={{ margin: 0 }}>
@@ -1296,7 +1296,7 @@ export function JoinPage() {
     <div className="joinorg">
       <OrgMark name={org.name} logo={org.logo} size={48} />
       <div>
-        <b style={{ fontSize: 16 }}>{org.name}</b>
+        <b style={{ fontSize: 17 }}>{org.name}</b>
         <small>
           {org.members} {org.members === 1 ? 'person' : 'people'} on Seek
         </small>
@@ -1312,7 +1312,7 @@ export function JoinPage() {
           <div className="joinorg">
             <OrgMark name={org.name} logo={org.logo} size={56} />
             <div>
-              <b style={{ fontSize: 19 }}>{org.name}</b>
+              <b style={{ fontSize: 20 }}>{org.name}</b>
               <small style={{ color: '#d9c4d9' }}>
                 {org.members} {org.members === 1 ? 'person' : 'people'} on Seek
               </small>

@@ -192,7 +192,7 @@ export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
                 const you = p.userId === org.me;
                 return (
                   <div key={p.userId} style={{ alignItems: 'center' }}>
-                    <span className="av" style={{ width: 34, height: 34, background: 'var(--v)', fontSize: 13 }}>
+                    <span className="av" style={{ width: 34, height: 34, background: 'var(--v)', fontSize: 14.5 }}>
                       {label(p).slice(0, 2).toUpperCase()}
                     </span>
                     <span style={{ flex: 1, minWidth: 0 }}>

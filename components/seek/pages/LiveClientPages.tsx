@@ -169,7 +169,7 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
         <div className="pg">
           {live.ready ? (
             <div className="empty">
-              <b style={{ display: 'block', fontSize: 16, color: 'var(--ink)' }}>No clients yet</b>
+              <b style={{ display: 'block', fontSize: 17, color: 'var(--ink)' }}>No clients yet</b>
               Each client gets their own space: a Client chat they can see, Team notes they never do, and a short getting-started checklist.
               <br />
               <br />
@@ -321,7 +321,7 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
       <div className="ppl">
         {clients.map((p) => (
           <div key={p.id}>
-            {p.userId ? <Avatar k={p.userId} size={32} presence /> : <span className="av" style={{ width: 32, height: 32, background: 'var(--golds)', color: 'var(--gold)', fontSize: 12 }}>{firstName(p)[0]?.toUpperCase()}</span>}
+            {p.userId ? <Avatar k={p.userId} size={32} presence /> : <span className="av" style={{ width: 32, height: 32, background: 'var(--golds)', color: 'var(--gold)', fontSize: 13 }}>{firstName(p)[0]?.toUpperCase()}</span>}
             <span>
               <b>{personName(p)}</b>
               <small>
@@ -582,8 +582,8 @@ function PeopleTab({ live, sp }: { live: LiveClients; sp: Space }) {
         >
           <label>Add client person</label>
           <div className="copyrow" style={{ flexWrap: 'wrap' }}>
-            <input className="inp" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: '1 1 120px', fontFamily: 'inherit', fontSize: 14, color: 'var(--ink)' }} />
-            <input className="inp" type="email" placeholder="name@client.com" value={email} onChange={(e) => setEmail(e.target.value)} style={{ flex: '2 1 180px', fontFamily: 'inherit', fontSize: 14, color: 'var(--ink)' }} />
+            <input className="inp" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: '1 1 120px', fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)' }} />
+            <input className="inp" type="email" placeholder="name@client.com" value={email} onChange={(e) => setEmail(e.target.value)} style={{ flex: '2 1 180px', fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)' }} />
             <select className="inp" style={{ width: 'auto' }} value={role} onChange={(e) => setRole(e.target.value as ClientRole)} aria-label="Role">
               {ROLES.map(([v, l]) => (
                 <option key={v} value={v}>
@@ -677,7 +677,7 @@ function LiveMeetings({ live }: { live: LiveClients }) {
           <p className="sub">Loading…</p>
         ) : !list.length ? (
           <div className="empty">
-            <b style={{ display: 'block', fontSize: 16, color: 'var(--ink)' }}>No meetings coming up</b>
+            <b style={{ display: 'block', fontSize: 17, color: 'var(--ink)' }}>No meetings coming up</b>
             {sp ? 'Pick a client on the left and schedule a call. The invite is posted in their Client chat with a calendar file.' : 'Add a client first, then schedule calls with them here.'}
           </div>
         ) : (
@@ -687,7 +687,7 @@ function LiveMeetings({ live }: { live: LiveClients }) {
               const end = new Date(d.getTime() + m.minutes * 60e3);
               return (
                 <div key={m.id} className="frow">
-                  <span className="av" style={{ width: 36, height: 36, borderRadius: 9, background: m.color, fontSize: 12, flex: 'none' }}>
+                  <span className="av" style={{ width: 36, height: 36, borderRadius: 9, background: m.color, fontSize: 13, flex: 'none' }}>
                     {m.code}
                   </span>
                   <span className="x">
@@ -998,7 +998,7 @@ function UpcomingCalls({ space }: { space: string }) {
         const end = new Date(d.getTime() + m.minutes * 60e3);
         return (
           <div key={m.id} className="frow">
-            <span className="av" style={{ width: 36, height: 36, borderRadius: 9, background: 'var(--v)', fontSize: 15, flex: 'none' }}>
+            <span className="av" style={{ width: 36, height: 36, borderRadius: 9, background: 'var(--v)', fontSize: 16, flex: 'none' }}>
               <Ic n="calendar" />
             </span>
             <span className="x">

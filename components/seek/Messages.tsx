@@ -373,7 +373,7 @@ function MessageRow({ m, feed, inThread }: { m: ChatMessage; feed: FeedRef; inTh
           </button>
         )}
         {(isSaved || (backendOn && m.pinned)) && (
-          <div style={{ fontSize: 11.5, color: 'var(--v)', marginTop: 4, fontWeight: 600, display: 'flex', gap: 10 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--v)', marginTop: 4, fontWeight: 600, display: 'flex', gap: 10 }}>
             {backendOn && m.pinned && <span className="mtl"><Ic n="pin" size={12} /> Pinned</span>}
             {isSaved && <span className="mtl"><Ic n="star" size={12} /> Saved</span>}
           </div>
@@ -878,7 +878,7 @@ export function Composer({
               {x.k ? (
                 <Avatar k={x.k} size={26} />
               ) : (
-                <span className="av" style={{ width: 26, height: 26, background: 'var(--soft)', color: 'var(--v)', fontSize: 13 }}>
+                <span className="av" style={{ width: 26, height: 26, background: 'var(--soft)', color: 'var(--v)', fontSize: 14.5 }}>
                   <Ic n="at" size={19} />
                 </span>
               )}
@@ -898,7 +898,7 @@ export function Composer({
         createPortal(<VideoRecorder onClose={() => setRecording(null)} onSend={(f, secs) => void sendRecorded(f, 'Video message · ' + clockOf(secs))} />, document.body)}
       <div className="cr">
         {thread ? (
-          <label style={{ fontSize: 12, color: 'var(--sb)', display: 'flex', gap: 6, alignItems: 'center' }}>
+          <label style={{ fontSize: 13, color: 'var(--sb)', display: 'flex', gap: 6, alignItems: 'center' }}>
             <input type="checkbox" checked={also} onChange={(e) => setAlso(e.target.checked)} /> Also send to the channel
           </label>
         ) : (

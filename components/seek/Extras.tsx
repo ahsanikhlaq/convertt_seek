@@ -202,7 +202,7 @@ export function SavedDialog({ me, onClose }: { me: string | null; onClose: () =>
                 <small>
                   {nameFor(it.userId, me)} · {it.place} · {when(it.at)}
                 </small>
-                <div style={{ fontSize: 13.5, overflowWrap: 'anywhere' }}>
+                <div style={{ fontSize: 15, overflowWrap: 'anywhere' }}>
                   <RichText text={it.body.length > 280 ? it.body.slice(0, 280) + '…' : it.body} />
                 </div>
               </span>
@@ -376,7 +376,7 @@ export function PinsList({ target, me, where, reloadKey = 0, canUnpin = true }: 
           <small>
             {nameFor(p.userId, me)} · {when(p.at)}
           </small>
-          <div style={{ fontSize: 14, overflowWrap: 'anywhere' }}>
+          <div style={{ fontSize: 15, overflowWrap: 'anywhere' }}>
             <RichText text={p.body} />
           </div>
           {p.files.length > 0 && <FileCards files={p.files} />}
@@ -452,7 +452,7 @@ export function CanvasEditor({ channel, me, name }: { channel: string | null; me
           </button>
         </div>
         {c.body ? (
-          <div style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.55, overflowWrap: 'anywhere' }}>
+          <div style={{ whiteSpace: 'pre-wrap', fontSize: 15, lineHeight: 1.55, overflowWrap: 'anywhere' }}>
             <RichText text={c.body} />
           </div>
         ) : (
@@ -569,7 +569,7 @@ export function ScheduledDialog({ onClose }: { onClose: () => void }) {
                 <small>
                   {new Date(it.at).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {it.place}
                 </small>
-                <div style={{ fontSize: 13.5, overflowWrap: 'anywhere' }}>{it.body.length > 280 ? it.body.slice(0, 280) + '…' : it.body}</div>
+                <div style={{ fontSize: 15, overflowWrap: 'anywhere' }}>{it.body.length > 280 ? it.body.slice(0, 280) + '…' : it.body}</div>
               </span>
               <button
                 type="button"
