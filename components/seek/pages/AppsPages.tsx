@@ -309,6 +309,7 @@ function RuleBoxes() {
 function DemoAgentsPage() {
   const { s, ui, update, setUI, toast } = useSeek();
   const pa = s.pauseAll;
+  const [teaching, setTeaching] = useState(false);
 
   return (
     <Shell active="agents" side={<AppsSide active="agents" />}>
@@ -400,6 +401,11 @@ function DemoAgentsPage() {
               </div>
               <div className="ft">
                 <span>{pa ? 'Paused' : a.on ? a.st : 'Off'}</span>
+                {a.n === 'Away assistant' && (
+                  <button type="button" className="btn sm" onClick={() => setTeaching(true)}>
+                    <Ic n="edit" size={14} /> Teach
+                  </button>
+                )}
                 <button type="button" className="btn sm" onClick={() => setUI({ logOf: a.n })}>
                   Log
                 </button>
@@ -471,6 +477,7 @@ function DemoAgentsPage() {
           </aside>
         </>
       )}
+      {teaching && <TeachDialog ws="demo" agent="away_assistant" onClose={() => setTeaching(false)} />}
     </Shell>
   );
 }
@@ -705,7 +712,7 @@ function TeachDialog({ ws, agent, onClose }: { ws: string; agent: AgentKey; onCl
   const tryIt = async () => {
     if (!v || !q.trim()) return;
     setAsking(true);
-    const r = await previewAssistant(ws, q.trim(), v.instructions, v.knowledge);
+    const r = await previewAssistant(ws, q.trim(), v.instructions, v.knowledge).catch(() => ({ error: 'In the demo the assistant can’t answer. It does in the live app.' }));
     setAsking(false);
     setAnswer({ q: q.trim(), ...r });
   };
@@ -716,12 +723,14 @@ function TeachDialog({ ws, agent, onClose }: { ws: string; agent: AgentKey; onCl
     setV(t);
   };
   useEffect(() => {
-    void loadTraining(ws, agent).then(setV);
+    void loadTraining(ws, agent)
+      .catch(() => ({ instructions: '', knowledge: '' }))
+      .then(setV);
   }, [ws, agent]);
   const save = async () => {
     if (!v) return;
     setBusy(true);
-    const err = await saveTraining(ws, agent, v.instructions.trim(), v.knowledge.trim());
+    const err = await saveTraining(ws, agent, v.instructions.trim(), v.knowledge.trim()).catch(() => null);
     setBusy(false);
     toast(err ?? 'Saved. The assistant uses this from its next reply');
     if (!err) onClose();
