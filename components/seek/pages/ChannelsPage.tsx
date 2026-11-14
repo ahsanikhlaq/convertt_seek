@@ -69,9 +69,12 @@ export function ChannelsPage() {
     setUI({ thread: null, chTab: 'Messages', sideOpen: false, menu: null });
   };
 
+  const wsName = backendOn ? s.ws.name : WORKSPACES[wsId].name;
+  // Home: your quick links first, then Channels and Direct messages (each folds away from its header, with a +)
   const side = (
     <Sidebar
-      title={backendOn ? s.ws.name : WORKSPACES[wsId].name}
+      mark={String(wsName || 'S').charAt(0).toUpperCase()}
+      title={wsName}
       sub={backendOn ? `Team · ${ws.channels.length} ${ws.channels.length === 1 ? 'channel' : 'channels'} · ${team.length} ${team.length === 1 ? 'person' : 'people'}` : WORKSPACES[wsId].sub}
       action={
         <button type="button" className="btn sm" onClick={() => setCreating(true)} aria-label="New channel">
@@ -79,45 +82,8 @@ export function ChannelsPage() {
         </button>
       }
     >
-      <div className="sg lbl">Channels</div>
-      <ChannelList active={ch} onOpen={open} />
-      {!live && (
-        <button type="button" className="si" onClick={() => toast('Browse all ' + ws.channels.length + ' channels')}>
-          <Ic n="plus" size={14} /> Browse channels
-        </button>
-      )}
       {live && (
-        <button type="button" className="si" onClick={() => setBrowsing(true)}>
-          <Ic n="search" size={14} /> Browse channels
-        </button>
-      )}
-      {live && (
-        <button type="button" className="si" onClick={() => setCreating(true)}>
-          <Ic n="plus" size={14} /> New channel
-        </button>
-      )}
-      {live && (
-        <button type="button" className="si" onClick={() => setInviting(true)}>
-          <Ic n="plus" size={14} /> Invite people
-        </button>
-      )}
-      {live && <div className="sg lbl">Direct messages</div>}
-      {live && <DmList active={null} onOpen={openDm} />}
-      {live && (
-        <button
-          type="button"
-          className="si"
-          onClick={() => {
-            setUI({ home: true, sideOpen: false });
-            router.push(ROUTES.dms);
-          }}
-        >
-          <Ic n="compose" size={14} /> New message
-        </button>
-      )}
-      {live && <div className="sg lbl">You</div>}
-      {live && (
-        <button type="button" className="si" onClick={() => setListing('tasks')}>
+        <button type="button" className="si qk" onClick={() => setListing('tasks')}>
           <span className="h"><Ic n="task" size={14} /></span>
           <span className="x">
             <b>Tasks</b>
@@ -126,7 +92,7 @@ export function ChannelsPage() {
         </button>
       )}
       {live && (
-        <button type="button" className="si" onClick={() => setListing('saved')}>
+        <button type="button" className="si qk" onClick={() => setListing('saved')}>
           <span className="h"><Ic n="star" size={14} /></span>
           <span className="x">
             <b>Saved</b>
@@ -135,11 +101,56 @@ export function ChannelsPage() {
         </button>
       )}
       {live && (
-        <button type="button" className="si" onClick={() => setListing('scheduled')}>
+        <button type="button" className="si qk" onClick={() => setListing('scheduled')}>
           <span className="h"><Ic n="clock" size={14} /></span>
           <span className="x">
             <b>Scheduled</b>
           </span>
+        </button>
+      )}
+      <button type="button" className="sg lbl sgb" data-sec="ch" title="Show or hide">
+        Channels
+      </button>
+      {live && (
+        <button type="button" className="sgadd" data-sec="ch" aria-label="New channel" title="New channel" onClick={() => setCreating(true)}>
+          <Ic n="plus" size={14} />
+        </button>
+      )}
+      <ChannelList active={ch} onOpen={open} />
+      {!live && (
+        <button type="button" className="si util" data-sec="ch" onClick={() => toast('Browse all ' + ws.channels.length + ' channels')}>
+          <Ic n="plus" size={14} /> Browse channels
+        </button>
+      )}
+      {live && (
+        <button type="button" className="si util" data-sec="ch" onClick={() => setBrowsing(true)}>
+          <Ic n="search" size={14} /> Browse channels
+        </button>
+      )}
+      {live && (
+        <button type="button" className="sg lbl sgb" data-sec="dm" title="Show or hide">
+          Direct messages
+        </button>
+      )}
+      {live && (
+        <button
+          type="button"
+          className="sgadd"
+          data-sec="dm"
+          aria-label="New message"
+          title="New message"
+          onClick={() => {
+            setUI({ home: true, sideOpen: false });
+            router.push(ROUTES.dms);
+          }}
+        >
+          <Ic n="plus" size={14} />
+        </button>
+      )}
+      {live && <DmList active={null} onOpen={openDm} />}
+      {live && (
+        <button type="button" className="si sinv" onClick={() => setInviting(true)}>
+          <Ic n="plus" size={14} /> Invite people
         </button>
       )}
       {!live && <div className="sg lbl">Starred</div>}
@@ -340,7 +351,7 @@ export function ChannelsPage() {
                 <Ic n="ai" /> <span className="hide-m">Catch up</span>
               </button>
             )}
-            <button type="button" className="btn sm" onClick={async () => {
+            <button type="button" className="btn sm hud" onClick={async () => {
                 if (!live) return toast('Huddle started · others can join');
                 if (!c.cid) return;
                 const err = await startHuddle({ channel: c.cid });

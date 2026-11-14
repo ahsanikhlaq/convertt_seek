@@ -301,11 +301,6 @@ const SIZES = ['1–10', '11–50', '51–200', '200+'];
 const ACCENTS = THEMES.acc;
 const DEFAULT_ACCENT = ACCENTS[0][1];
 
-/** A colour k of the way to black (for the preview's rail). */
-function darken(hex: string, k: number) {
-  return '#' + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, '0')).join('');
-}
-
 export function SetupPage() {
   const { s, update, toast } = useSeek();
   const router = useRouter();
@@ -508,45 +503,93 @@ export function SetupPage() {
       });
   };
 
-  const rail = darken(accent, 0.28);
-
   return (
     <main className="auth">
-      <div className="art">
+      <div className="art wsart">
         <Brand />
         <h2>
-          Set up for how <em>your team works.</em>
+          Here’s what <em>your team will see.</em>
         </h2>
-        <p>Your answers decide which channels and spaces we create, and your notification defaults.</p>
-        <div className="pc" style={{ maxWidth: 420, padding: 0, overflow: 'hidden', display: 'flex' }}>
-          <div style={{ background: rail, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-            <span style={{ borderRadius: 10, boxShadow: '0 0 0 2px #fff' }}>
-              <OrgMark name={w.name} logo={logo} size={34} color={accent} />
-            </span>
+        <p>The preview fills in as you type. You can change any of it later in Workspace settings.</p>
+        {/* a small picture of Seek with this workspace's name, logo, channels and invited teammates */}
+        <div className="wpv" aria-hidden="true">
+          <div className="wpv-bar">
+            <i />
+            <i />
+            <i />
+            <span className="mono">{slug || 'your-team'}.seek.app</span>
           </div>
-          <div style={{ padding: '12px 14px', flex: 1, minWidth: 0 }}>
-            <b style={{ display: 'block' }}>{w.name.trim() || 'Your workspace'}</b>
-            <div style={{ color: 'var(--sb)', fontSize: 13 }} className="mono">
-              {slug || 'your-team'}.seek.app
+          <div className="wpv-body">
+            <div className="wpv-rail">
+              <span className="wpv-mark">
+                <OrgMark name={w.name} logo={logo} size={30} color={accent} />
+              </span>
+              <u className="on" />
+              <u />
+              <u />
+              <u />
+            </div>
+            <div className="wpv-side">
+              <b>{w.name.trim() || 'Your workspace'}</b>
+              <small>Team · {w.size || '1–10'} people</small>
+              <div className="wpv-l">Channels</div>
+              {creates.map(([a], i) => (
+                <div key={a} className={'wpv-r' + (i === 0 ? ' on' : '')}>
+                  <Ic n={a === 'general' ? 'hash' : 'decision'} size={13} />
+                  <span>{a}</span>
+                </div>
+              ))}
+              <div className="wpv-l">Teammates</div>
+              <div className="wpv-r">
+                <i className="me">{(s.email || 'y').charAt(0).toUpperCase()}</i>
+                <span>You</span>
+              </div>
+              {w.invites.slice(0, 3).map((e) => (
+                <div key={e} className="wpv-r">
+                  <i>{e.charAt(0).toUpperCase()}</i>
+                  <span>{e.split('@')[0]}</span>
+                  <em>invited</em>
+                </div>
+              ))}
+              {w.invites.length > 3 && <div className="wpv-r more">+{w.invites.length - 3} more invited</div>}
+              {w.invites.length === 0 && <div className="wpv-r more">Invites show up here</div>}
+            </div>
+            <div className="wpv-main">
+              <div className="wpv-h">
+                <Ic n="hash" size={14} />
+                <b>general</b>
+                <small>everyone</small>
+              </div>
+              <div className="wpv-m">
+                <i>
+                  <Ic n="ai" size={14} />
+                </i>
+                <div>
+                  <b>
+                    Seek assistant<small>now</small>
+                  </b>
+                  <p>Welcome to {w.name.trim() || 'your workspace'}. This is #general, where the whole team talks.</p>
+                </div>
+              </div>
+              <div className="wpv-c">Message #general</div>
             </div>
           </div>
         </div>
-        <div>
-          <div className="lbl" style={{ color: '#c6a7c6', marginBottom: 8 }}>
-            We'll create
-          </div>
-          <div className="creates">
-            {creates.map(([a, b]) => (
-              <div key={a}>
-                {a === 'Clients' || a === 'Decisions' ? <Ic n="decision" size={13} /> : <Ic n="hash" size={13} />} {a}
-                <small>{b}</small>
-              </div>
-            ))}
-          </div>
-        </div>
-        <p style={{ fontSize: 14.5 }}>
-          Notifications start on <b style={{ color: '#fff' }}>Balanced</b>.
-        </p>
+        <ul className="wsfacts">
+          <li>
+            <Ic n="check" size={12} />
+            {creates.length}
+            {creates.length === 1 ? ' space' : ' spaces'} set up for you
+          </li>
+          <li>
+            <Ic n="check" size={12} />
+            Notifications start on Balanced
+          </li>
+          <li>
+            <Ic n="check" size={12} />
+            Clients join free
+          </li>
+        </ul>
       </div>
       <div className="fm">
         <div className="mbrand">
@@ -596,25 +639,26 @@ export function SetupPage() {
           <div>
             <h1>Set up your workspace</h1>
           </div>
-          <p className="sub">A few questions so it is set up for how your team works.</p>
+          <p className="sub">Name it, bring your team, and you’re in.</p>
 
           {!created && (
             <>
-              <div className="fld">
-                <label>
-                  Logo <span style={{ color: 'var(--sb)', fontWeight: 400 }}>(optional)</span>
-                </label>
-                <div
-                  className="logopick"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    pickLogo(e.dataTransfer.files?.[0]);
-                  }}
-                >
+              <div
+                className="wslogo"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  pickLogo(e.dataTransfer.files?.[0]);
+                }}
+              >
                   <OrgMark name={w.name} logo={logo} size={56} color={accent} />
-                  <div className="acts">
-                    <span style={{ display: 'flex', gap: 6 }}>
+                  <div className="t">
+                    <b>
+                      Workspace logo <span>(optional)</span>
+                    </b>
+                    <small>PNG, JPG or WebP up to 2 MB. Drop a file here, or upload one.</small>
+                  </div>
+                  <div className="a">
                       <button type="button" className="btn sm" onClick={() => fileRef.current?.click()}>
                         {logo ? 'Change' : 'Upload logo'}
                       </button>
@@ -633,8 +677,6 @@ export function SetupPage() {
                           Remove
                         </button>
                       )}
-                    </span>
-                    <small>PNG, JPG or WebP up to 2 MB. Cropped to a square. Or drag it here.</small>
                   </div>
                   <input
                     ref={fileRef}
@@ -646,9 +688,7 @@ export function SetupPage() {
                       e.target.value = '';
                     }}
                   />
-                </div>
               </div>
-              <div className="grid2">
                 <div className="fld">
                   <label htmlFor="wsn">Workspace name</label>
                   <input
@@ -669,6 +709,7 @@ export function SetupPage() {
                     {backendOn && slug ? (!/^[a-z0-9]{2,40}$/.test(slug) ? ' · use at least 2 letters' : free === null ? ' · checking…' : free ? ' · available' : ' · taken, try another name') : ''}
                   </em>
                 </div>
+              <div className="grid2 wsrow2">
                 <div className="fld">
                   <label htmlFor="wtz">Time zone</label>
                   <select
@@ -687,10 +728,9 @@ export function SetupPage() {
                   </select>
                   <em>For working hours and Focus.</em>
                 </div>
-              </div>
               <div className="fld">
                 <label>Team size</label>
-                <div className="chips">
+                <div className="chips seg">
                   {SIZES.map((z) => (
                     <button
                       key={z}
@@ -707,6 +747,8 @@ export function SetupPage() {
                     </button>
                   ))}
                 </div>
+                <em>Sets your starting defaults.</em>
+              </div>
               </div>
             </>
           )}
@@ -754,9 +796,10 @@ export function SetupPage() {
                 onBlur={() => invite.trim() && addInvites(invite)}
               />
             </div>
+            <em>Each person gets an email invite. You can also invite people later.</em>
           </div>
           <button type="button" className="btn lg pri" onClick={() => void submit()} disabled={saving}>
-            {saving ? 'Setting up your workspace…' : 'Continue to #general'}
+            {saving ? 'Setting up your workspace…' : created ? 'Continue to #general' : 'Create workspace'}
           </button>
           <p className="fine"><Ic n="lock" size={13} /> Secure sign-in · Your data is encrypted</p>
         </div>
@@ -972,7 +1015,7 @@ export function WelcomePage() {
 
   return (
     <main className="auth">
-      <div className="art">
+      <div className="art ctr">
         <Brand />
         {ws && (
           <div className="joinorg">
@@ -1003,17 +1046,50 @@ export function WelcomePage() {
               : 'Tell your team who you are. You can change this any time from your profile.'}
         </p>
         {phase === 'profile' && (
-          <div className="pc" style={{ maxWidth: 420 }}>
-            <div className="r">
-              <span className="av" style={{ width: 40, height: 40, background: 'var(--v)', fontSize: 16, borderRadius: 12 }}>
+          <div className="wpv pfv" aria-hidden="true">
+            <div className="wpv-h">
+              <Ic n="hash" size={14} />
+              <b>general</b>
+              <small>how you’ll appear</small>
+            </div>
+            <div className="pfv-m">
+              <span className="av" style={{ width: 40, height: 40, background: 'var(--v)', fontSize: 15, borderRadius: 10 }}>
+                {initialsOf(shown)}
+              </span>
+              <div>
+                <b>
+                  {shown}
+                  <small>now</small>
+                </b>
+                <p>Hi everyone, glad to be here.</p>
+              </div>
+            </div>
+            <div className="pfv-c">
+              <span className="av" style={{ width: 52, height: 52, background: 'var(--v)', fontSize: 19, borderRadius: 14 }}>
                 {initialsOf(shown)}
               </span>
               <div>
                 <b>{shown}</b>
-                <div style={{ color: 'var(--sb)', fontSize: 13 }}>{[title.trim() || 'Your role', tz].join(' · ')}</div>
+                <span>{title.trim() || 'Your role'}</span>
+                <small>
+                  <Ic n="clock" size={12} /> {tz}
+                </small>
               </div>
+              <em>Profile card</em>
             </div>
           </div>
+        )}
+        {phase === 'profile' && (
+          <ul className="wsfacts">
+            <li>
+              <Ic n="check" size={12} />
+              Only your workspace sees this
+            </li>
+            <li>
+              <Ic n="check" size={12} />
+              Change it any time
+            </li>
+          </ul>
         )}
       </div>
       <div className="fm" ref={formRef}>
@@ -1137,7 +1213,7 @@ export function WelcomePage() {
                   <>
                     <hr />
                     <span>
-                      <i>3</i>Organisation
+                      <i>3</i>Workspace
                     </span>
                   </>
                 )}
@@ -1306,23 +1382,72 @@ export function JoinPage() {
 
   return (
     <main className="auth">
-      <div className="art">
+      <div className="art ctr">
         <Brand />
-        {org && (
-          <div className="joinorg">
-            <OrgMark name={org.name} logo={org.logo} size={56} />
-            <div>
-              <b style={{ fontSize: 20 }}>{org.name}</b>
-              <small style={{ color: '#d9c4d9' }}>
-                {org.members} {org.members === 1 ? 'person' : 'people'} on Seek
-              </small>
-            </div>
-          </div>
-        )}
         <h2>
           Join <em>{name}</em> on Seek.
         </h2>
-        <p>Messages, decisions and client work in one tidy workspace. No password needed: we'll email you a code.</p>
+        <p>Messages, decisions and client work in one tidy workspace.</p>
+        {org && (
+          <div className="wpv" aria-hidden="true">
+            <div className="wpv-body">
+              <div className="wpv-rail">
+                <span className="wpv-mark">
+                  <OrgMark name={org.name} logo={org.logo} size={30} />
+                </span>
+                <u className="on" />
+                <u />
+                <u />
+                <u />
+              </div>
+              <div className="wpv-side">
+                <b>{org.name}</b>
+                <small>
+                  {org.members} {org.members === 1 ? 'person' : 'people'} on Seek
+                </small>
+                <div className="wpv-l">Channels</div>
+                <div className="wpv-r on">
+                  <Ic n="hash" size={13} />
+                  <span>general</span>
+                </div>
+                <div className="wpv-l">Teammates</div>
+                <div className="wpv-r">
+                  <i className="me">+</i>
+                  <span>You, in a minute</span>
+                </div>
+              </div>
+              <div className="wpv-main">
+                <div className="wpv-h">
+                  <Ic n="hash" size={14} />
+                  <b>general</b>
+                  <small>everyone</small>
+                </div>
+                <div className="wpv-m">
+                  <i>
+                    <Ic n="ai" size={14} />
+                  </i>
+                  <div>
+                    <b>
+                      Seek assistant<small>now</small>
+                    </b>
+                    <p>Welcome to {org.name}. Say hello in #general once you’re in.</p>
+                  </div>
+                </div>
+                <div className="wpv-c">Message #general</div>
+              </div>
+            </div>
+          </div>
+        )}
+        <ul className="wsfacts">
+          <li>
+            <Ic n="check" size={12} />
+            No password: we email you a code
+          </li>
+          <li>
+            <Ic n="check" size={12} />
+            Next, set up your profile
+          </li>
+        </ul>
       </div>
       <div className="fm">
         <div className="mbrand">

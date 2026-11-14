@@ -46,10 +46,10 @@ function PeopleIcon() {
 const NAV: [RouteKey, IconName | 'people', string][] = [
   ['channels', 'team', 'Home'],
   ['dms', 'dm', 'DMs'],
-  ['people', 'people', 'People'],
   ['clients', 'cl', 'Clients'],
-  ['meetings', 'mt', 'Meetings'],
   ['decisions', 'dc', 'Decisions'],
+  ['meetings', 'mt', 'Meetings'],
+  ['people', 'people', 'People'],
   ['agents', 'ap', 'Apps'],
 ];
 
@@ -202,7 +202,7 @@ function TopBar() {
 }
 
 /** Left list column (becomes a full-screen drawer on phones). */
-export function Sidebar({ title, sub, action, children }: { title: string; sub: string; action?: React.ReactNode; children: React.ReactNode }) {
+export function Sidebar({ title, sub, action, children, mark }: { title: string; sub: string; action?: React.ReactNode; children: React.ReactNode; /** a letter shown before the title (the workspace's initial) */ mark?: string }) {
   const { s, setUI } = useSeek();
   const { items } = useWorkspaceList();
   const pop = usePopovers();
@@ -230,6 +230,11 @@ export function Sidebar({ title, sub, action, children }: { title: string; sub: 
         </div>
         <div className="t">
           <b role="heading" aria-level={1}>
+            {mark ? (
+              <i className="wmk" aria-hidden="true">
+                {mark}
+              </i>
+            ) : null}
             {title}
           </b>
           {action}

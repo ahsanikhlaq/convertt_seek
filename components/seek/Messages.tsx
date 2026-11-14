@@ -1094,6 +1094,9 @@ export function Composer({
             <button type="button" className="ic" onClick={() => insert('', true)} aria-label="Mention someone">
               <Ic n="at" size={19} />
             </button>
+            <button type="button" className="ic slashb" aria-label="Commands" title="Commands (type /)">
+              /
+            </button>
             {recordable && (
               <button type="button" className="ic" aria-label="Record a voice message" title="Voice message" disabled={!!uploading || !!recording} onClick={() => setRecording('voice')}>
                 <Ic n="mic" size={19} />

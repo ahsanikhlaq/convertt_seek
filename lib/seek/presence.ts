@@ -83,10 +83,13 @@ function ago(t: number) {
 }
 
 export type Presence = { known: boolean; active: boolean; label: string };
+const DEMO_SEEN: Record<string, 1> = { MO: 1, SY: 1, ZA: 1 };
 
 /** Someone's presence: active (green dot), or when they were last seen. Re-renders when it changes. */
 export function usePresenceOf(id: string | null | undefined): Presence {
   useSyncExternalStore(subscribe, () => version, () => 0);
+  // demo mode: the sample teammates look like a real team (two online, one seen an hour ago)
+  if (!backendOn && id && DEMO_SEEN[id]) return { known: true, active: id !== 'ZA', label: id !== 'ZA' ? 'Active now' : 'Last seen 1 h ago' };
   if (!backendOn || !id || id === 'AH') return { known: false, active: false, label: '' };
   const p = seen.get(id);
   if (!p) return { known: false, active: false, label: '' };

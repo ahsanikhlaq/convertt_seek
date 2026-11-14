@@ -17,6 +17,7 @@ import { SEARCH_KINDS, searchSeek, type Found, type SearchKind } from '@/lib/see
 import { dmThreadWith, openConversation } from '@/lib/seek/liveExtras';
 import { flashMessage } from '@/lib/seek/liveDecisions';
 import { toUiId } from '@/lib/seek/live';
+import { installCommands } from '@/lib/seek/commands';
 import { useOpenFile } from './Files';
 import { ConfirmDialog, Modal } from './Dialogs';
 import { WorkspaceSettings } from './WorkspaceSettings';
@@ -133,7 +134,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [setUI]);
 
-  // the desktop app's menu navigates by dispatching this event
+  // "/" commands in every message box, and folding sidebar sections
+  useEffect(() => installCommands(), []);
+
+  // the desktop app's menu (and the / commands) navigate by dispatching this event
   useEffect(() => {
     const onNav = (e: Event) => {
       const to = (e as CustomEvent<string>).detail;

@@ -15,7 +15,7 @@ export function ChannelList({ active, onOpen }: { active: string | null; onOpen:
   return (
     <>
       {ws.channels.map((x) => (
-        <button key={x.id} type="button" className={'si' + (x.id === active ? ' on' : '') + (x.unread ? ' unread' : '')} aria-current={x.id === active ? 'page' : undefined} onClick={() => onOpen(x.id)}>
+        <button key={x.id} type="button" className={'si' + (x.id === active ? ' on' : '') + (x.unread ? ' unread' : '')} data-sec="ch" aria-current={x.id === active ? 'page' : undefined} onClick={() => onOpen(x.id)}>
           <span className="h" title={x.private ? 'Private channel' : undefined}>
             {x.private ? <Ic n="lock" size={14} /> : <Ic n="hash" size={14} />}
           </span>
@@ -36,7 +36,7 @@ export function DmList({ active, onOpen }: { active: string | null; onOpen: (k: 
   return (
     <>
       {threads.map(([k, t]) => (
-        <button key={k} type="button" className={'si dmi' + (k === active ? ' on' : '') + (t.unread ? ' unread' : '')} aria-current={k === active ? 'page' : undefined} onClick={() => onOpen(k)}>
+        <button key={k} type="button" className={'si dmi' + (k === active ? ' on' : '') + (t.unread ? ' unread' : '')} data-sec="dm" aria-current={k === active ? 'page' : undefined} onClick={() => onOpen(k)}>
           <Avatar k={k} size={22} presence />
           <span className="x">
             <b>{PEOPLE[k]?.name ?? 'Someone'}</b>

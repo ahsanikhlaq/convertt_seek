@@ -1150,3 +1150,214 @@ html.dark .pp-mail{color:var(--vd)}
  .pp-prof{padding-bottom:12px}
 }
 @media (max-width:420px){.rail>a.ri{min-width:0;font-size:10.5px;letter-spacing:-.01em}}
+
+/* ===== Seek polish layer: sidebar, composer, commands (brand tokens only) ===== */
+:root{--acc:#f5b14c}
+/* sidebar header: workspace mark */
+.side .sh .t b{display:flex;align-items:center;gap:10px;min-width:0;letter-spacing:-.01em}
+.side .sh .t b .wmk{width:26px;height:26px;flex:none;border-radius:8px;background:#fff;color:var(--rbg);display:grid;place-items:center;font-style:normal;font-size:14px;font-weight:800;letter-spacing:0}
+/* sidebar list */
+.side .sl{display:flex;flex-direction:column;padding:10px 10px 14px!important}
+.side .sl>*{flex:none}
+.side .sl .si{min-height:32px;padding:5px 10px;border-radius:7px;font-size:14.5px;gap:10px;position:relative;transition:background .12s,color .12s}
+.side .sl .si .h{width:22px;display:grid;place-items:center}
+.side .sl .si.on:before{content:"";position:absolute;left:-10px;top:6px;bottom:6px;width:3px;border-radius:0 3px 3px 0;background:var(--acc)}
+.side .sl .si.unread .x b{font-weight:700}
+.side .badge{background:var(--acc)!important;color:var(--rbg)!important;min-width:20px;height:18px;font-size:11px}
+.side .sl .si:focus-visible,.side .sgb:focus-visible{outline:2px solid var(--acc);outline-offset:-2px}
+/* quick links (Tasks, Saved, Scheduled) sit first, then a rule */
+.side .sl .si.qk+.sgb,.side .sl .si.qk+.sg{margin-top:10px;border-top:1px solid var(--sln);border-radius:0;padding-top:16px}
+/* section headers collapse */
+.side .sgb{appearance:none;border:0;background:none;width:100%;display:flex;align-items:center;gap:7px;text-align:left;cursor:pointer;padding:14px 10px 6px;transition:color .12s}
+.side .sgb:before{content:"";width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid currentColor;opacity:.75;transition:transform .15s}
+.side .sgb:hover{color:var(--sfg)!important}
+html.sec-ch-closed .side .sgb[data-sec=ch]:before,html.sec-dm-closed .side .sgb[data-sec=dm]:before{transform:rotate(-90deg)}
+html.sec-ch-closed .side .si[data-sec=ch]:not(.on):not(.unread),html.sec-dm-closed .side .si[data-sec=dm]:not(.on):not(.unread){display:none}
+/* add / browse rows read as actions, not channels */
+.side .sl .si.util{font-size:14px;opacity:.86}
+.side .sl .si.util:hover{opacity:1}
+.side .sl .si.util>svg{width:22px;height:22px;padding:4px;border-radius:6px;background:var(--shov);flex:none}
+.side .sl .si.sinv{margin-top:14px;justify-content:center;border:1px dashed var(--sln);color:var(--sfg)!important;font-weight:600;min-height:36px}
+.side .sl .si.sinv:hover{border-style:solid}
+.side .sl .si.sinv:before{display:none}
+/* composer */
+.comp:focus-within{border-color:var(--v)!important;box-shadow:0 0 0 3px var(--vs)!important}
+.comp.gold:focus-within{border-color:var(--gold)!important;box-shadow:0 0 0 3px var(--golds)!important}
+.comp .cr .ic.slashb{font:600 18px 'Geist Mono',monospace}
+/* command menu */
+.slp{position:fixed;z-index:96;background:var(--card,#fff);border:1px solid var(--ln2);border-radius:14px;box-shadow:0 20px 50px rgba(38,19,37,.22);overflow:hidden;display:flex;flex-direction:column;color:var(--ink);font-size:14.5px}
+.slp .slg{padding:10px 14px 4px;font:600 11.5px 'Geist Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--sb)}
+.slp .sll{max-height:min(320px,50vh);overflow:auto;padding:2px 6px 6px}
+.slp .sli{width:100%;border:0;background:none;display:flex;align-items:baseline;gap:12px;padding:8px 10px;border-radius:8px;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.slp .sli.on{background:var(--vs)}
+.slp .sli b{font:600 13.5px 'Geist Mono',monospace;color:var(--vd);min-width:112px}
+.slp .sli span{color:var(--mu);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slp .slf{display:flex;gap:14px;align-items:center;padding:8px 14px;border-top:1px solid var(--ln);background:var(--bg);color:var(--sb);font-size:12.5px}
+.slp kbd{font:500 11.5px 'Geist Mono',monospace;border:1px solid var(--ln2);border-radius:5px;padding:1px 5px;background:var(--card,#fff);color:var(--mu);margin-right:4px}
+html.dark .slp{border-color:var(--ln)}
+@media (max-width:760px){.slp .sli b{min-width:92px}.slp .slf span:nth-child(n+3){display:none}}
+@media (max-width:760px){.comp .cr .ic.slashb{display:none}}
+
+/* ===== type refinements ===== */
+h1,h2,h3{text-wrap:balance}
+.msg .nm b{font-size:15px}
+.msg .tx{font-size:15px;line-height:1.5}
+.msg .nm small,.badge,.rlink small,.vmeta,.side .tag{font-variant-numeric:tabular-nums}
+@media (min-width:761px){.mh .tt b{letter-spacing:-.015em}.mh .tt small{font-size:13.5px}.auth h1{font-size:27px;letter-spacing:-.03em}}
+.auth .sub{line-height:1.5}
+
+/* ===== workspace setup ===== */
+@media (min-width:761px){
+  .auth:has(.wsart){grid-template-columns:minmax(0,1.08fr) minmax(0,1fr)}
+  .auth .fm .in:has(.wslogo){max-width:520px;gap:20px}
+}
+.auth .art.wsart{gap:22px}
+.wsart .brand{margin-bottom:auto}
+.wsart .wsfacts{margin-bottom:auto}
+.wsart h2{max-width:16ch;font-size:40px}
+.wpv{background:var(--card,#fcfaf5);color:var(--ink);border-radius:14px;overflow:hidden;box-shadow:0 30px 60px -24px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.16);width:100%;max-width:640px;font-size:13px;line-height:1.4}
+.wpv-bar{display:flex;align-items:center;gap:6px;padding:9px 12px;background:var(--rbg)}
+.wpv-bar i{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.22)}
+.wpv-bar span{margin:0 auto;font-size:11.5px;color:var(--sfg2);background:rgba(255,255,255,.1);border-radius:6px;padding:2px 14px;transform:translateX(-20px);max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wpv-body{display:grid;grid-template-columns:46px minmax(0,172px) minmax(0,1fr);height:296px}
+.wpv-rail{background:var(--rbg);display:flex;flex-direction:column;align-items:center;gap:9px;padding:10px 0}
+.wpv-mark{display:grid;border-radius:9px;box-shadow:0 0 0 2px var(--rbg),0 0 0 3.5px var(--sfg);margin-bottom:6px}
+.wpv-rail u{width:22px;height:22px;border-radius:7px;background:rgba(255,255,255,.1)}
+.wpv-rail u.on{background:rgba(255,255,255,.28)}
+.wpv-side{background:var(--sbg);color:var(--sfg);padding:12px 8px;display:flex;flex-direction:column;gap:2px;min-width:0;overflow:hidden}
+.wpv-side>b{font-size:14.5px;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wpv-side>small{font-size:11.5px;color:var(--sfg2);padding:0 6px}
+.wpv-l{font:600 10px 'Geist Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--sfg2);padding:12px 6px 4px}
+.wpv-r{display:flex;align-items:center;gap:7px;padding:4px 6px;border-radius:6px;color:var(--sfg2);min-width:0}
+.wpv-r span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.wpv-r svg{flex:none}
+.wpv-r.on{background:var(--son);color:#fff;font-weight:600}
+.wpv-r i{width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;font-style:normal;font-weight:700;font-size:9px;line-height:16px;text-align:center;flex:none}
+.wpv-r i.me{background:var(--acc);color:var(--rbg)}
+.wpv-r em{margin-left:auto;font-style:normal;font-size:10.5px;opacity:.7;flex:none}
+.wpv-r.more{font-size:11.5px;opacity:.7}
+.wpv-main{background:var(--card,#fcfaf5);display:flex;flex-direction:column;min-width:0}
+.wpv-h{display:flex;align-items:center;gap:6px;padding:11px 14px;border-bottom:1px solid var(--ln)}
+.wpv-h b{font-size:14px}.wpv-h small{color:var(--sb);font-size:11.5px}
+.wpv-m{display:flex;gap:9px;padding:14px;flex:1;align-items:flex-start;min-width:0}
+.wpv-m>i{width:28px;height:28px;border-radius:8px;background:var(--ai);color:#fff;display:grid;place-items:center;flex:none}
+.wpv-m b{font-size:13px}.wpv-m b small{font-weight:400;color:var(--sb);font-size:11px;margin-left:4px}
+.art .wpv-m p{margin:2px 0 0;color:var(--ink);font-size:13px;max-width:none;overflow-wrap:anywhere}
+.wpv-c{margin:0 14px 14px;border:1px solid var(--ln2);border-radius:9px;padding:8px 11px;color:var(--sb);font-size:12.5px}
+.wsfacts{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px 22px;color:#dfc8de;font-size:14px}
+.wsfacts li{display:flex;align-items:center;gap:8px}
+.wsfacts svg{width:18px;height:18px;padding:3px;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;flex:none}
+.chips.seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;height:44px;border:1px solid var(--ln2);border-radius:10px;overflow:hidden}
+.chips.seg .chip{height:100%;border:0;border-left:1px solid var(--ln);border-radius:0;justify-content:center;padding:0;font-size:13.5px;font-variant-numeric:tabular-nums}
+.chips.seg .chip:first-child{border-left:0}
+.chips.seg .chip.on{background:var(--v);color:#fff}
+.auth select.inp{appearance:none;-webkit-appearance:none;padding-right:34px;text-overflow:ellipsis;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a6179' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+.wpv-side>*{flex:none}
+.chips.seg .chip{font-size:13px;letter-spacing:-.01em}
+@media (min-width:761px){.auth .fm .in .grid2.wsrow2{grid-template-columns:minmax(0,1fr) minmax(0,1.12fr)}}
+@media (min-width:761px) and (max-height:800px){.auth .art.wsart{gap:16px;padding-top:32px;padding-bottom:32px}.wsart h2{font-size:32px;max-width:none}.wsart>p{display:none}}
+html.dark .tagin input{background:transparent!important}
+
+@media (max-width:760px){.auth .fm .in .grid2.wsrow2{grid-template-columns:1fr}.wslogo{flex-wrap:wrap}.wslogo .a{width:100%}}
+
+/* ===== setup form fields (round 3) ===== */
+.wslogo{display:flex;align-items:center;gap:14px;padding:14px;border:1.5px dashed var(--ln2);border-radius:14px;background:var(--bg);transition:border-color .15s,background .15s}
+.wslogo:hover{border-color:var(--v)}
+.wslogo .orgmark{box-shadow:0 0 0 1px var(--ln2)}
+.wslogo .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.wslogo .t b{font-size:14.5px;font-weight:600}
+.wslogo .t b span{color:var(--sb);font-weight:400}
+.wslogo .t small{color:var(--sb);font-size:12.5px;line-height:1.4}
+.wslogo .a{display:flex;gap:6px;flex:none}
+.wslogo .btn.sm{height:34px;padding:0 12px;font-size:13.5px}
+.auth .fm .in:has(.wslogo) .inp,.auth .fm .in:has(.wslogo) .chips.seg{height:46px;border-radius:11px}
+.auth .fm .in:has(.wslogo) .inp{font-size:15px}
+.auth .fm .in:has(.wslogo) .fld>label{font-size:13.5px;font-weight:600;color:var(--ink)}
+.auth .fm .in:has(.wslogo) .fld>em{font-size:12.5px;line-height:1.4}
+.auth .fm .in:has(.wslogo) #wsn+em{align-self:flex-start;background:var(--bg);border:1px solid var(--ln);border-radius:6px;padding:2px 8px;font-size:12px}
+.auth .fm .in:has(.wslogo) .tagin{border-radius:11px;padding:7px 8px;min-height:46px}
+
+/* ===== chat: more air, calmer header (round 3) ===== */
+@media (min-width:761px){
+  .main .mh{padding:14px 24px;gap:10px;min-height:68px}
+  .main .tabs{padding:0 20px;gap:6px}
+  .feed{padding:14px 0 26px}
+  .msg{padding:10px 28px;margin-top:6px;gap:14px}
+  .msg.cmp{padding:3px 28px;margin-top:0}
+  .daysep{margin:28px 0 12px}
+  .newsep{margin:20px 28px 8px}
+  .comp{margin:8px 28px 24px}
+  .banner{margin-left:28px;margin-right:28px}
+}
+.msg .tx{margin-top:4px}
+.msg .file,.msg .files{margin-top:10px}
+.msg .files .file{margin-top:0}
+.msg .file+.tx,.msg .files+.tx{margin-top:10px!important}
+.msg .reacts{margin-top:9px;gap:6px}
+.msg .rlink{margin-top:9px}
+.msg .nm{gap:9px}
+.msg .nm small{font-size:12px}
+.msg:hover{background:var(--soft)}
+html.dark .msg:hover{background:rgba(255,255,255,.03)}
+.main .mh .btn.sm{height:34px;padding:0 11px;font-size:13.5px;border-color:transparent;background:transparent;color:var(--mu)}
+.main .mh .btn.sm:hover{background:var(--soft);color:var(--ink)}
+.main .mh .btn.sm.pri{background:var(--v);color:#fff;border-color:var(--v)}
+.main .mh .btn.sm.hud{border-color:var(--ln2);color:var(--ink);background:var(--card,#fff)}
+.main .mh .btn.sm.hud:hover{border-color:var(--v);color:var(--v)}
+html.dark .main .mh .btn.sm:not(.pri):not(.hud){background-color:transparent!important;border-color:transparent!important}
+.main .mh .stack{margin-right:4px}
+
+/* ===== sidebar alignment and detail (round 3) ===== */
+.side .sgb{padding-left:17px;gap:17px}
+.side .sl .sg.lbl:not(.sgb){padding-left:10px}
+.side .sl .si.dmi .av{border-radius:7px!important}
+.side .sl .si .x small{font-size:12.5px;line-height:1.35}
+.side .sl{scrollbar-width:thin;scrollbar-color:var(--sln) transparent}
+.side .sl::-webkit-scrollbar{width:8px}.side .sl::-webkit-scrollbar-thumb{background:var(--sln);border-radius:4px}
+.side .sh{padding:16px 16px 12px!important}
+.side .tag{font-size:11px;border-radius:5px;padding:1px 6px}
+@media (min-width:761px){.auth .fm:has(.wslogo){padding-top:24px;padding-bottom:28px}.auth .fm:has(.wslogo) .top{margin-bottom:14px}.auth .fm .in:has(.wslogo){gap:16px;padding:28px 36px 24px!important}.auth .fm .in:has(.wslogo) .fine{margin:0}}
+
+/* ===== round 4 ===== */
+/* onboarding: profile + join panels match setup */
+.auth .art.ctr{gap:22px}
+.auth .art.ctr .brand{margin-bottom:auto}
+.auth .art.ctr>:last-child{margin-bottom:auto}
+.auth .art.ctr h2{font-size:40px;max-width:16ch}
+.auth .art.ctr .wpv-body{height:236px}
+.pfv{max-width:520px}
+.pfv-m{display:flex;gap:12px;padding:16px 16px 18px;align-items:flex-start}
+.pfv-m b{font-size:14.5px}.pfv-m b small{font-weight:400;color:var(--sb);font-size:11.5px;margin-left:6px}
+.art .pfv-m p{margin:2px 0 0;color:var(--ink);font-size:14px;max-width:none}
+.pfv-c{display:flex;gap:14px;align-items:center;margin:0 16px 16px;padding:14px;border:1px solid var(--ln);border-radius:12px;background:var(--bg);position:relative}
+.pfv-c>div{display:flex;flex-direction:column;gap:1px;min-width:0}
+.pfv-c b{font-size:15.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pfv-c span:not(.av){color:var(--mu);font-size:13.5px}
+.pfv-c small{color:var(--sb);font-size:12px;display:flex;align-items:center;gap:5px;margin-top:3px}
+.pfv-c em{position:absolute;right:12px;top:10px;font:600 10px 'Geist Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--sb);font-style:normal}
+@media (min-width:761px){.auth:has(.art.ctr) .fm .in .inp{height:46px;border-radius:11px}}
+@media (min-width:761px) and (max-height:800px){.auth .art.ctr{gap:16px;padding-top:32px;padding-bottom:32px}.auth .art.ctr h2{font-size:32px;max-width:none}}
+/* sidebar: section add buttons, presence */
+.side .sgadd{align-self:flex-end;margin:-26px 6px 2px 0;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:none;color:var(--sfg2);display:grid;place-items:center;cursor:pointer;opacity:0;transition:opacity .12s,background .12s;position:relative;z-index:1}
+.side .sl:hover .sgadd,.side .sgadd:focus-visible{opacity:1}
+.side .sgadd:hover{background:var(--shov);color:var(--sfg)}
+@media (hover:none){.side .sgadd{opacity:1}}
+.side .sl .si.dmi .pav .pdot{width:9px!important;height:9px!important;right:-3px;bottom:-3px}
+/* thread pane */
+.pane .pb .msg{padding:6px 0;margin-top:0;gap:11px}
+.pane .pb .msg>.av,.pane .pb .msg>.pav .av{width:34px!important;height:34px!important;font-size:12px!important;border-radius:9px!important}
+.pane .pb .daysep{font:600 11.5px 'Geist Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--sb);justify-content:flex-start;gap:10px}
+.pane .pb .daysep:before{display:none}.pane .pb .daysep:after{content:"";flex:1;height:1px;background:var(--ln)}
+.pane .comp{margin:0 14px 14px!important}
+.msg .task{margin-top:9px}
+/* fixes to existing screens */
+.smark.mt{position:static!important;display:inline-block!important;padding:0!important;border:0!important;box-shadow:none!important;border-radius:50%!important;z-index:auto}
+.dz-card{flex-direction:row!important;flex-wrap:nowrap!important}
+.dz-card>.dz-body{flex:1 1 0!important;min-width:0}
+@media (min-width:761px){.main .mh .btn.sm:nth-of-type(2):nth-last-of-type(2):not(.pri){border-color:var(--ln2);color:var(--ink);background:var(--card,#fff)}}
+html.dark .main .mh .btn.sm:nth-of-type(2):nth-last-of-type(2):not(.pri){border-color:var(--ln)!important}
+/* long content never breaks the layout */
+.msg .tx,.pp-rv,.dz-title{overflow-wrap:anywhere}
+.side .sl .si .x b,.mh .tt b{min-width:0}
+.dz-card.appr{gap:14px!important;padding:16px 18px!important;border-radius:14px!important;box-shadow:0 1px 2px rgba(38,19,37,.04)!important}
+.pane .pb .daysep{align-items:center}

@@ -204,7 +204,7 @@ function LiveDmsPage() {
           {dm !== 'AH' && (
             <button
               type="button"
-              className="btn sm"
+              className="btn sm hud"
               onClick={async () => {
                 const err = await startHuddle({ dmWith: dm });
                 toast(err ?? 'Call started · ' + nameOf(dm) + ' can join from the chat');
@@ -275,7 +275,9 @@ function LiveDmsPage() {
         </button>
       }
     >
-      <div className="sg lbl">Channels</div>
+      <button type="button" className="sg lbl sgb" data-sec="ch" title="Show or hide">
+        Channels
+      </button>
       <ChannelList
         active={null}
         onOpen={(id) => {
@@ -288,7 +290,9 @@ function LiveDmsPage() {
           router.push(ROUTES.channels);
         }}
       />
-      <div className="sg lbl">Direct messages</div>
+      <button type="button" className="sg lbl sgb" data-sec="dm" title="Show or hide">
+        Direct messages
+      </button>
       <DmList active={dm} onOpen={(k) => void open(k)} />
       <button type="button" className="si" onClick={() => setPicking(true)}>
         <Ic n="compose" size={14} /> New message
@@ -451,7 +455,7 @@ function DemoDmsPage() {
         sub={`${p.role} · available · 14:10 in Lahore`}
         right={
           <>
-            <button type="button" className="btn sm" onClick={() => toast('Huddle started · others can join')}>
+            <button type="button" className="btn sm hud" onClick={() => toast('Huddle started · others can join')}>
               <Ic n="huddle" /> Huddle
             </button>
             <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Profile details" aria-pressed={ui.paneOpen}>
