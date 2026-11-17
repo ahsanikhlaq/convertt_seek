@@ -317,6 +317,15 @@ Deno.serve(async (req) => {
     const sys = assistantPrompt({ org: w?.name ?? '', channel: ch?.name ?? 'channel', sender, mentioned, tz, team, instructions: setting?.instructions ?? '', knowledge: setting?.knowledge ?? '' });
     try {
       const text = tidy(await gemini(sys, transcript));
+      // two quick messages get one reply: if they wrote again (that message gets the reply, with both in view) or a
+      // reply went out while this one was being written, stay quiet
+      if (!mentioned) {
+        const [{ count: newer }, { count: answered }] = await Promise.all([
+          admin.from('messages').select('id', { count: 'exact', head: true }).eq('channel_id', m.channel_id).eq('user_id', user.id).is('parent_id', null).gt('created_at', m.created_at),
+          admin.from('messages').select('id', { count: 'exact', head: true }).eq('channel_id', m.channel_id).eq('agent', 'away_assistant').gt('created_at', m.created_at),
+        ]);
+        if ((newer ?? 0) > 0 || (answered ?? 0) > 0) return json({ replied: false, why: 'already answered' });
+      }
       const { error } = await admin.from('messages').insert({ channel_id: m.channel_id, body: text, agent: 'away_assistant' });
       if (error) return json({ error: 'The assistant couldn’t post its reply' }, 500);
       await admin.from('agent_log').insert({ workspace_id: m.workspace_id, agent: 'away_assistant', action: `Replied in #${ch?.name ?? 'channel'} to ${sender}${mentioned ? ' (asked directly)' : ' while the team was away'}`, conv: 'ch:' + m.channel_id, sources: [m.id], actor_id: user.id });

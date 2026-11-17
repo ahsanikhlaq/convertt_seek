@@ -210,7 +210,7 @@ function LiveDmsPage() {
                 toast(err ?? 'Call started · ' + nameOf(dm) + ' can join from the chat');
               }}
             >
-              <Ic n="phone" /> Call
+              <Ic n="phone" /> <span className="hide-m">Call</span>
             </button>
           )}
           <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Profile details" aria-pressed={ui.paneOpen}>
@@ -456,7 +456,7 @@ function DemoDmsPage() {
         right={
           <>
             <button type="button" className="btn sm hud" onClick={() => toast('Huddle started · others can join')}>
-              <Ic n="huddle" /> Huddle
+              <Ic n="huddle" /> <span className="hide-m">Huddle</span>
             </button>
             <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Profile details" aria-pressed={ui.paneOpen}>
               <Ic n="info" />

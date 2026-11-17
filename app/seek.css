@@ -1361,3 +1361,6 @@ html.dark .main .mh .btn.sm:nth-of-type(2):nth-last-of-type(2):not(.pri){border-
 .side .sl .si .x b,.mh .tt b{min-width:0}
 .dz-card.appr{gap:14px!important;padding:16px 18px!important;border-radius:14px!important;box-shadow:0 1px 2px rgba(38,19,37,.04)!important}
 .pane .pb .daysep{align-items:center}
+
+/* phones: header buttons are icons only, so the channel or person name always fits */
+@media (max-width:760px){.main .mh{gap:6px}.main .mh .btn.sm{padding:0 9px}.main .mh .tt{min-width:64px}}

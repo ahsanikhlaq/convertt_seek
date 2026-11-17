@@ -357,7 +357,7 @@ export function ChannelsPage() {
                 const err = await startHuddle({ channel: c.cid });
                 toast(err ?? 'Huddle started · everyone in #' + ch + ' can join');
               }}>
-              <Ic n="huddle" /> Huddle
+              <Ic n="huddle" /> <span className="hide-m">Huddle</span>
             </button>
           </>
         }
