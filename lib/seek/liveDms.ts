@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { notifyOut } from './push';
 import { accountFor, backendOn, DB_SCHEMA, sb } from './backend';
 import type { ChatMessage, FileRef, MessageCard, PersonKey } from './data';
 import { inviteByEmail, keyFor, learnProfiles, timeLabel, toUiId } from './live';
@@ -275,6 +276,7 @@ export function useLiveDms(): LiveDms | null {
         markNotSent(update, (d) => (d.dms[k] ||= { last: '', unread: 0, msgs: [] }).msgs, text, () => send(text));
         return;
       }
+      notifyOut();
       await addRow(data as Row);
     },
     invite: (email, opts) => inviteByEmail(ws.current, me.current, email, opts),

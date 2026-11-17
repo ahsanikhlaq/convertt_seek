@@ -1,5 +1,6 @@
 'use client';
 
+import { notifyOut } from './push';
 import { sb } from './backend';
 import type { FileRef } from './data';
 
@@ -73,6 +74,7 @@ export async function sendFiles(target: FileTarget, files: File[], caption: stri
     await sb().storage.from('seek-files').remove(uploaded.map((u) => u.path));
     return 'Couldn’t send the files. Check your connection';
   }
+  notifyOut();
   return null;
 }
 

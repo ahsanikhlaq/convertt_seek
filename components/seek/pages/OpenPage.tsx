@@ -7,6 +7,7 @@ import { convOfMessage, openConversation } from '@/lib/seek/liveExtras';
 import { toUiId } from '@/lib/seek/live';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
+import { forgetAccount, preferOrg } from '@/lib/seek/backend';
 
 /** Where a copied message link lands (/open?m=<id>): opens the conversation and highlights the message. */
 export function OpenPage() {
@@ -15,7 +16,16 @@ export function OpenPage() {
   const [missing, setMissing] = useState(false);
   useEffect(() => {
     if (s.session !== 'in' && s.session !== 'client') return;
-    const id = Number(new URLSearchParams(location.search).get('m'));
+    const q = new URLSearchParams(location.search);
+    const id = Number(q.get('m'));
+    // from an email or a phone notification about another of your workspaces: switch to it first
+    const w = q.get('w');
+    if (w && w !== s.orgId && (s.orgs ?? []).some((o) => o.id === w)) {
+      preferOrg(w);
+      forgetAccount();
+      location.replace('/open?m=' + id);
+      return;
+    }
     if (!Number.isInteger(id) || id <= 0) {
       router.replace(s.session === 'client' ? ROUTES.clients : ROUTES.channels);
       return;

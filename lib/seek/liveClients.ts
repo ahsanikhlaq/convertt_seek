@@ -1,5 +1,6 @@
 'use client';
 
+import { notifyOut } from './push';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, inviteClient, completeStep, sb, type ClientRole } from './backend';
@@ -223,6 +224,7 @@ export function useLiveClients(): LiveClients | null {
         markNotSent(update, (d) => ((d.lc ||= {})[laneKey(space, ln)] ||= []), text, () => send(space, ln, text));
         return;
       }
+      notifyOut();
       const r = data as Row;
       update((d) => {
         const list = ((d.lc ||= {})[laneKey(space, ln)] ||= []);

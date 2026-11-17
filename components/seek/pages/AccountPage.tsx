@@ -9,7 +9,7 @@ import { ROUTES } from '@/lib/seek/routes';
 import { setMe, useSeek } from '@/lib/seek/store';
 import { ConfirmDialog } from '../Dialogs';
 import { PauseSelect } from '../PauseSelect';
-import { AlsoNotify, ChannelExceptions, DesktopBanners, Keywords, Schedule, WhatToNotify } from '../NotifySettings';
+import { AlsoNotify, ChannelExceptions, DesktopBanners, DevicePush, Keywords, Schedule, WhatToNotify } from '../NotifySettings';
 import { usePopovers } from '../Popovers';
 import { ClientRail, MainHeader, Shell } from '../Shell';
 import { SoundSettings } from '../SoundSettings';
@@ -237,6 +237,14 @@ function NotificationsTab() {
         <Schedule />
       </div>
 </section>
+      {backendOn && (
+        <section className="acard">
+          <h3>Phone and desktop</h3>
+          <div className="abody">
+            <DevicePush />
+          </div>
+        </section>
+      )}
       <section className="acard">
         <h3>Desktop notifications</h3>
 <div className="abody">
@@ -264,11 +272,11 @@ function NotificationsTab() {
         <div className="fld">
           <label htmlFor="ac-e">Email me about notifications</label>
           <select id="ac-e" className="inp" value={email} onChange={(e) => void saveEmail(e.target.value as typeof email)}>
-            <option value="instant">As they happen (when I&apos;m not in Seek)</option>
-            <option value="daily">Once a day (summary)</option>
+            <option value="instant">When I’m away (unread for 10 minutes)</option>
+            <option value="daily">Once a day (a summary at 9:00)</option>
             <option value="off">Never</option>
           </select>
-          <em>Emails go to {s.me.email}. Your choice is saved now; emails start once Seek’s email sending is set up. In-app notifications always show under the bell.</em>
+          <em>Emails go to {s.me.email}, only for direct messages, mentions, replies and client messages you haven’t read. Several at once come as one email. Paused and outside your schedule: no email.</em>
         </div>
       </div>
 </section>

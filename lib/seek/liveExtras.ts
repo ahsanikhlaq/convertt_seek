@@ -1,5 +1,6 @@
 'use client';
 
+import { notifyOut } from './push';
 import { useEffect, useRef } from 'react';
 import { backendOn, DB_SCHEMA, sb } from './backend';
 import type { FileRef, LiveTask, PersonKey, State } from './data';
@@ -421,6 +422,7 @@ export async function startHuddle(target: ConvTarget): Promise<string | null> {
     w?.close();
     return 'Couldn’t start it. Check your connection';
   }
+  notifyOut();
   if (!w) return 'Your browser blocked the video tab. Allow pop-ups for Seek, or press Join on the card';
   return null;
 }

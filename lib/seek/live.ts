@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { notifyOut } from './push';
 import { accountFor, backendOn, DB_SCHEMA, sb, sendInvite } from './backend';
 import { PEOPLE, type ChatMessage, type FeedItem, type FileRef, type MessageCard, type PersonKey } from './data';
 import { initialsOf, channelId as toChannelName, isEmail } from './format';
@@ -360,6 +361,7 @@ export function useLiveChat(): LiveChat | null {
       return;
     }
     addRow(data as Row);
+    notifyOut();
     if (parent == null && agentChans.current.has(channel_id))
       void sb()
         .functions.invoke('seek-ai', { body: { action: 'away', message_id: (data as Row).id } })

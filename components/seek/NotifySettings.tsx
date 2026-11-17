@@ -1,5 +1,6 @@
 'use client';
 
+import { disablePush, enablePush, pushState, testPush, type PushState } from '@/lib/seek/push';
 import { useEffect, useRef, useState } from 'react';
 import { backendOn, DEFAULT_NOTIFY, saveNotify, sb, type NotifyPrefs, type NotifySchedule } from '@/lib/seek/backend';
 import { inSchedule } from '@/lib/seek/prefs';
@@ -202,6 +203,64 @@ export function Schedule() {
           <em className="ahint">
             In your time zone{s.me.tz ? ' (' + s.me.tz.replace(/_/g, ' ') + ')' : ''}. Right now you {now ? 'are inside' : 'are outside'} your schedule.
           </em>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Phone and desktop notifications when Seek isn't open: on or off for this device, and a test. */
+export function DevicePush() {
+  const { toast } = useSeek();
+  const [st, setSt] = useState<PushState | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void pushState().then(setSt);
+  }, []);
+  const on = st === 'on';
+  const toggle = async () => {
+    setBusy(true);
+    const err = on ? await disablePush() : await enablePush();
+    setBusy(false);
+    setSt(await pushState());
+    toast(err ?? (on ? 'Notifications off on this device' : 'Notifications on. Try “Send a test”'));
+  };
+  return (
+    <>
+      <div className="trow">
+        <div>
+          <b>Notify me on this device when I’m away</b>
+          <small>
+            {st === 'ios-install'
+              ? 'On iPhone and iPad: tap Share → Add to Home Screen, open Seek from there, then turn this on'
+              : st === 'unsupported'
+                ? 'This browser can’t show notifications when Seek is closed. Try Chrome, Edge, Firefox or Safari'
+                : st === 'denied'
+                  ? 'Blocked in your browser. Allow notifications for this site in its settings, then come back'
+                  : 'Messages, mentions and replies pop up on this phone or computer, even when Seek is closed'}
+          </small>
+        </div>
+        <Switch on={on} disabled={busy || !st || st === 'unsupported' || st === 'ios-install' || st === 'denied'} label="Notify me on this device" onClick={() => void toggle()} />
+      </div>
+      {on && (
+        <div className="trow">
+          <div>
+            <b>Check it works</b>
+            <small>Sends a notification to every device where you turned this on</small>
+          </div>
+          <button
+            type="button"
+            className="btn sm"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              const err = await testPush();
+              setBusy(false);
+              toast(err ?? 'Test sent. It should appear in a few seconds');
+            }}
+          >
+            Send a test
+          </button>
         </div>
       )}
     </>

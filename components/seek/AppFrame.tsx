@@ -18,6 +18,7 @@ import { dmThreadWith, openConversation } from '@/lib/seek/liveExtras';
 import { flashMessage } from '@/lib/seek/liveDecisions';
 import { toUiId } from '@/lib/seek/live';
 import { installCommands } from '@/lib/seek/commands';
+import { notifyOut, registerWorker } from '@/lib/seek/push';
 import { useOpenFile } from './Files';
 import { ConfirmDialog, Modal } from './Dialogs';
 import { WorkspaceSettings } from './WorkspaceSettings';
@@ -136,6 +137,16 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   // "/" commands in every message box, and folding sidebar sections
   useEffect(() => installCommands(), []);
+
+  // notifications outside Seek: the service worker, and a delivery round now and every 5 minutes
+  const signedIn = backendOn && (s.session === 'in' || s.session === 'client');
+  useEffect(() => {
+    if (!signedIn) return;
+    void registerWorker();
+    notifyOut();
+    const t = setInterval(notifyOut, 5 * 60_000);
+    return () => clearInterval(t);
+  }, [signedIn]);
 
   // the desktop app's menu (and the / commands) navigate by dispatching this event
   useEffect(() => {
