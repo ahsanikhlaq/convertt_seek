@@ -1,5 +1,6 @@
 'use client';
 
+import { testEmail } from '@/lib/seek/push';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { backendOn, removeAvatar, saveProfile, signInMethods, signOut, signOutOthers, uploadAvatar } from '@/lib/seek/backend';
@@ -278,6 +279,20 @@ function NotificationsTab() {
           </select>
           <em>Emails go to {s.me.email}, only for direct messages, mentions, replies and client messages you haven’t read. Several at once come as one email. Paused and outside your schedule: no email.</em>
         </div>
+        {backendOn && (
+          <button
+            type="button"
+            className="btn sm"
+            style={{ alignSelf: 'flex-start' }}
+            onClick={async () => {
+              toast('Sending…');
+              const r = await testEmail();
+              toast(r.error ?? 'Test email sent to ' + r.to + '. Check your inbox (and spam)');
+            }}
+          >
+            <Ic n="mail" size={14} /> Send a test email
+          </button>
+        )}
       </div>
 </section>
     </>

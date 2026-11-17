@@ -93,6 +93,12 @@ export async function testPush(): Promise<string | null> {
   return r.error ?? (r.data?.sent ? null : 'Couldn’t reach this device. Turn notifications off and on again');
 }
 
+/** Emails you a sample notification. Returns the address it went to, or an error. */
+export async function testEmail(): Promise<{ to?: string; error?: string }> {
+  const r = await call<{ sent: string }>({ action: 'test-email' });
+  return r.error ? { error: r.error } : { to: r.data?.sent };
+}
+
 // ---- delivery
 let timer: ReturnType<typeof setTimeout> | null = null;
 /** After sending: deliver the notifications it created (pushes now, emails for people away a while). */

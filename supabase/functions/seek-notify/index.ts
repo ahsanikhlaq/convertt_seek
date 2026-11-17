@@ -133,16 +133,26 @@ async function sendPush(sub: Sub, msg: Record<string, unknown>, v: Vapid): Promi
 // ---------------------------------------------------------------- email (Brevo)
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-async function sendEmail(to: { email: string; name: string }, subject: string, html: string, text: string): Promise<boolean> {
+async function sendEmail(to: { email: string; name: string }, subject: string, html: string, text: string): Promise<{ ok: boolean; why?: string }> {
   const key = Deno.env.get('BREVO_API_KEY');
-  if (!key || !FROM) return false;
+  if (!key) return { ok: false, why: 'The BREVO_API_KEY secret isn’t set in Supabase' };
+  if (!FROM) return { ok: false, why: 'The NOTIFY_FROM secret (the sender email) isn’t set in Supabase' };
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: { 'api-key': key, 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ sender: { name: 'Seek', email: FROM }, to: [to], subject, htmlContent: html, textContent: text, tags: ['seek-notify'] }),
   });
-  await res.body?.cancel();
-  return res.ok;
+  if (res.ok) {
+    await res.body?.cancel();
+    return { ok: true };
+  }
+  // Brevo's own reason (wrong key, sender not verified, daily limit…), for the test button
+  const why = await res.text().catch(() => '');
+  let msg = why;
+  try {
+    msg = JSON.parse(why).message ?? why;
+  } catch {}
+  return { ok: false, why: 'Brevo said: ' + (msg || 'error ' + res.status).slice(0, 200) };
 }
 
 type Note = { id: number; user_id: string; workspace_id: string | null; kind: string; title: string; body: string; conv: string; message_id: number | null; created_at: string };
@@ -286,7 +296,7 @@ async function flush(admin: Client) {
         const due = away(p, EMAIL_AWAY_MS) || (away(p, PUSH_AWAY_MS) && notes.some((n) => Date.now() - Date.parse(n.created_at) > EMAIL_AWAY_MS));
         if (!due) continue;
         const e = emailOf(notes, p.name.split(/\s+/)[0], false);
-        if (await sendEmail({ email: p.email, name: p.name }, e.subject, e.html, e.text)) {
+        if ((await sendEmail({ email: p.email, name: p.name }, e.subject, e.html, e.text)).ok) {
           out.emailed++;
           await admin.from('notifications').update({ emailed_at: new Date().toISOString() }).in('id', notes.map((n) => n.id));
           await admin.from('notify_state').upsert({ user_id: uid, last_email_at: new Date().toISOString(), last_digest_on: s?.last_digest_on ?? null });
@@ -295,7 +305,7 @@ async function flush(admin: Client) {
         const z = zoned(new Date(), p.time_zone);
         if (z.min < 9 * 60 || s?.last_digest_on === z.day) continue;
         const e = emailOf(notes, p.name.split(/\s+/)[0], true);
-        if (await sendEmail({ email: p.email, name: p.name }, e.subject, e.html, e.text)) {
+        if ((await sendEmail({ email: p.email, name: p.name }, e.subject, e.html, e.text)).ok) {
           out.digests++;
           await admin.from('notifications').update({ emailed_at: new Date().toISOString() }).in('id', notes.map((n) => n.id));
           await admin.from('notify_state').upsert({ user_id: uid, last_email_at: s?.last_email_at ?? null, last_digest_on: z.day });
@@ -325,6 +335,15 @@ Deno.serve(async (req) => {
   }
   try {
     if (body.action === 'vapid') return json({ publicKey: (await vapid(admin)).publicKey });
+    if (body.action === 'test-email') {
+      const p = (await people(admin, [user.id])).get(user.id);
+      const to = p?.email || user.email;
+      if (!to) return json({ error: 'Your account has no email address' }, 400);
+      const sample: Note = { id: 0, user_id: user.id, workspace_id: null, kind: 'dm', title: 'Seek', body: 'This is a test. Unread direct messages, mentions, replies and client messages will reach you like this when you’re away.', conv: 'test', message_id: null, created_at: new Date().toISOString() };
+      const e = emailOf([sample], (p?.name || 'there').split(/\s+/)[0], false);
+      const r = await sendEmail({ email: to, name: p?.name || to }, 'Seek email notifications are on', e.html, e.text);
+      return r.ok ? json({ sent: to }) : json({ error: r.why }, 502);
+    }
     if (body.action === 'test') {
       const { data: subs } = await admin.from('push_subscriptions').select('endpoint, p256dh, auth, user_id').eq('user_id', user.id);
       const list = (subs ?? []) as Sub[];
