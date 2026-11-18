@@ -43,6 +43,17 @@ const learned = new Set<string>();
 // the AI assistant (an agent, not a person) shows as "Seek assistant" in real workspaces
 if (backendOn) PEOPLE.AI = { name: 'Seek assistant', color: '#5a48c0', role: 'AI assistant', initials: 'AI' };
 
+// other agents that write messages show under their own name ("Scope guard"), keyed "agent:<key>"
+const AGENT_NAMES: Record<string, [string, string]> = { scope_guard: ['Scope guard', 'SG'], retainer_watch: ['Retainer watch', 'RW'], status_drafter: ['Status drafter', 'SD'] };
+/** The person key a message written by an agent shows as (the Away assistant is "Seek assistant", 'AI'). */
+export function agentWho(agent: string | null | undefined): PersonKey {
+  const a = agent ? AGENT_NAMES[agent] : undefined;
+  if (!a) return 'AI';
+  const k = 'agent:' + agent;
+  PEOPLE[k] ??= { name: a[0], color: '#5a48c0', role: 'AI agent', initials: a[1] };
+  return k;
+}
+
 // Names and photos of people you've seen, remembered on this device so saved chats show who wrote what at once
 // (they're refreshed from the server once per visit).
 const PEOPLE_KEY = 'seek:people';
@@ -145,7 +156,7 @@ export function useLiveChat(): LiveChat | null {
   const keyOf = (userId: string): PersonKey => keyFor(userId, meRef.current);
   const learnPeople = useCallback((ids: string[]) => learnProfiles(ids, meRef.current), []);
 
-  const whoOf = (r: { user_id: string | null; agent?: string | null }): PersonKey => (r.agent || !r.user_id ? 'AI' : keyOf(r.user_id));
+  const whoOf = (r: { user_id: string | null; agent?: string | null }): PersonKey => (r.agent || !r.user_id ? agentWho(r.agent) : keyOf(r.user_id));
 
   const toFeed = useCallback((rows: Row[]): FeedItem[] => {
     const roots: ChatMessage[] = [];

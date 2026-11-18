@@ -4,8 +4,8 @@ import { sb } from './backend';
 
 /**
  * AI agent settings (backend mode): each agent's on/off and permission level, Pause all AI, and the agent log.
- * Only admins change them (the database checks). The agents themselves run on the server once the AI
- * connection (a Claude API key) is added; until then they're set up but idle.
+ * Only admins change them (the database checks). The agents run on the server (seek-ai, on the Gemini API) and,
+ * for Retainer watch, in the database.
  */
 
 export type AgentKey = 'summariser' | 'task_suggester' | 'away_assistant' | 'scope_guard' | 'retainer_watch' | 'status_drafter';
@@ -23,9 +23,9 @@ export const AGENTS: { key: AgentKey; name: string; does: string; level: Level; 
   { key: 'summariser', name: 'Summariser', does: 'Catch-up on a channel or /summarize, with links to every source.', level: 'suggest', client: false, on: true },
   { key: 'task_suggester', name: 'Task suggester', does: 'Proposes tasks from messages. You accept or dismiss.', level: 'suggest', client: false, on: true },
   { key: 'away_assistant', name: 'Away assistant', does: 'A channel member that replies when nobody on the team is around: answers from what you teach it, or says you’ll get back to them.', level: 'ask', client: true, on: true },
-  { key: 'scope_guard', name: 'Scope guard', does: 'Flags requests outside the accepted scope and drafts a change request.', level: 'suggest', client: false, on: true, needs: 'each client’s agreed scope' },
-  { key: 'retainer_watch', name: 'Retainer watch', does: 'Warns in Team notes at 80% and 100% of a retainer.', level: 'suggest', client: false, on: true, needs: 'retainer hours tracking' },
-  { key: 'status_drafter', name: 'Status drafter', does: 'Drafts the weekly client update for your review.', level: 'ask', client: true, on: false },
+  { key: 'scope_guard', name: 'Scope guard', does: 'Checks client requests against each client’s agreed scope (Clients → Scope & hours) and, when one looks outside it, posts a note with a draft change request in Team notes. Never writes to the client.', level: 'suggest', client: false, on: true },
+  { key: 'retainer_watch', name: 'Retainer watch', does: 'Warns in Team notes when time logged on a client reaches 80% and 100% of its monthly retainer (Clients → Scope & hours).', level: 'suggest', client: false, on: true },
+  { key: 'status_drafter', name: 'Status drafter', does: 'Drafts the weekly client update from the last 7 days of Client chat (never Team notes). You edit it and send it yourself.', level: 'ask', client: true, on: false },
 ];
 
 export type AgentState = { enabled: boolean; level: Level };
@@ -62,7 +62,7 @@ export async function saveTraining(ws: string, agent: AgentKey, instructions: st
 }
 
 /** Agents that are running now (the others are switched on but not built yet). */
-export const RUNNING: AgentKey[] = ['summariser', 'task_suggester', 'away_assistant'];
+export const RUNNING: AgentKey[] = ['summariser', 'task_suggester', 'away_assistant', 'scope_guard', 'retainer_watch', 'status_drafter'];
 
 /** Try the assistant with (unsaved) instructions and knowledge: the reply comes back here; nothing is posted. Admins. */
 export async function previewAssistant(ws: string, question: string, instructions: string, knowledge: string): Promise<{ text?: string; error?: string }> {

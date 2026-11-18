@@ -131,7 +131,7 @@ export type Mode = 'light' | 'dark' | 'system';
 export type StatusKey = 'on' | 'mt' | 'fc' | 'aw';
 export type CustomEmoji = { n: string; src: string; /** backend mode: who added it */ by?: string };
 export type WorkspaceId = 'C' | 'K';
-export type ClientTab = 'Client chat' | 'Team notes' | 'Status' | 'Approvals' | 'Files' | 'Pins' | 'People';
+export type ClientTab = 'Client chat' | 'Team notes' | 'Status' | 'Scope & hours' | 'Approvals' | 'Files' | 'Pins' | 'People';
 
 export type Workspace = { ch: string; channels: Channel[]; msgs: Record<string, FeedItem[]> };
 

@@ -329,9 +329,11 @@ export function SetupPage() {
   useEffect(() => {
     if (!backendOn || cleared.current) return;
     cleared.current = true;
-    if (w.step) return; // resuming a draft
+    const another = s.session === 'in' && /[?&]new=1/.test(location.search);
+    if (w.step && !another) return; // resuming a draft
     ws((x) => {
-      if (x.name === 'Convertt') x.name = '';
+      if (x.name === 'Convertt' || another) x.name = '';
+      x.step = undefined;
       x.logo = undefined;
       x.invites = [];
       x.roles = {};
@@ -346,6 +348,21 @@ export function SetupPage() {
       if (preview) URL.revokeObjectURL(preview);
     },
     [preview],
+  );
+
+  // another workspace, but you left without creating it: your current workspace's details come back
+  const madeIt = useRef(false);
+  useEffect(
+    () => () => {
+      if (!backendOn || madeIt.current || s.session !== 'in') return;
+      void currentAccount(true).then((acc) => {
+        if (acc)
+          update((d) => {
+            applyAccount(d, acc);
+          });
+      });
+    },
+    [], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // your company may already be on Seek: offer to join it instead of creating a second workspace
@@ -463,6 +480,7 @@ export function SetupPage() {
         return;
       }
       newOrg = id;
+      madeIt.current = true;
       // if anything below fails, a retry only sends the invites
       ws((x) => {
         x.step = 'invite';

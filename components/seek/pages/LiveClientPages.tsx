@@ -24,6 +24,7 @@ import { PinsList, useSchedule } from '../Extras';
 import { useApprovals } from '@/lib/seek/liveApprovals';
 import { spaceFiles, type SharedFile } from '@/lib/seek/liveFiles';
 import { Ic } from '../icons';
+import { DraftUpdateDialog, ScopeHoursTab } from '../ScopeHours';
 
 /**
  * Client spaces with a real backend. The agency's team sees every client with Client chat, Team notes, Status,
@@ -38,7 +39,7 @@ export function LiveClientsPage({ scheduling, inviting }: { scheduling?: boolean
   return <TeamClients live={live} inviting={inviting} />;
 }
 
-const TABS: ClientTab[] = ['Client chat', 'Team notes', 'Status', 'Approvals', 'Files', 'Pins', 'People'];
+const TABS: ClientTab[] = ['Client chat', 'Team notes', 'Status', 'Scope & hours', 'Approvals', 'Files', 'Pins', 'People'];
 const ROLES: [ClientRole, string][] = [
   ['approver', 'Approver'],
   ['contributor', 'Contributor'],
@@ -129,6 +130,7 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
 
   const appr = useApprovals(sp?.id ?? null);
   const [scheduling, setScheduling] = useState(false);
+  const [drafting, setDrafting] = useState(false);
   const [newClient, setNewClient] = useState(!!inviting);
   const router = useRouter();
   const closeNew = (id?: string) => {
@@ -287,6 +289,8 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
         <Checklist live={live} sp={sp} />
       </>
     );
+  } else if (tab === 'Scope & hours') {
+    body = <ScopeHoursTab key={sp.id} live={live} sp={sp} onDraft={() => setDrafting(true)} />;
   } else if (tab === 'Approvals') {
     body = (
       <ApprovalsTab
@@ -403,6 +407,9 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
                 <Avatar key={k} k={k} size={26} />
               ))}
             </span>
+            <button type="button" className="btn sm" onClick={() => setDrafting(true)} title="Draft weekly update (Status drafter)">
+              <Ic n="ai" /> <span className="hide-m">Draft update</span>
+            </button>
             <button type="button" className="btn sm" onClick={() => setScheduling(true)} title="Schedule a call">
               <Ic n="calendar" /> <span className="hide-m">Schedule</span>
             </button>
@@ -420,6 +427,18 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
           me={live.me}
           onClose={() => setScheduling(false)}
           onScheduled={(toClient) => setTab(toClient ? 'Client chat' : 'Team notes')}
+        />
+      )}
+      {drafting && (
+        <DraftUpdateDialog
+          live={live}
+          sp={sp}
+          readers={readers}
+          onClose={() => setDrafting(false)}
+          onSent={() => {
+            setDrafting(false);
+            setTab('Client chat');
+          }}
         />
       )}
       {newDialog}

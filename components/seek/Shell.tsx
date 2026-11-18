@@ -12,6 +12,7 @@ import { NotesBell } from './NotesBell';
 import { usePopovers } from './Popovers';
 import { Avatar, Icon, Logo, ModeSeg, OrgMark, StatusDot, type IconName } from './ui';
 import { Ic } from './icons';
+import { HelpDialog } from './HelpDialog';
 import { useResync } from '@/lib/seek/resync';
 import { unreadCounts } from '@/lib/seek/liveSync';
 
@@ -114,6 +115,7 @@ function useWorkspaceList(): { items: WsItem[] } {
 
 function Rail({ active }: { active: RouteKey }) {
   const { s, ui, setUI, toast } = useSeek();
+  const router = useRouter();
   const { items } = useWorkspaceList();
   const dot: Partial<Record<RouteKey, boolean>> = {
     dms: Object.values(s.dms).some((d) => d && d.unread > 0),
@@ -127,7 +129,17 @@ function Rail({ active }: { active: RouteKey }) {
           {!!w.unread && <span className="wsun">{w.unread > 99 ? '99+' : w.unread}</span>}
         </button>
       ))}
-      <button type="button" className="wsb add" onClick={() => toast('Create or join another workspace')} aria-label="Add a workspace">
+      <button
+        type="button"
+        className="wsb add"
+        onClick={() => {
+          if (!backendOn) return toast('Create or join another workspace');
+          setUI({ sideOpen: false });
+          router.push(ROUTES.setup + '?new=1');
+        }}
+        aria-label="Add a workspace"
+        title="Create another workspace"
+      >
         <Ic n="plus" size={18} />
       </button>
       <span className="sep"></span>
@@ -150,6 +162,7 @@ function Rail({ active }: { active: RouteKey }) {
 }
 
 function TopBar() {
+  const [help, setHelp] = useState(false);
   const { s, dark, update, setUI, toast } = useSeek();
   const pop = usePopovers();
   return (
@@ -182,9 +195,10 @@ function TopBar() {
         >
           {dark ? <Ic n="sun" /> : <Ic n="moon" />}
         </button>
-        <button type="button" className="btn sm ghost" onClick={() => toast('Help centre opens in a new tab')}>
+        <button type="button" className="btn sm ghost" onClick={() => setHelp(true)}>
           <Ic n="help" /> Help
         </button>
+        {help && <HelpDialog onClose={() => setHelp(false)} />}
         {backendOn ? (
           <NotesBell />
         ) : (

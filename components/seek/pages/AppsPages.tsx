@@ -11,6 +11,7 @@ import { useSeek } from '@/lib/seek/store';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar, RichText, Switch } from '../ui';
 import { Ic } from '../icons';
+import { LiveApps } from '../LiveApps';
 
 /** Apps and AI: the two pages, every agent with whether it's on (click to jump to it), and the log. */
 function AppsSide({ active, on, paused, onLog }: { active: 'apps' | 'agents'; on?: Partial<Record<AgentKey, boolean>>; paused?: boolean; onLog?: () => void }) {
@@ -219,7 +220,7 @@ function LiveAgentsPage() {
                   <span>Posts via What reaches clients</span>
                 </div>
                 <div className="ft">
-                  <span>{pa ? 'Paused' : !st.enabled ? 'Off' : RUNNING.includes(a.key) ? 'Running on Gemini (free, for testing)' : a.needs ? 'Needs ' + a.needs : 'Coming soon'}</span>
+                  <span>{pa ? 'Paused' : !st.enabled ? 'Off' : RUNNING.includes(a.key) ? (a.key === 'retainer_watch' ? 'Running · watches logged hours (no AI)' : 'Running on Gemini (free, for testing)') : a.needs ? 'Needs ' + a.needs : 'Coming soon'}</span>
                   {a.key === 'away_assistant' && admin && (
                     <button type="button" className="btn sm" onClick={() => setTeaching(a.key)}>
                       <Ic n="edit" size={14} /> Teach
@@ -575,24 +576,15 @@ export function AppsPage() {
         title="All apps"
         sub="Every connected tool, where it posts and on which tier. Apps never post to clients."
         right={
-          <button type="button" className="btn sm pri" onClick={() => toast(backendOn ? 'Connecting apps arrives in a later update' : 'Opening the app directory')}>
-            Browse directory
-          </button>
+          backendOn ? undefined : (
+            <button type="button" className="btn sm pri" onClick={() => toast('Opening the app directory')}>
+              Browse directory
+            </button>
+          )
         }
       />
       <div className="pg">
-        {backendOn && (
-          <>
-            <div className="intro">
-              <div>
-                <h2>Connected apps</h2>
-                <p>Connecting apps arrives in a later update.</p>
-              </div>
-              <span className="tag">Coming soon</span>
-            </div>
-            <div className="empty">No apps connected. Connect GitHub, Figma or your calendar. Their updates wait for the digest by default.</div>
-          </>
-        )}
+        {backendOn && <LiveApps />}
         {!backendOn && <div className="stats">
           <div className="stat">
             <b>{s.apps.filter((x) => x.on).length}</b>

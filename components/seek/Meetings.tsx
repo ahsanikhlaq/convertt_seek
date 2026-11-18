@@ -19,6 +19,7 @@ import {
   type Tool,
 } from '@/lib/seek/liveMeetings';
 import { useSeek } from '@/lib/seek/store';
+import { attachGoogleEvent, connectGoogle, googleMeeting, googleStatus, type GoogleStatus } from '@/lib/seek/google';
 import { Modal } from './Dialogs';
 import { Switch } from './ui';
 import { Ic } from './icons';
@@ -52,6 +53,12 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
   const [send, setSend] = useState(true);
   const [record, setRecord] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [google, setGoogle] = useState<GoogleStatus | null>(null);
+  useEffect(() => {
+    void googleStatus().then(setGoogle);
+  }, []);
+  // Google Meet with Google connected and no link pasted: Seek makes the Calendar event and the Meet link
+  const autoMeet = tool === 'meet' && !!google?.connected && !link.trim();
 
   // the client's time zone (from their profile) shapes the suggested times
   useEffect(() => {
@@ -73,24 +80,39 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
       return;
     }
     setBusy(true);
-    const err = await scheduleMeeting({
+    const attendees = who.filter((id) => send || !clients.some((p) => p.userId === id));
+    let meetLink = tool === 'seek' && !link.trim() ? seekRoom() : link;
+    let eventId: string | null = null;
+    if (autoMeet) {
+      const g = await googleMeeting({ space: sp.id, title, startsAt, minutes, agenda, attendees });
+      if (!g.data) {
+        setBusy(false);
+        toast(g.error ?? 'Couldn’t create the Google Meet link');
+        return;
+      }
+      meetLink = g.data.link;
+      eventId = g.data.eventId;
+    }
+    const { error: err, id } = await scheduleMeeting({
       space: sp.id,
       title,
       startsAt,
       minutes,
       tool,
-      link: tool === 'seek' && !link.trim() ? seekRoom() : link,
+      link: meetLink,
       agenda,
       sendToClient: send,
       record,
-      attendees: who.filter((id) => send || !clients.some((p) => p.userId === id)),
+      attendees,
     });
+    if (!err && id && eventId) await attachGoogleEvent(id, eventId);
     setBusy(false);
     if (err) {
       toast(err);
       return;
     }
-    toast(send && clientNames.length ? `Meeting scheduled · ${clientNames.join(' and ')} ${clientNames.length > 1 ? 'have' : 'has'} been told` : 'Meeting scheduled · posted in Team notes');
+    const told = send && clientNames.length ? ` · ${clientNames.join(' and ')} ${clientNames.length > 1 ? 'have' : 'has'} been told` : ' · posted in Team notes';
+    toast((eventId ? 'Meeting scheduled with Google Meet · invitations sent from your calendar' : 'Meeting scheduled') + (eventId ? '' : told));
     onScheduled(send);
     onClose();
   };
@@ -207,13 +229,37 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
               </button>
             ))}
           </div>
+          {tool === 'meet' && google?.connected && (
+            <em className="gmeet ok">
+              <Ic n="check" size={13} /> Seek creates the Google Meet link and adds the meeting to your Google Calendar ({google.email}). Guests get Google’s invitation email.
+              Or paste a link below to use your own.
+            </em>
+          )}
+          {tool === 'meet' && google && !google.connected && (
+            <em className="gmeet">
+              {google.configured ? (
+                <>
+                  Want Seek to create the Meet link and the calendar invite?{' '}
+                  <button type="button" className="linkbtn" onClick={async () => {
+                    const e = await connectGoogle();
+                    if (e) toast(e);
+                  }}>
+                    Connect Google
+                  </button>
+                  . Or paste a link.
+                </>
+              ) : (
+                'Paste a Google Meet link. (An admin can set up Google in Apps so Seek creates the link and the invite.)'
+              )}
+            </em>
+          )}
           {tool === 'seek' ? (
             <em>A private video room is created for this call. It opens in the browser (Jitsi Meet); whoever starts it may be asked to sign in with Google, GitHub or Facebook.</em>
           ) : (
             <input
               className="inp"
               aria-label={tool === 'person' ? 'Where' : 'Meeting link'}
-              placeholder={tool === 'person' ? 'Where (e.g. Convertt office, 3rd floor)' : `Paste the ${toolName(tool)} link (optional)`}
+              placeholder={tool === 'person' ? 'Where (e.g. Convertt office, 3rd floor)' : autoMeet || (tool === 'meet' && google?.connected) ? 'Leave empty: Seek creates the Meet link' : `Paste the ${toolName(tool)} link (optional)`}
               value={link}
               maxLength={500}
               onChange={(e) => setLink(e.target.value)}

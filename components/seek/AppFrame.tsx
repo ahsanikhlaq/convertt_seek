@@ -73,7 +73,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         ? route && ok.includes(route)
           ? null
           : home
-        : route === 'signup' || route === 'setup'
+        : route === 'signup' || (route === 'setup' && !(typeof location !== 'undefined' && /[?&]new=1/.test(location.search)))
           ? home
           : null;
   useEffect(() => {

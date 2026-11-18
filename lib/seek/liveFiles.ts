@@ -3,6 +3,7 @@
 import { notifyOut } from './push';
 import { sb } from './backend';
 import type { FileRef } from './data';
+import { checkScope, sendingAsClient } from './liveScope';
 
 /**
  * Files (backend mode). Files go to the private "seek-files" bucket under the conversation they were shared in, so
@@ -67,14 +68,18 @@ export async function sendFiles(target: FileTarget, files: File[], caption: stri
     uploaded.push({ path, name: f.name.slice(0, 200), size: f.size, type: f.type || 'application/octet-stream' });
   }
   const body = caption.trim() || (uploaded.length === 1 ? uploaded[0].name : `${uploaded.length} files`);
-  const { error } = await sb()
+  const insert = sb()
     .from('messages')
     .insert({ ...where.row, body: body.slice(0, 8000), files: uploaded, ...(mentions.length ? { mentions } : {}) });
+  // a client's files with a message in Client chat: Scope guard checks the message (so the new id is needed)
+  const scoped = 'space' in target && target.lane === 'client' && sendingAsClient() && !!caption.trim();
+  const { data, error } = scoped ? await insert.select('id').single() : { ...(await insert), data: null };
   if (error) {
     await sb().storage.from('seek-files').remove(uploaded.map((u) => u.path));
     return 'Couldn’t send the files. Check your connection';
   }
   notifyOut();
+  if (scoped && data) checkScope((data as { id: number }).id);
   return null;
 }
 

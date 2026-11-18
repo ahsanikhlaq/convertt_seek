@@ -5,9 +5,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, inviteClient, completeStep, sb, type ClientRole } from './backend';
 import type { ChatMessage, FileRef, MessageCard } from './data';
-import { keyFor, learnProfiles, timeLabel, toUiId } from './live';
+import { agentWho, keyFor, learnProfiles, timeLabel, toUiId } from './live';
 import { hydrateReactions, markNotSent } from './liveSync';
 import { mentionIds } from './liveNotes';
+import { checkScope, setSenderSide } from './liveScope';
 import { useSeek } from './store';
 
 /**
@@ -34,10 +35,16 @@ export type Space = {
   people: ClientPerson[];
   team: TeamMember[];
   steps: Step[];
+  /** team view only: the agreed scope (Scope guard checks client requests against it) */
+  scope?: string;
+  /** team view only: retainer hours per calendar month (null: no retainer) */
+  retainerHours?: number | null;
 };
 
-type Row = { id: number; space_id: string | null; lane: Lane | null; user_id: string; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; card?: MessageCard | null; pinned_at?: string | null; edited_at?: string | null };
-const COLS = 'id, space_id, lane, user_id, parent_id, body, created_at, files, card, pinned_at, edited_at';
+// user_id is null (and agent set) for a message written by an agent, e.g. Scope guard in Team notes
+type Row = { id: number; space_id: string | null; lane: Lane | null; user_id: string | null; agent?: string | null; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; card?: MessageCard | null; pinned_at?: string | null; edited_at?: string | null };
+const COLS = 'id, space_id, lane, user_id, agent, parent_id, body, created_at, files, card, pinned_at, edited_at';
+const people = (ids: (string | null)[]) => ids.filter((v): v is string => !!v);
 
 export const laneKey = (space: string, lane: Lane) => space + ':' + lane;
 /** People still to join (invited, not signed in yet). */
@@ -81,7 +88,8 @@ export function useLiveClients(): LiveClients | null {
   const toMsg = (r: Row, flash = false): ChatMessage => ({
     kind: 'msg',
     id: toUiId(r.id),
-    who: keyFor(r.user_id, me.current),
+    who: r.agent || !r.user_id ? agentWho(r.agent) : keyFor(r.user_id, me.current),
+    ai: !!r.agent || undefined,
     time: timeLabel(r.created_at),
     at: r.created_at,
     text: r.body,
@@ -90,32 +98,37 @@ export function useLiveClients(): LiveClients | null {
     pinned: !!r.pinned_at,
     edited: !!r.edited_at,
     flash,
-    client: side === 'team' && clientIds.current.has(r.user_id),
+    client: side === 'team' && !!r.user_id && clientIds.current.has(r.user_id),
   });
+  setSenderSide(side);
 
   const load = useCallback(async () => {
     const acc = await currentAccount();
     if (!acc) return;
     me.current = acc.id;
     org.current = acc.workspace?.id ?? null;
-    let q = sb()
-      .from('client_spaces')
-      .select('id, name, project, code, color, status, reply_target, tone, never_mention, created_at, client_people ( id, email, name, role, user_id, joined_at, invited_at, removed_at ), client_team ( user_id, is_lead ), client_steps ( id, kind, title, detail, side, position, done_at )')
-      .neq('status', 'closed')
-      .order('created_at', { ascending: false });
-    if (side === 'team' && acc.workspace) q = q.eq('workspace_id', acc.workspace.id);
-    const { data, error } = await q;
+    const cols = 'id, name, project, code, color, status, reply_target, tone, never_mention, created_at, client_people ( id, email, name, role, user_id, joined_at, invited_at, removed_at ), client_team ( user_id, is_lead ), client_steps ( id, kind, title, detail, side, position, done_at )';
+    const query = (select: string) => {
+      let q = sb().from('client_spaces').select(select).neq('status', 'closed').order('created_at', { ascending: false });
+      if (side === 'team' && acc.workspace) q = q.eq('workspace_id', acc.workspace.id);
+      return q;
+    };
+    // the team also gets the agreed scope and retainer (Scope & hours); without them if the database is older
+    let { data, error } = await query(side === 'team' ? cols + ', scope, retainer_hours' : cols);
+    if (error && side === 'team') ({ data, error } = await query(cols));
     if (error) {
       toast('Couldn’t load clients. Check your connection');
       return;
     }
     type R = {
       id: string; name: string; project: string; code: string; color: string; status: Space['status']; reply_target: string; tone: string; never_mention: string[]; created_at: string;
+      scope?: string | null; retainer_hours?: number | string | null;
       client_people: { id: string; email: string; name: string; role: ClientRole; user_id: string | null; joined_at: string | null; invited_at: string; removed_at: string | null }[];
       client_team: { user_id: string; is_lead: boolean }[];
       client_steps: { id: string; kind: string; title: string; detail: string; side: 'client' | 'team'; position: number; done_at: string | null }[];
     };
-    const list: Space[] = ((data ?? []) as R[]).map((r) => ({
+    const list: Space[] = ((data ?? []) as unknown as R[]).map((r) => ({
+      ...(side === 'team' ? { scope: r.scope ?? '', retainerHours: r.retainer_hours == null ? null : Number(r.retainer_hours) } : {}),
       id: r.id,
       name: r.name,
       project: r.project,
@@ -156,7 +169,7 @@ export function useLiveClients(): LiveClients | null {
         .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'messages', ...(filter ? { filter } : {}) }, async (p) => {
           const r = p.new as Row;
           if (!r.space_id || !r.lane || r.parent_id != null) return;
-          await learnProfiles([r.user_id], me.current);
+          await learnProfiles(people([r.user_id]), me.current);
           update((d) => {
             const k = laneKey(r.space_id!, r.lane!);
             const list = ((d.lc ||= {})[k] ||= []);
@@ -195,7 +208,7 @@ export function useLiveClients(): LiveClients | null {
         return;
       }
       const rows = ((data ?? []) as Row[]).reverse();
-      await learnProfiles(rows.map((r) => r.user_id), me.current);
+      await learnProfiles(people(rows.map((r) => r.user_id)), me.current);
       if (!alive) return;
       const msgs = rows.map((r) => toMsg(r));
       update((d) => {
@@ -226,6 +239,8 @@ export function useLiveClients(): LiveClients | null {
       }
       notifyOut();
       const r = data as Row;
+      // a client's request in Client chat: Scope guard checks it against the agreed scope (notes go to Team notes only)
+      if (side === 'client' && ln === 'client') checkScope(r.id);
       update((d) => {
         const list = ((d.lc ||= {})[laneKey(space, ln)] ||= []);
         if (!list.some((m) => m.id === toUiId(r.id))) list.push(toMsg(r, true));

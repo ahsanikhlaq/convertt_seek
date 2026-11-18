@@ -1,6 +1,7 @@
 'use client';
 
 import { sb } from './backend';
+import { cancelGoogleEvent } from './google';
 import type { MeetingCard } from './data';
 
 /**
@@ -74,7 +75,7 @@ export async function scheduleMeeting(m: {
   record: boolean;
   attendees: string[];
 }) {
-  const { error } = await sb().rpc('schedule_meeting', {
+  const { data, error } = await sb().rpc('schedule_meeting', {
     p_space: m.space,
     p_title: m.title.trim().slice(0, 120),
     p_starts_at: m.startsAt.toISOString(),
@@ -86,15 +87,18 @@ export async function scheduleMeeting(m: {
     p_record: m.record,
     p_attendees: m.attendees,
   });
-  if (!error) return null;
-  if (/future/.test(error.message)) return 'Pick a time in the future';
-  if (/https/.test(error.message)) return 'The video link must start with https://';
-  return 'Couldn’t schedule it. Check your connection';
+  if (!error) return { error: null, id: Number(data) || null };
+  if (/future/.test(error.message)) return { error: 'Pick a time in the future', id: null };
+  if (/https/.test(error.message)) return { error: 'The video link must start with https://', id: null };
+  return { error: 'Couldn’t schedule it. Check your connection', id: null };
 }
 
 export async function cancelMeeting(id: number) {
   const { error } = await sb().rpc('cancel_meeting', { p_id: id });
-  return error ? 'Couldn’t cancel it. Check your connection' : null;
+  if (error) return 'Couldn’t cancel it. Check your connection';
+  // its Google Calendar event, if it has one: cancelled too, and the guests are told
+  void cancelGoogleEvent(id);
+  return null;
 }
 
 export type Upcoming = { id: number; title: string; startsAt: string; minutes: number; tool: Tool; link: string; spaceId: string; space: string; code: string; color: string; toClient: boolean };
