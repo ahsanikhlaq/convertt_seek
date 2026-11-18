@@ -134,8 +134,8 @@ function Rail({ active }: { active: RouteKey }) {
         className="wsb add"
         onClick={() => {
           if (!backendOn) return toast('Create or join another workspace');
-          setUI({ sideOpen: false });
-          router.push(ROUTES.setup + '?new=1');
+          // a full page load, so setup opens with ?new=1 already in the address (signed-in people may only open it so)
+          location.assign(ROUTES.setup + '?new=1');
         }}
         aria-label="Add a workspace"
         title="Create another workspace"
