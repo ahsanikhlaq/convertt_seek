@@ -25,6 +25,7 @@ import {
   type Account,
 } from '@/lib/seek/backend';
 import { initialsOf, isEmail, slugify } from '@/lib/seek/format';
+import { GOOGLE_CLIENT_ID, GOOGLE_UNAVAILABLE, profileFromCredential, renderGoogleButton, type GoogleProfile } from '@/lib/seek/google';
 import { ROUTES } from '@/lib/seek/routes';
 import { applyAccount, setMe, useSeek } from '@/lib/seek/store';
 import { CodeInput, codeComplete } from '../CodeInput';
@@ -96,6 +97,43 @@ function Resend({ email, wait, setWait }: { email: string; wait: number; setWait
   );
 }
 
+/** Google's own "Continue with Google" button, or a stand-in that explains why Google isn't available. */
+function GoogleButton({ onProfile }: { onProfile: (p: GoogleProfile) => void }) {
+  const { toast } = useSeek();
+  const ref = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(GOOGLE_CLIENT_ID ? 'loading' : 'error');
+  const latest = useRef({ onProfile, toast });
+  latest.current = { onProfile, toast };
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || !ref.current) return;
+    let live = true;
+    renderGoogleButton(ref.current, (credential) => {
+      const p = profileFromCredential(credential);
+      if (p) latest.current.onProfile(p);
+      else latest.current.toast("Google sign-in didn't go through. Try again.");
+    })
+      .then(() => live && setStatus('ready'))
+      .catch(() => live && setStatus('error'));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  if (status === 'error') {
+    return (
+      <button
+        type="button"
+        className="btn lg"
+        onClick={() => toast(GOOGLE_CLIENT_ID ? "Couldn't reach Google. Check your connection and reload." : GOOGLE_UNAVAILABLE)}
+      >
+        <b style={{ color: '#4285f4' }}>G</b> Continue with Google
+      </button>
+    );
+  }
+  return <div ref={ref} className="gbtn" aria-busy={status === 'loading'} style={{ minHeight: 44, display: 'flex', justifyContent: 'center' }} />;
+}
+
 export function SignupPage() {
   const { s, update, toast } = useSeek();
   const router = useRouter();
@@ -111,6 +149,20 @@ export function SignupPage() {
       d.session = 'setup';
     });
     router.push(ROUTES.setup);
+  };
+
+  const onGoogle = (p: GoogleProfile) => {
+    // the same Google account that already finished setup goes straight back to its workspace
+    const returning = s.setupDone && s.google?.sub === p.sub;
+    update((d) => {
+      d.google = { sub: p.sub, picture: p.picture };
+      d.email = p.email;
+      d.me.email = p.email;
+      if (p.name) d.me.name = p.name;
+      d.session = returning ? 'in' : 'setup';
+    });
+    toast(`Signed in as ${p.email}`);
+    router.push(returning ? ROUTES.channels : ROUTES.setup);
   };
 
   const cont = async () => {
@@ -137,6 +189,7 @@ export function SignupPage() {
     update((d) => {
       d.email = v;
       d.me.email = v;
+      d.google = null;
     });
     setStep('code');
   };
@@ -240,9 +293,13 @@ export function SignupPage() {
                 <h1>Create your account</h1>
               </div>
               <p className="sub">Free for 14 days. No card needed.</p>
+              {backendOn ? (
               <button type="button" className="btn lg" onClick={google}>
                 <b style={{ color: '#4285f4' }}>G</b> Continue with Google
               </button>
+              ) : (
+                <GoogleButton onProfile={onGoogle} />
+              )}
               <div className="or">OR</div>
               <form
                 style={{ display: 'contents' }}
@@ -462,6 +519,7 @@ export function SetupPage() {
     if (!backendOn) {
       update((d) => {
         d.session = 'in';
+        d.setupDone = true;
         d.workspaces.C.ch = 'general';
         d.ws.step = undefined;
       });
