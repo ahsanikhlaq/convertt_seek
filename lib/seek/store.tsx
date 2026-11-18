@@ -67,6 +67,12 @@ export function useSeek() {
  * With a backend, the prototype's sample chats never show: the saved chats are kept only when they belong to
  * this same account and organization (so a reload shows them at once while fresh ones load).
  */
+/** True while the setup form is open for creating another workspace (the rail's +): see applyAccount. */
+let makingAnother = false;
+export function setMakingAnother(on: boolean) {
+  makingAnother = on;
+}
+
 export function applyAccount(d: State, acc: Account | null) {
   // people who are only a client of an agency (no team of their own) get just their client space
   // a new owner goes straight to organisation setup; invited teammates and clients set up their profile first
@@ -105,7 +111,7 @@ export function applyAccount(d: State, acc: Account | null) {
   if (acc.look?.theme) d.theme = { ...d.theme, ...acc.look.theme } as State['theme'];
   if (acc.look?.mode === 'light' || acc.look?.mode === 'dark' || acc.look?.mode === 'system') d.mode = acc.look.mode;
   d.savedLook = JSON.stringify({ theme: d.theme, mode: d.mode });
-  if (acc.workspace) {
+  if (acc.workspace && !makingAnother) {
     d.ws.name = acc.workspace.name;
     d.ws.logo = acc.workspace.logo ?? undefined;
     if (acc.workspace.tz) d.ws.tz = acc.workspace.tz;

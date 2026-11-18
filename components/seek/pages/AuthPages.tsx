@@ -27,7 +27,7 @@ import {
 import { initialsOf, isEmail, slugify } from '@/lib/seek/format';
 import { GOOGLE_CLIENT_ID, GOOGLE_UNAVAILABLE, profileFromCredential, renderGoogleButton, type GoogleProfile } from '@/lib/seek/google';
 import { ROUTES } from '@/lib/seek/routes';
-import { applyAccount, setMe, useSeek } from '@/lib/seek/store';
+import { applyAccount, setMakingAnother, setMe, useSeek } from '@/lib/seek/store';
 import { CodeInput, codeComplete } from '../CodeInput';
 import { Avatar, Logo, OrgMark } from '../ui';
 import { THEMES } from '@/lib/seek/data';
@@ -387,6 +387,7 @@ export function SetupPage() {
     if (!backendOn || cleared.current) return;
     cleared.current = true;
     const another = s.session === 'in' && /[?&]new=1/.test(location.search);
+    if (another) setMakingAnother(true);
     if (w.step && !another) return; // resuming a draft
     ws((x) => {
       if (x.name === 'Convertt' || another) x.name = '';
@@ -411,6 +412,7 @@ export function SetupPage() {
   const madeIt = useRef(false);
   useEffect(
     () => () => {
+      setMakingAnother(false);
       if (!backendOn || madeIt.current || s.session !== 'in') return;
       void currentAccount(true).then((acc) => {
         if (acc)
@@ -539,6 +541,8 @@ export function SetupPage() {
       }
       newOrg = id;
       madeIt.current = true;
+      // the new workspace's details may now replace the form's
+      setMakingAnother(false);
       // if anything below fails, a retry only sends the invites
       ws((x) => {
         x.step = 'invite';
