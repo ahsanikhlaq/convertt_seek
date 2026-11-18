@@ -2,6 +2,7 @@
 
 import { sb } from './backend';
 import { cancelGoogleEvent } from './gcal';
+import { cancelZoomMeeting } from './zoom';
 import type { MeetingCard } from './data';
 
 /**
@@ -98,6 +99,8 @@ export async function cancelMeeting(id: number) {
   if (error) return 'Couldn’t cancel it. Check your connection';
   // its Google Calendar event, if it has one: cancelled too, and the guests are told
   void cancelGoogleEvent(id);
+  // and its Zoom meeting, if it has one: deleted in Zoom
+  void cancelZoomMeeting(id);
   return null;
 }
 

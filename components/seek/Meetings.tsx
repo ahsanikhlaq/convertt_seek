@@ -20,6 +20,7 @@ import {
 } from '@/lib/seek/liveMeetings';
 import { useSeek } from '@/lib/seek/store';
 import { attachGoogleEvent, connectGoogle, googleMeeting, googleStatus, type GoogleStatus } from '@/lib/seek/gcal';
+import { attachZoomMeeting, connectZoom, zoomMeeting, zoomStatus, type ZoomStatus } from '@/lib/seek/zoom';
 import { Modal } from './Dialogs';
 import { Switch } from './ui';
 import { Ic } from './icons';
@@ -54,11 +55,15 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
   const [record, setRecord] = useState(false);
   const [busy, setBusy] = useState(false);
   const [google, setGoogle] = useState<GoogleStatus | null>(null);
+  const [zoom, setZoom] = useState<ZoomStatus | null>(null);
   useEffect(() => {
     void googleStatus().then(setGoogle);
+    void zoomStatus().then(setZoom);
   }, []);
   // Google Meet with Google connected and no link pasted: Seek makes the Calendar event and the Meet link
   const autoMeet = tool === 'meet' && !!google?.connected && !link.trim();
+  // Zoom with Zoom connected and no link pasted: Seek makes the Zoom meeting
+  const autoZoom = tool === 'zoom' && !!zoom?.connected && !link.trim();
 
   // the client's time zone (from their profile) shapes the suggested times
   useEffect(() => {
@@ -93,6 +98,17 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
       meetLink = g.data.link;
       eventId = g.data.eventId;
     }
+    let zoomId: string | null = null;
+    if (autoZoom) {
+      const zm = await zoomMeeting({ space: sp.id, title, startsAt, minutes, agenda });
+      if (!zm.data) {
+        setBusy(false);
+        toast(zm.error ?? 'Couldn’t create the Zoom meeting');
+        return;
+      }
+      meetLink = zm.data.link;
+      zoomId = zm.data.zoomId;
+    }
     const { error: err, id } = await scheduleMeeting({
       space: sp.id,
       title,
@@ -106,13 +122,14 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
       attendees,
     });
     if (!err && id && eventId) await attachGoogleEvent(id, eventId);
+    if (!err && id && zoomId) await attachZoomMeeting(id, zoomId);
     setBusy(false);
     if (err) {
       toast(err);
       return;
     }
     const told = send && clientNames.length ? ` · ${clientNames.join(' and ')} ${clientNames.length > 1 ? 'have' : 'has'} been told` : ' · posted in Team notes';
-    toast((eventId ? 'Meeting scheduled with Google Meet · invitations sent from your calendar' : 'Meeting scheduled') + (eventId ? '' : told));
+    toast(eventId ? 'Meeting scheduled with Google Meet · invitations sent from your calendar' : (zoomId ? 'Meeting scheduled with a new Zoom meeting' : 'Meeting scheduled') + told);
     onScheduled(send);
     onClose();
   };
@@ -253,13 +270,36 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
               )}
             </em>
           )}
+          {tool === 'zoom' && zoom?.connected && (
+            <em className="gmeet ok">
+              <Ic n="check" size={13} /> Seek creates the Zoom meeting in your Zoom account ({zoom.email}) and puts its link on the invite. Or paste a link below to use your own.
+            </em>
+          )}
+          {tool === 'zoom' && zoom && !zoom.connected && (
+            <em className="gmeet">
+              {zoom.configured ? (
+                <>
+                  Want Seek to create the Zoom meeting for you?{' '}
+                  <button type="button" className="linkbtn" onClick={async () => {
+                    const e = await connectZoom();
+                    if (e) toast(e);
+                  }}>
+                    Connect Zoom
+                  </button>
+                  . Or paste a link.
+                </>
+              ) : (
+                'Paste a Zoom link. (An admin can set up Zoom in Apps so Seek creates the meeting.)'
+              )}
+            </em>
+          )}
           {tool === 'seek' ? (
             <em>A private video room is created for this call. It opens in the browser (Jitsi Meet); whoever starts it may be asked to sign in with Google, GitHub or Facebook.</em>
           ) : (
             <input
               className="inp"
               aria-label={tool === 'person' ? 'Where' : 'Meeting link'}
-              placeholder={tool === 'person' ? 'Where (e.g. Convertt office, 3rd floor)' : autoMeet || (tool === 'meet' && google?.connected) ? 'Leave empty: Seek creates the Meet link' : `Paste the ${toolName(tool)} link (optional)`}
+              placeholder={tool === 'person' ? 'Where (e.g. Convertt office, 3rd floor)' : autoMeet || (tool === 'meet' && google?.connected) ? 'Leave empty: Seek creates the Meet link' : autoZoom || (tool === 'zoom' && zoom?.connected) ? 'Leave empty: Seek creates the Zoom meeting' : `Paste the ${toolName(tool)} link (optional)`}
               value={link}
               maxLength={500}
               onChange={(e) => setLink(e.target.value)}

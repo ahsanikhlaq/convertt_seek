@@ -2,6 +2,7 @@
 
 import { notifyOut } from './push';
 import { instantMeet } from './gcal';
+import { instantZoom } from './zoom';
 import { useEffect, useRef } from 'react';
 import { backendOn, DB_SCHEMA, sb } from './backend';
 import type { FileRef, LiveTask, PersonKey, State } from './data';
@@ -407,7 +408,10 @@ export async function startHuddle(target: ConvTarget): Promise<string | null> {
   // open the tab now (popup blockers only allow it straight after the click), then point it at the room
   const w = window.open('', '_blank');
   if (w) w.opener = null;
-  const meet = await Promise.race([instantMeet('dmWith' in target ? 'Seek call' : 'Seek huddle'), new Promise<null>((r) => setTimeout(() => r(null), 8000))]).catch(() => null);
+  // Google Meet if you've connected Google, else Zoom if you've connected Zoom, else a Seek (Jitsi) room
+  const name = 'dmWith' in target ? 'Seek call' : 'Seek huddle';
+  const quick = (p: Promise<string | null>) => Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), 8000))]).catch(() => null);
+  const meet = (await quick(instantMeet(name))) ?? (await quick(instantZoom(name)));
   const link = meet ?? 'https://meet.jit.si/Seek-' + crypto.randomUUID().replace(/-/g, '').slice(0, 24);
   if (w) w.location.href = link;
   let where: Record<string, string>;
