@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PEOPLE, STATUSES, WORKSPACES, type PersonKey } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
+import { googleSignOut } from '@/lib/seek/google';
 import { backendOn, currentAccount, saveLook, saveProfile, saveStatus, signOut, uploadAvatar } from '@/lib/seek/backend';
 import { prototypeName, ROUTES, routeFromPrototype, routeOf, type RouteKey } from '@/lib/seek/routes';
 import { setMe, useSeek } from '@/lib/seek/store';
@@ -516,6 +517,7 @@ function ProfileDrawer() {
               update((d) => {
                 d.session = 'out';
               });
+              googleSignOut();
               close();
               router.push(ROUTES.signup);
               toast('Signed out');

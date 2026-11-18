@@ -142,6 +142,10 @@ export type State = {
   /** backend mode: live client-space messages, keyed "<space id>:<client|team>" */
   lc?: Record<string, FeedItem[]>;
   email: string;
+  /** Demo mode: the Google account last used to sign in (null for email sign-in). */
+  google: { sub: string; picture: string } | null;
+  /** Demo mode: true once workspace setup has been finished, so a returning account skips it. */
+  setupDone: boolean;
   /** organization: name, logo (a URL, backend mode), setup answers and teammates to invite */
   ws: {
     name: string;
@@ -248,6 +252,8 @@ export function initialState(): State {
     version: STATE_VERSION,
     session: 'out',
     email: 'ahsan@convertt.co',
+    google: null,
+    setupDone: false,
     ws: { name: 'Convertt', tz: 'Lahore (GMT+5)', size: '1–10', use: ['Team chat', 'Client work'], invites: ['syed@convertt.co', 'momina@convertt.co'] },
     wsId: 'C',
     workspaces: {
