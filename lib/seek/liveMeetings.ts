@@ -1,7 +1,7 @@
 'use client';
 
 import { sb } from './backend';
-import { cancelGoogleEvent } from './google';
+import { cancelGoogleEvent } from './gcal';
 import type { MeetingCard } from './data';
 
 /**

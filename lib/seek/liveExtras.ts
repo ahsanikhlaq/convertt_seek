@@ -1,7 +1,7 @@
 'use client';
 
 import { notifyOut } from './push';
-import { instantMeet } from './google';
+import { instantMeet } from './gcal';
 import { useEffect, useRef } from 'react';
 import { backendOn, DB_SCHEMA, sb } from './backend';
 import type { FileRef, LiveTask, PersonKey, State } from './data';

@@ -19,7 +19,7 @@ import {
   type Tool,
 } from '@/lib/seek/liveMeetings';
 import { useSeek } from '@/lib/seek/store';
-import { attachGoogleEvent, connectGoogle, googleMeeting, googleStatus, type GoogleStatus } from '@/lib/seek/google';
+import { attachGoogleEvent, connectGoogle, googleMeeting, googleStatus, type GoogleStatus } from '@/lib/seek/gcal';
 import { Modal } from './Dialogs';
 import { Switch } from './ui';
 import { Ic } from './icons';

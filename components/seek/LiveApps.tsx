@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { connectGoogle, disconnectGoogle, finishGoogle, googleStatus, type GoogleStatus } from '@/lib/seek/google';
+import { connectGoogle, disconnectGoogle, finishGoogle, googleStatus, type GoogleStatus } from '@/lib/seek/gcal';
 import { useSeek } from '@/lib/seek/store';
 import { Ic } from './icons';
 
