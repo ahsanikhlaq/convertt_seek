@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { connectGoogle, disconnectGoogle, googleStatus, type GoogleStatus } from '@/lib/seek/google';
+import { connectGoogle, disconnectGoogle, finishGoogle, googleStatus, type GoogleStatus } from '@/lib/seek/google';
 import { useSeek } from '@/lib/seek/store';
 import { Ic } from './icons';
 
@@ -19,13 +19,22 @@ export function LiveApps() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    // back from Google's consent screen: say how it went, then tidy the address
-    const r = new URLSearchParams(location.search).get('google');
-    if (r) {
-      toast(GOOGLE_RESULT[r] ?? GOOGLE_RESULT.error);
-      history.replaceState(null, '', location.pathname);
-    }
-    void googleStatus(true).then(setG);
+    // back from Google's consent screen (?code&state, or ?error): finish connecting, then tidy the address
+    const q = new URLSearchParams(location.search);
+    const code = q.get('code');
+    const state = q.get('state');
+    const cancelled = q.get('error');
+    if (code || cancelled) history.replaceState(null, '', location.pathname);
+    void (async () => {
+      if (cancelled) toast(GOOGLE_RESULT.cancelled);
+      else if (code && state) {
+        setBusy(true);
+        const err = await finishGoogle(code, state);
+        setBusy(false);
+        toast(err ?? GOOGLE_RESULT.connected);
+      }
+      setG(await googleStatus(true));
+    })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (

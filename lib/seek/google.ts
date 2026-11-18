@@ -42,6 +42,13 @@ export async function connectGoogle(): Promise<string | null> {
   return null;
 }
 
+/** Back on Apps from Google with ?code&state: saves the connection. Returns an error message, or null. */
+export async function finishGoogle(code: string, state: string): Promise<string | null> {
+  const r = await call<{ email: string }>({ action: 'finish', code, state });
+  cached = null;
+  return r.error ?? null;
+}
+
 export async function disconnectGoogle(): Promise<string | null> {
   const r = await call({ action: 'disconnect' });
   cached = null;

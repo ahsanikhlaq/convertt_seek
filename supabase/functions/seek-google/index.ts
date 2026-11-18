@@ -1,23 +1,23 @@
 // Seek · Google Calendar and Google Meet, for each person who connects their Google account.
 //   POST (signed in), body { action }:
 //     'status'                    → { configured, connected, email }
-//     'start'                     → { url }  Google's consent page; it comes back to this function (GET below)
+//     'start'                     → { url }  Google's consent page; it comes back to Seek → Apps
+//     'finish' { code, state }    Seek → Apps passes on what Google sent back; saves the connection
 //     'disconnect'                → {}
 //     'event' { space, title, startsAt, minutes, agenda, attendees: user ids }
 //                                 → { link, eventId }  a Calendar event with a Meet link; invitations are emailed
 //     'attach' { meeting, eventId } links that event to the Seek meeting (so cancelling cancels it)
 //     'cancel' { meeting }        → cancels the Calendar event (and tells the guests)
 //     'instant' { title }         → { link }  a Meet link for right now (huddles and calls)
-//   GET ?code&state               Google's redirect after consent: saves the connection, returns to Seek → Apps.
 // Secrets: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET (from Google Cloud → Credentials → OAuth client, type "Web").
-// The OAuth client's redirect URI must be <SUPABASE_URL>/functions/v1/seek-google. Deploy with JWT verification
-// off (Google's redirect has no Seek token); every POST checks the caller itself.
+// The OAuth client's redirect URI must be <SITE_URL>/apps (Seek's Apps page finishes the connection while you're
+// signed in, so this function keeps Supabase's normal sign-in check).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
@@ -27,7 +27,7 @@ type Client = any;
 const SITE = (Deno.env.get('SITE_URL') || 'https://convertt-seek.vercel.app').replace(/\/+$/, '');
 const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || '';
 const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
-const REDIRECT = (Deno.env.get('SUPABASE_URL') || '').replace(/\/+$/, '') + '/functions/v1/seek-google';
+const REDIRECT = SITE + '/apps';
 const SCOPES = 'openid email https://www.googleapis.com/auth/calendar.events';
 const CAL = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
 
@@ -127,36 +127,6 @@ Deno.serve(async (req) => {
   const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const admin = createClient(url, service, { db: { schema: 'seek' }, auth: { persistSession: false, autoRefreshToken: false } });
 
-  // ---- Google's redirect after the consent screen
-  if (req.method === 'GET') {
-    const q = new URL(req.url).searchParams;
-    const back = (result: string) => Response.redirect(`${SITE}/apps?google=${result}`, 302);
-    if (q.get('error')) return back('cancelled');
-    const user = await readState(q.get('state') ?? '');
-    const code = q.get('code');
-    if (!user || !code || !CLIENT_ID) return back('error');
-    const r = await token({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT });
-    if (!r.ok) return back('error');
-    let email = '';
-    try {
-      email = JSON.parse(unb64u(String(r.data.id_token).split('.')[1])).email ?? '';
-    } catch {}
-    const scope = String(r.data.scope ?? '');
-    if (!scope.includes('calendar')) return back('noscope');
-    const { data: old } = await admin.from('google_accounts').select('refresh_token').eq('user_id', user).maybeSingle();
-    const refresh = String(r.data.refresh_token ?? old?.refresh_token ?? '');
-    if (!refresh) return back('error');
-    await admin.from('google_accounts').upsert({
-      user_id: user,
-      email,
-      refresh_token: refresh,
-      access_token: String(r.data.access_token),
-      expires_at: new Date(Date.now() + Number(r.data.expires_in ?? 3600) * 1000).toISOString(),
-      connected_at: new Date().toISOString(),
-    });
-    return back('connected');
-  }
-
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   const auth = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
   const { data: who } = await admin.auth.getUser(auth);
@@ -188,6 +158,33 @@ Deno.serve(async (req) => {
           login_hint: user.email ?? '',
         });
         return json({ url: 'https://accounts.google.com/o/oauth2/v2/auth?' + p.toString() });
+      }
+      case 'finish': {
+        // what Google sent back to Seek → Apps; the state must have been made for this same person
+        const asked = await readState(String(body.state ?? ''));
+        const code = String(body.code ?? '');
+        if (!configured) return json({ error: 'Google isn’t set up for Seek yet' }, 400);
+        if (!asked || asked !== user.id || !code) return json({ error: 'That Google sign-in link expired. Try connecting again' }, 400);
+        const r = await token({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT });
+        if (!r.ok) return json({ error: 'Google didn’t accept the sign-in. Try connecting again' }, 400);
+        const scope = String(r.data.scope ?? '');
+        if (!scope.includes('calendar')) return json({ error: 'Connect again and tick the box that lets Seek use your calendar' }, 400);
+        let email = '';
+        try {
+          email = JSON.parse(unb64u(String(r.data.id_token).split('.')[1])).email ?? '';
+        } catch {}
+        const { data: old } = await admin.from('google_accounts').select('refresh_token').eq('user_id', user.id).maybeSingle();
+        const refresh = String(r.data.refresh_token ?? old?.refresh_token ?? '');
+        if (!refresh) return json({ error: 'Google didn’t give Seek lasting access. Remove Seek in your Google account’s third-party access, then connect again' }, 400);
+        await admin.from('google_accounts').upsert({
+          user_id: user.id,
+          email,
+          refresh_token: refresh,
+          access_token: String(r.data.access_token),
+          expires_at: new Date(Date.now() + Number(r.data.expires_in ?? 3600) * 1000).toISOString(),
+          connected_at: new Date().toISOString(),
+        });
+        return json({ email });
       }
       case 'disconnect': {
         const { data } = await admin.from('google_accounts').select('refresh_token').eq('user_id', user.id).maybeSingle();
