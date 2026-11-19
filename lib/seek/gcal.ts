@@ -36,6 +36,10 @@ export function googleStatus(fresh = false): Promise<GoogleStatus | null> {
 
 /** Sends you to Google's consent screen; it comes back to Apps. */
 export async function connectGoogle(): Promise<string | null> {
+  // the consent screen comes back to Apps; remember where you were, to go back there afterwards
+  try {
+    if (!location.pathname.startsWith('/apps')) sessionStorage.setItem('seek.afterConnect', location.pathname + location.search);
+  } catch {}
   const r = await call<{ url: string }>({ action: 'start' });
   if (!r.data?.url) return r.error ?? 'Couldn’t start connecting Google';
   location.assign(r.data.url);

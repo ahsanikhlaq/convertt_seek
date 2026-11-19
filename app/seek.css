@@ -1451,3 +1451,9 @@ html.dark .main .mh .btn.sm:nth-of-type(2):nth-last-of-type(2):not(.pri){border-
 .dtp-t{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--sb);font-weight:600;min-width:150px}
 .dtp-t select{width:auto}
 html.dark .mcal-d.on{background:var(--son,#7c4a82)}
+
+/* time & zone column beside the calendar; the "connect your own calendar" box */
+.dtp-side{display:flex;flex-direction:column;gap:12px;min-width:190px;flex:1}
+.dtp-side select{width:100%;max-width:280px}
+.gmeet:not(.ok){display:flex;flex-direction:column;align-items:flex-start;gap:8px;border:1px solid var(--ln);border-radius:10px;padding:10px 12px;background:var(--soft)}
+.gmeet .sub{font-size:12.5px;color:var(--sb)}

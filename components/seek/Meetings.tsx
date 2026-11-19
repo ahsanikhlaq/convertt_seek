@@ -12,7 +12,6 @@ import {
   placeOf,
   scheduleMeeting,
   seekRoom,
-  suggestSlots,
   TOOLS,
   toolName,
   zonesOf,
@@ -36,57 +35,118 @@ const myZone = () => {
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const WEEK = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
-/** The next quarter hour at least 15 minutes from now. */
+
+// ---- time zones (the browser's own list; times are worked out with Intl, so daylight saving is handled)
+const myTz = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+};
+/** Minutes the zone is ahead of UTC at that moment. */
+function zoneOffset(tz: string, at: Date) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      .formatToParts(at)
+      .map((x) => [x.type, x.value]),
+  );
+  const wall = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+  return Math.round((wall - at.getTime()) / 60000);
+}
+/** 'YYYY-MM-DDTHH:mm' read as the clock on the wall in that zone → the moment it is. */
+function zoned(v: string, tz: string) {
+  const [d, t] = v.split('T');
+  const [y, mo, da] = d.split('-').map(Number);
+  const [h, mi] = t.split(':').map(Number);
+  const guess = Date.UTC(y, mo - 1, da, h, mi);
+  let at = guess - zoneOffset(tz, new Date(guess)) * 60000;
+  at = guess - zoneOffset(tz, new Date(at)) * 60000;
+  return new Date(at);
+}
+const todayIn = (tz: string) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const gmt = (tz: string) => {
+  const o = zoneOffset(tz, new Date());
+  const a = Math.abs(o);
+  return `GMT${o < 0 ? '−' : '+'}${pad2(Math.floor(a / 60))}:${pad2(a % 60)}`;
+};
+const COMMON_TZ: [string, string][] = [
+  ['America/New_York', 'US Eastern (New York)'],
+  ['America/Chicago', 'US Central (Chicago)'],
+  ['America/Denver', 'US Mountain (Denver)'],
+  ['America/Los_Angeles', 'US Pacific (Los Angeles)'],
+  ['America/Toronto', 'Canada (Toronto)'],
+  ['Europe/London', 'UK (London)'],
+  ['Europe/Dublin', 'Ireland (Dublin)'],
+  ['Europe/Berlin', 'Central Europe (Berlin)'],
+  ['Europe/Paris', 'France (Paris)'],
+  ['Asia/Dubai', 'UAE (Dubai)'],
+  ['Asia/Riyadh', 'Saudi Arabia (Riyadh)'],
+  ['Asia/Karachi', 'Pakistan (Karachi)'],
+  ['Asia/Kolkata', 'India (Kolkata)'],
+  ['Asia/Singapore', 'Singapore'],
+  ['Australia/Sydney', 'Australia (Sydney)'],
+  ['UTC', 'UTC'],
+];
+const tzName = (tz: string) => COMMON_TZ.find(([z]) => z === tz)?.[1] ?? tz.split('/').pop()!.replace(/_/g, ' ');
+function allZones(): string[] {
+  try {
+    return (Intl as unknown as { supportedValuesOf: (k: string) => string[] }).supportedValuesOf('timeZone');
+  } catch {
+    return COMMON_TZ.map(([z]) => z);
+  }
+}
 const nextQuarter = () => {
   const t = new Date(Date.now() + 15 * 60e3);
   t.setSeconds(0, 0);
   t.setMinutes(Math.ceil(t.getMinutes() / 15) * 15);
   return t;
 };
+/** Every quarter hour of that day (in the zone); today, only the ones still ahead. */
+function timesFor(day: string, tz: string) {
+  const out: string[] = [];
+  const min = day === todayIn(tz) ? nextQuarter() : null;
+  for (let m = 0; m < 24 * 60; m += 15) {
+    const v = pad2(Math.floor(m / 60)) + ':' + pad2(m % 60);
+    if (min && zoned(day + 'T' + v, tz) < min) continue;
+    out.push(v);
+  }
+  return out;
+}
+const hm = (v: string) => new Date('2000-01-01T' + v).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-/** A month calendar and a time list: any day from today on, any quarter hour, in your time. value is 'YYYY-MM-DDTHH:mm'. */
-function DateTimePick({ value, onChange }: { value: string | null; onChange: (v: string) => void }) {
-  const today = ymd(new Date());
+/** Pick any day on a month calendar, any quarter hour, in any time zone. value is 'YYYY-MM-DDTHH:mm' on the zone's clock. */
+function DateTimePick({ value, tz, onChange, onTz }: { value: string | null; tz: string; onChange: (v: string) => void; onTz: (tz: string) => void }) {
+  const today = todayIn(tz);
   const day = value?.slice(0, 10) ?? null;
   const time = value?.slice(11, 16) ?? null;
   const [month, setMonth] = useState(() => {
-    const d = day ? new Date(day + 'T00:00') : new Date();
+    const d = new Date((day ?? today) + 'T00:00');
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const lead = (month.getDay() + 6) % 7; // weeks start on Monday
   const count = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const cells: (Date | null)[] = [...Array<null>(lead).fill(null), ...Array.from({ length: count }, (_, i) => new Date(month.getFullYear(), month.getMonth(), i + 1))];
-  const thisMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-
-  // the times for the chosen day; today, only the ones still ahead
-  const times = useMemo(() => {
-    const out: string[] = [];
-    const min = day === today ? nextQuarter() : null;
-    for (let m = 0; m < 24 * 60; m += 15) {
-      const v = pad2(Math.floor(m / 60)) + ':' + pad2(m % 60);
-      if (day && min && new Date(day + 'T' + v) < min) continue;
-      out.push(v);
-    }
-    return out;
-  }, [day, today]);
+  const firstMonth = ymd(month).slice(0, 7) <= today.slice(0, 7);
+  const times = useMemo(() => (day ? timesFor(day, tz) : []), [day, tz]);
+  const zones = useMemo(() => {
+    const mine = myTz();
+    const common = COMMON_TZ.map(([z]) => z);
+    return { mine, common, rest: allZones().filter((z) => z !== mine && !common.includes(z)) };
+  }, []);
 
   const pickDay = (d: Date) => {
     const k = ymd(d);
-    let t = time ?? '10:00';
-    if (k === today && new Date(k + 'T' + t) < nextQuarter()) {
-      const q = nextQuarter();
-      if (ymd(q) !== today) return; // nothing left today
-      t = pad2(q.getHours()) + ':' + pad2(q.getMinutes());
-    }
-    onChange(k + 'T' + t);
+    const list = timesFor(k, tz);
+    if (!list.length) return; // nothing left today
+    onChange(k + 'T' + (time && list.includes(time) ? time : list.includes('10:00') ? '10:00' : list[0]));
   };
-  const label = (v: string) => new Date('2000-01-01T' + v).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
   return (
     <div className="dtp">
       <div className="mcal">
         <div className="mcal-h">
-          <button type="button" className="mcal-nav" aria-label="Previous month" disabled={month <= thisMonth} onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>
+          <button type="button" className="mcal-nav" aria-label="Previous month" disabled={firstMonth} onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>
             ‹
           </button>
           <b>{month.toLocaleDateString([], { month: 'long', year: 'numeric' })}</b>
@@ -119,22 +179,50 @@ function DateTimePick({ value, onChange }: { value: string | null; onChange: (v:
           )}
         </div>
       </div>
-      <label className="dtp-t">
-        <span>Time</span>
-        <select className="inp" value={day ? time ?? '' : ''} disabled={!day} onChange={(e) => day && e.target.value && onChange(day + 'T' + e.target.value)}>
-          {!day && <option value="">Pick a day first</option>}
-          {times.map((v) => (
-            <option key={v} value={v}>
-              {label(v)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="dtp-side">
+        <label className="dtp-t">
+          <span>Time</span>
+          <select className="inp" value={day ? time ?? '' : ''} disabled={!day} onChange={(e) => day && e.target.value && onChange(day + 'T' + e.target.value)}>
+            {!day && <option value="">Pick a day first</option>}
+            {times.map((v) => (
+              <option key={v} value={v}>
+                {hm(v)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="dtp-t">
+          <span>Time zone</span>
+          <select className="inp" value={tz} onChange={(e) => onTz(e.target.value)}>
+            <optgroup label="Your time zone">
+              <option value={zones.mine}>
+                {tzName(zones.mine)} · {gmt(zones.mine)}
+              </option>
+            </optgroup>
+            <optgroup label="Common">
+              {zones.common
+                .filter((z) => z !== zones.mine)
+                .map((z) => (
+                  <option key={z} value={z}>
+                    {tzName(z)} · {gmt(z)}
+                  </option>
+                ))}
+            </optgroup>
+            <optgroup label="All time zones">
+              {zones.rest.map((z) => (
+                <option key={z} value={z}>
+                  {z.replace(/_/g, ' ')} · {gmt(z)}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </label>
+      </div>
     </div>
   );
 }
 
-/** "Schedule a meeting with <client>": who, suggested times in both time zones, video, agenda, send and record. */
+/** "Schedule a meeting with <client>": who, a date and time in any time zone, video, agenda, send and record. */
 export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me: string | null; onClose: () => void; onScheduled: (toClient: boolean) => void }) {
   const { toast } = useSeek();
   const clients = sp.people.filter((p) => p.userId);
@@ -143,9 +231,9 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
   const [who, setWho] = useState<string[]>([...clients.map((p) => p.userId!), ...team]);
   const [minutes, setMinutes] = useState(30);
   const [their, setTheir] = useState<{ offset: number | null; place: string }>({ offset: null, place: '' });
-  const [slot, setSlot] = useState(0);
   const [custom, setCustom] = useState<string | null>(null);
-  const [picking, setPicking] = useState(false);
+  const [picking, setPicking] = useState(true);
+  const [tz, setTz] = useState(myTz);
   const [tool, setTool] = useState<Tool>('meet');
   const [link, setLink] = useState('');
   const [agenda, setAgenda] = useState('');
@@ -171,8 +259,8 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
     });
   }, [sp.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const slots = useMemo(() => suggestSlots(their.offset, minutes), [their.offset, minutes]);
-  const startsAt = custom ? new Date(custom) : slots[slot] ?? null;
+  // the picked day and time, read on the chosen zone's clock
+  const startsAt = custom ? zoned(custom, tz) : null;
   const clientNames = clients.filter((p) => who.includes(p.userId!)).map((p) => (p.name.trim() || p.email.split('@')[0]).split(' ')[0]);
   const ok = !!title.trim() && !!startsAt && !Number.isNaN(startsAt.getTime()) && !busy && (tool !== 'person' || !!link.trim());
 
@@ -290,43 +378,22 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
         </div>
         <div className="fld">
           <label>When</label>
-          <small className="whenhint">Suggested: inside everyone&apos;s working hours. Or pick any date and time.</small>
-          {slots.length ? (
-            <div className="slots" role="radiogroup" aria-label="Suggested times">
-              {slots.map((d, i) => (
-                <button
-                  key={d.toISOString()}
-                  type="button"
-                  role="radio"
-                  aria-checked={!custom && slot === i}
-                  className={'slot' + (!custom && slot === i ? ' on' : '')}
-                  onClick={() => {
-                    setCustom(null);
-                    setSlot(i);
-                  }}
-                >
-                  <small>{dayLabel(d)}</small>
-                  <b>
-                    {clock(d, null)} {myZone()}
-                  </b>
-                  <span>{their.offset != null ? `${clock(d, their.offset)} ${their.place}` : 'their time unknown'}</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <em>No shared working hours in the next two weeks. Pick a date and time below.</em>
-          )}
-          <button
-            type="button"
-            className={'pickbtn' + (custom ? ' on' : '')}
-            aria-expanded={picking || !slots.length}
-            onClick={() => setPicking(!picking)}
-          >
+          <button type="button" className={'pickbtn' + (custom ? ' on' : '')} aria-expanded={picking} onClick={() => setPicking(!picking)}>
             <Ic n="calendar" size={15} />
-            {custom && startsAt ? `${dayLabel(startsAt)} at ${startsAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} (${myZone()})` : 'Pick a date & time'}
+            {custom ? `${dayLabel(new Date(custom.slice(0, 10) + 'T00:00'))} at ${hm(custom.slice(11, 16))} · ${tzName(tz)}` : 'Pick a date & time'}
             <Ic n="chevron" size={13} />
           </button>
-          {(picking || !slots.length) && <DateTimePick value={custom} onChange={setCustom} />}
+          {picking && <DateTimePick value={custom} tz={tz} onChange={setCustom} onTz={setTz} />}
+          {startsAt && (tz !== myTz() || their.offset != null) && (
+            <small className="whenhint">
+              {[
+                tz !== myTz() ? `${startsAt.toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })} your time (${myZone()})` : '',
+                their.offset != null ? `${clock(startsAt, their.offset)} for ${their.place}` : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </small>
+          )}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <select className="inp" style={{ width: 'auto' }} aria-label="Length" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
               {[15, 30, 45, 60, 90].map((m) => (
@@ -335,7 +402,6 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
                 </option>
               ))}
             </select>
-            {custom && their.offset != null && startsAt && <small style={{ color: 'var(--sb)' }}>{`${clock(startsAt, their.offset)} for ${their.place}`}</small>}
           </div>
         </div>
         <div className="fld">
@@ -357,14 +423,16 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
             <em className="gmeet">
               {google.configured ? (
                 <>
-                  Want Seek to create the Meet link and the calendar invite?{' '}
-                  <button type="button" className="linkbtn" onClick={async () => {
+                  <span>
+                    Meetings are booked from <b>your own</b> Google Calendar. Connect yours once and Seek creates the Meet link and emails the invites. Everyone on the team connects their own.
+                  </span>
+                  <button type="button" className="btn sm pri" onClick={async () => {
                     const e = await connectGoogle();
                     if (e) toast(e);
                   }}>
-                    Connect Google
+                    Connect my Google Calendar
                   </button>
-                  . Or paste a link.
+                  <span className="sub">Or paste a Meet link below.</span>
                 </>
               ) : (
                 'Paste a Google Meet link. (An admin can set up Google in Apps so Seek creates the link and the invite.)'
@@ -380,14 +448,16 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
             <em className="gmeet">
               {zoom.configured ? (
                 <>
-                  Want Seek to create the Zoom meeting for you?{' '}
-                  <button type="button" className="linkbtn" onClick={async () => {
+                  <span>
+                    Zoom meetings are created in <b>your own</b> Zoom account. Connect yours once and Seek makes the meeting and its link. Everyone on the team connects their own.
+                  </span>
+                  <button type="button" className="btn sm pri" onClick={async () => {
                     const e = await connectZoom();
                     if (e) toast(e);
                   }}>
-                    Connect Zoom
+                    Connect my Zoom
                   </button>
-                  . Or paste a link.
+                  <span className="sub">Or paste a Zoom link below.</span>
                 </>
               ) : (
                 'Paste a Zoom link. (An admin can set up Zoom in Apps so Seek creates the meeting.)'

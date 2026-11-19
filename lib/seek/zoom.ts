@@ -36,6 +36,10 @@ export function zoomStatus(fresh = false): Promise<ZoomStatus | null> {
 
 /** Sends you to Zoom's consent screen; it comes back to Apps. */
 export async function connectZoom(): Promise<string | null> {
+  // the consent screen comes back to Apps; remember where you were, to go back there afterwards
+  try {
+    if (!location.pathname.startsWith('/apps')) sessionStorage.setItem('seek.afterConnect', location.pathname + location.search);
+  } catch {}
   const r = await call<{ url: string }>({ action: 'start' });
   if (!r.data?.url) return r.error ?? 'Couldn’t start connecting Zoom';
   location.assign(r.data.url);

@@ -97,6 +97,16 @@ export function LiveApps() {
               ? 'Zoom connected. New Zoom meetings get their link automatically'
               : 'Google connected. New Google Meet meetings get a link and a calendar invite automatically'),
         );
+        // connected from somewhere else (the schedule dialog): go back there
+        let back: string | null = null;
+        try {
+          back = sessionStorage.getItem('seek.afterConnect');
+          sessionStorage.removeItem('seek.afterConnect');
+        } catch {}
+        if (!err && back && back.startsWith('/') && !back.startsWith('//')) {
+          setTimeout(() => location.assign(back!), 1500);
+          return;
+        }
       }
       const [gs, zs] = await Promise.all([googleStatus(true), zoomStatus(true)]);
       setG(gs);
