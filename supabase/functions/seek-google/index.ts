@@ -162,7 +162,8 @@ Deno.serve(async (req) => {
           response_type: 'code',
           scope: SCOPES,
           access_type: 'offline',
-          prompt: 'consent',
+          // always ask which Google account: a shared computer is often signed in to someone else's
+          prompt: 'select_account consent',
           include_granted_scopes: 'true',
           state: await makeState(user.id),
           login_hint: user.email ?? '',
