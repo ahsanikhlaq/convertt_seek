@@ -32,10 +32,107 @@ const myZone = () => {
     return 'your time';
   }
 };
-const localInput = (d: Date) => {
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const WEEK = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+/** The next quarter hour at least 15 minutes from now. */
+const nextQuarter = () => {
+  const t = new Date(Date.now() + 15 * 60e3);
+  t.setSeconds(0, 0);
+  t.setMinutes(Math.ceil(t.getMinutes() / 15) * 15);
+  return t;
 };
+
+/** A month calendar and a time list: any day from today on, any quarter hour, in your time. value is 'YYYY-MM-DDTHH:mm'. */
+function DateTimePick({ value, onChange }: { value: string | null; onChange: (v: string) => void }) {
+  const today = ymd(new Date());
+  const day = value?.slice(0, 10) ?? null;
+  const time = value?.slice(11, 16) ?? null;
+  const [month, setMonth] = useState(() => {
+    const d = day ? new Date(day + 'T00:00') : new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+  const lead = (month.getDay() + 6) % 7; // weeks start on Monday
+  const count = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const cells: (Date | null)[] = [...Array<null>(lead).fill(null), ...Array.from({ length: count }, (_, i) => new Date(month.getFullYear(), month.getMonth(), i + 1))];
+  const thisMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+  // the times for the chosen day; today, only the ones still ahead
+  const times = useMemo(() => {
+    const out: string[] = [];
+    const min = day === today ? nextQuarter() : null;
+    for (let m = 0; m < 24 * 60; m += 15) {
+      const v = pad2(Math.floor(m / 60)) + ':' + pad2(m % 60);
+      if (day && min && new Date(day + 'T' + v) < min) continue;
+      out.push(v);
+    }
+    return out;
+  }, [day, today]);
+
+  const pickDay = (d: Date) => {
+    const k = ymd(d);
+    let t = time ?? '10:00';
+    if (k === today && new Date(k + 'T' + t) < nextQuarter()) {
+      const q = nextQuarter();
+      if (ymd(q) !== today) return; // nothing left today
+      t = pad2(q.getHours()) + ':' + pad2(q.getMinutes());
+    }
+    onChange(k + 'T' + t);
+  };
+  const label = (v: string) => new Date('2000-01-01T' + v).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  return (
+    <div className="dtp">
+      <div className="mcal">
+        <div className="mcal-h">
+          <button type="button" className="mcal-nav" aria-label="Previous month" disabled={month <= thisMonth} onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>
+            ‹
+          </button>
+          <b>{month.toLocaleDateString([], { month: 'long', year: 'numeric' })}</b>
+          <button type="button" className="mcal-nav" aria-label="Next month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>
+            ›
+          </button>
+        </div>
+        <div className="mcal-g">
+          {WEEK.map((w) => (
+            <span key={w} className="mcal-w">
+              {w}
+            </span>
+          ))}
+          {cells.map((d, i) =>
+            d ? (
+              <button
+                key={i}
+                type="button"
+                disabled={ymd(d) < today}
+                aria-pressed={ymd(d) === day}
+                aria-label={d.toDateString()}
+                className={'mcal-d' + (ymd(d) === day ? ' on' : '') + (ymd(d) === today ? ' now' : '') + (d.getDay() % 6 === 0 ? ' we' : '')}
+                onClick={() => pickDay(d)}
+              >
+                {d.getDate()}
+              </button>
+            ) : (
+              <span key={i} />
+            ),
+          )}
+        </div>
+      </div>
+      <label className="dtp-t">
+        <span>Time</span>
+        <select className="inp" value={day ? time ?? '' : ''} disabled={!day} onChange={(e) => day && e.target.value && onChange(day + 'T' + e.target.value)}>
+          {!day && <option value="">Pick a day first</option>}
+          {times.map((v) => (
+            <option key={v} value={v}>
+              {label(v)}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
 
 /** "Schedule a meeting with <client>": who, suggested times in both time zones, video, agenda, send and record. */
 export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me: string | null; onClose: () => void; onScheduled: (toClient: boolean) => void }) {
@@ -48,6 +145,7 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
   const [their, setTheir] = useState<{ offset: number | null; place: string }>({ offset: null, place: '' });
   const [slot, setSlot] = useState(0);
   const [custom, setCustom] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
   const [tool, setTool] = useState<Tool>('meet');
   const [link, setLink] = useState('');
   const [agenda, setAgenda] = useState('');
@@ -191,7 +289,8 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
           {sp.people.some((p) => !p.userId) && <em>People who haven&apos;t joined yet can&apos;t be invited until they do.</em>}
         </div>
         <div className="fld">
-          <label>Suggested times · inside everyone&apos;s working hours</label>
+          <label>When</label>
+          <small className="whenhint">Suggested: inside everyone&apos;s working hours. Or pick any date and time.</small>
           {slots.length ? (
             <div className="slots" role="radiogroup" aria-label="Suggested times">
               {slots.map((d, i) => (
@@ -215,18 +314,20 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
               ))}
             </div>
           ) : (
-            <em>No shared working hours in the next two weeks. Pick a time below.</em>
+            <em>No shared working hours in the next two weeks. Pick a date and time below.</em>
           )}
+          <button
+            type="button"
+            className={'pickbtn' + (custom ? ' on' : '')}
+            aria-expanded={picking || !slots.length}
+            onClick={() => setPicking(!picking)}
+          >
+            <Ic n="calendar" size={15} />
+            {custom && startsAt ? `${dayLabel(startsAt)} at ${startsAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} (${myZone()})` : 'Pick a date & time'}
+            <Ic n="chevron" size={13} />
+          </button>
+          {(picking || !slots.length) && <DateTimePick value={custom} onChange={setCustom} />}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              className="inp"
-              type="datetime-local"
-              aria-label="Or pick another time"
-              style={{ width: 'auto' }}
-              value={custom ?? ''}
-              min={localInput(new Date())}
-              onChange={(e) => setCustom(e.target.value || null)}
-            />
             <select className="inp" style={{ width: 'auto' }} aria-label="Length" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
               {[15, 30, 45, 60, 90].map((m) => (
                 <option key={m} value={m}>
