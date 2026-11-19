@@ -135,7 +135,7 @@ export function LiveApps() {
         <AppCard
           name="Google Calendar & Meet"
           icon={GOOGLE_ICON}
-          about="Meetings you schedule with “Google Meet” get a Meet link and go into your Google Calendar, with invitations emailed to the guests. Huddles and calls use Google Meet too. Cancelling in Seek cancels the event."
+          about="Meetings you schedule with “Google Meet” get a Meet link and go into your Google Calendar, with invitations emailed to the guests. Huddles and calls use Google Meet too. Cancelling in Seek cancels the event. If Google says it “hasn’t verified this app”, choose Advanced → Go to Seek."
           st={g}
           busy={busy}
           setupHint="Not set up yet: an admin adds the Google client ID and secret in Supabase (Edge Functions → Secrets)."

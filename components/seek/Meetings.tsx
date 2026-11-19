@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { PEOPLE, type HuddleCard, type MeetingCard } from '@/lib/seek/data';
 import type { Space } from '@/lib/seek/liveClients';
 import {
@@ -114,6 +115,66 @@ function timesFor(day: string, tz: string) {
   return out;
 }
 const hm = (v: string) => new Date('2000-01-01T' + v).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+/** A pop-up anchored to a button: below it when there is room, otherwise above; full width on phones. */
+function Popover({ anchor, onClose, children }: { anchor: RefObject<HTMLElement | null>; onClose: () => void; children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width?: number } | null>(null);
+  useLayoutEffect(() => {
+    const place = () => {
+      const a = anchor.current?.getBoundingClientRect();
+      const b = box.current;
+      if (!a || !b) return;
+      const h = b.offsetHeight;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      if (vw < 560) {
+        setPos({ top: Math.max(8, vh - h - 8), left: 8, width: vw - 16 });
+        return;
+      }
+      const w = b.offsetWidth;
+      const below = a.bottom + 6;
+      const top = below + h <= vh - 8 ? below : Math.max(8, a.top - 6 - h);
+      setPos({ top, left: Math.min(Math.max(8, a.left), vw - w - 8) });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [anchor]);
+  useEffect(() => {
+    const down = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node;
+      if (box.current?.contains(t) || anchor.current?.contains(t)) return;
+      onClose();
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', down);
+    document.addEventListener('touchstart', down);
+    // on window, so it runs before the dialog's own Escape (which then sees defaultPrevented)
+    window.addEventListener('keydown', key, true);
+    return () => {
+      document.removeEventListener('mousedown', down);
+      document.removeEventListener('touchstart', down);
+      window.removeEventListener('keydown', key, true);
+    };
+  }, [anchor, onClose]);
+  return createPortal(
+    <div ref={box} className="pop" role="dialog" aria-label="Pick a date and time" style={pos ? { top: pos.top, left: pos.left, width: pos.width } : { visibility: 'hidden', top: 0, left: 0 }}>
+      {children}
+    </div>,
+    document.body,
+  );
+}
 
 /** Pick any day on a month calendar, any quarter hour, in any time zone. value is 'YYYY-MM-DDTHH:mm' on the zone's clock. */
 function DateTimePick({ value, tz, onChange, onTz }: { value: string | null; tz: string; onChange: (v: string) => void; onTz: (tz: string) => void }) {
@@ -232,7 +293,8 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
   const [minutes, setMinutes] = useState(30);
   const [their, setTheir] = useState<{ offset: number | null; place: string }>({ offset: null, place: '' });
   const [custom, setCustom] = useState<string | null>(null);
-  const [picking, setPicking] = useState(true);
+  const [picking, setPicking] = useState(false);
+  const whenBtn = useRef<HTMLButtonElement>(null);
   const [tz, setTz] = useState(myTz);
   const [tool, setTool] = useState<Tool>('meet');
   const [link, setLink] = useState('');
@@ -378,12 +440,22 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
         </div>
         <div className="fld">
           <label>When</label>
-          <button type="button" className={'pickbtn' + (custom ? ' on' : '')} aria-expanded={picking} onClick={() => setPicking(!picking)}>
+          <button ref={whenBtn} type="button" className={'pickbtn' + (custom ? ' on' : '')} aria-haspopup="dialog" aria-expanded={picking} onClick={() => setPicking(!picking)}>
             <Ic n="calendar" size={15} />
             {custom ? `${dayLabel(new Date(custom.slice(0, 10) + 'T00:00'))} at ${hm(custom.slice(11, 16))} · ${tzName(tz)}` : 'Pick a date & time'}
             <Ic n="chevron" size={13} />
           </button>
-          {picking && <DateTimePick value={custom} tz={tz} onChange={setCustom} onTz={setTz} />}
+          {picking && (
+            <Popover anchor={whenBtn} onClose={() => setPicking(false)}>
+              <DateTimePick value={custom} tz={tz} onChange={setCustom} onTz={setTz} />
+              <div className="pop-f">
+                <span>{custom ? `${dayLabel(new Date(custom.slice(0, 10) + 'T00:00'))} at ${hm(custom.slice(11, 16))} · ${tzName(tz)}` : 'Pick a day, then a time'}</span>
+                <button type="button" className="btn sm pri" disabled={!custom} onClick={() => setPicking(false)}>
+                  Done
+                </button>
+              </div>
+            </Popover>
+          )}
           {startsAt && (tz !== myTz() || their.offset != null) && (
             <small className="whenhint">
               {[
@@ -432,7 +504,9 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
                   }}>
                     Connect my Google Calendar
                   </button>
-                  <span className="sub">Or paste a Meet link below.</span>
+                  <span className="sub">
+                    If Google says it &quot;hasn&apos;t verified this app&quot;, choose <b>Advanced</b> → <b>Go to Seek</b>. Or paste a Meet link below.
+                  </span>
                 </>
               ) : (
                 'Paste a Google Meet link. (An admin can set up Google in Apps so Seek creates the link and the invite.)'
