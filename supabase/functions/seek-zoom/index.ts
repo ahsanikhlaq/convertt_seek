@@ -25,8 +25,9 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 type Client = any;
 
 const SITE = (Deno.env.get('SITE_URL') || 'https://convertt-seek.vercel.app').replace(/\/+$/, '');
-const CLIENT_ID = Deno.env.get('ZOOM_CLIENT_ID') || '';
-const CLIENT_SECRET = Deno.env.get('ZOOM_CLIENT_SECRET') || '';
+// trimmed: a pasted key often carries a space or line break
+const CLIENT_ID = (Deno.env.get('ZOOM_CLIENT_ID') || '').trim();
+const CLIENT_SECRET = (Deno.env.get('ZOOM_CLIENT_SECRET') || '').trim();
 const REDIRECT = SITE + '/apps';
 const API = 'https://api.zoom.us/v2';
 
@@ -60,6 +61,15 @@ async function readState(state: string): Promise<string | null> {
 }
 
 // ---- tokens (Zoom gives a new refresh token every time one is used: always keep the latest)
+/** Why Zoom refused a token request, in a form that is safe to show (error code and description only). */
+function why(data: Record<string, string | number>) {
+  const code = String(data.error ?? '').slice(0, 60);
+  const desc = String(data.error_description ?? data.reason ?? '').slice(0, 160);
+  if (code === 'invalid_client') return ' (Zoom says the client ID or secret is wrong: check both in Supabase → Edge Functions → Secrets, with no spaces)';
+  if (code === 'redirect_uri_mismatch') return ' (Zoom says the redirect URL doesn’t match: it must be exactly ' + REDIRECT + ')';
+  return code ? ` (Zoom: ${code}${desc ? ' – ' + desc : ''})` : '';
+}
+
 async function token(params: Record<string, string>) {
   const res = await fetch('https://zoom.us/oauth/token', {
     method: 'POST',
@@ -163,7 +173,10 @@ Deno.serve(async (req) => {
         if (!configured) return json({ error: 'Zoom isn’t set up for Seek yet' }, 400);
         if (!asked || asked !== user.id || !code) return json({ error: 'That Zoom sign-in link expired. Try connecting again' }, 400);
         const r = await token({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT });
-        if (!r.ok || !r.data.access_token) return json({ error: 'Zoom didn’t accept the sign-in. Try connecting again' }, 400);
+        if (!r.ok || !r.data.access_token) {
+          console.error('zoom token exchange failed', r.data.error, r.data.reason);
+          return json({ error: 'Zoom didn’t accept the sign-in' + why(r.data) + '. Try connecting again' }, 400);
+        }
         const me = await zoom(String(r.data.access_token), '/users/me');
         await save(admin, user.id, r.data, me.ok ? String(me.data.email ?? '') : '');
         return json({ email: me.ok ? me.data.email : '' });

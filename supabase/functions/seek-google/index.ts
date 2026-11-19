@@ -25,8 +25,9 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 type Client = any;
 
 const SITE = (Deno.env.get('SITE_URL') || 'https://convertt-seek.vercel.app').replace(/\/+$/, '');
-const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || '';
-const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
+// trimmed: a pasted key often carries a space or line break
+const CLIENT_ID = (Deno.env.get('GOOGLE_CLIENT_ID') || '').trim();
+const CLIENT_SECRET = (Deno.env.get('GOOGLE_CLIENT_SECRET') || '').trim();
 const REDIRECT = SITE + '/apps';
 const SCOPES = 'openid email https://www.googleapis.com/auth/calendar.events';
 const CAL = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
@@ -60,6 +61,15 @@ async function readState(state: string): Promise<string | null> {
 }
 
 // ---- tokens
+/** Why Google refused a token request, in a form that is safe to show (error code and description only). */
+function why(data: Record<string, string | number>) {
+  const code = String(data.error ?? '').slice(0, 60);
+  const desc = String(data.error_description ?? data.reason ?? '').slice(0, 160);
+  if (code === 'invalid_client') return ' (Google says the client ID or secret is wrong: check both in Supabase → Edge Functions → Secrets, with no spaces)';
+  if (code === 'redirect_uri_mismatch') return ' (Google says the redirect URL doesn’t match: it must be exactly ' + REDIRECT + ')';
+  return code ? ` (Google: ${code}${desc ? ' – ' + desc : ''})` : '';
+}
+
 async function token(params: Record<string, string>) {
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -166,7 +176,10 @@ Deno.serve(async (req) => {
         if (!configured) return json({ error: 'Google isn’t set up for Seek yet' }, 400);
         if (!asked || asked !== user.id || !code) return json({ error: 'That Google sign-in link expired. Try connecting again' }, 400);
         const r = await token({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT });
-        if (!r.ok) return json({ error: 'Google didn’t accept the sign-in. Try connecting again' }, 400);
+        if (!r.ok) {
+          console.error('google token exchange failed', r.data.error, r.data.error_description);
+          return json({ error: 'Google didn’t accept the sign-in' + why(r.data) + '. Try connecting again' }, 400);
+        }
         const scope = String(r.data.scope ?? '');
         if (!scope.includes('calendar')) return json({ error: 'Connect again and tick the box that lets Seek use your calendar' }, 400);
         let email = '';
