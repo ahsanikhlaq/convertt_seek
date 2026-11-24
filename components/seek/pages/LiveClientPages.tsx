@@ -26,7 +26,7 @@ import { spaceFiles, type SharedFile } from '@/lib/seek/liveFiles';
 import { Ic } from '../icons';
 import { DraftUpdateDialog, ScopeHoursTab } from '../ScopeHours';
 import { useConfirm } from '../Dialogs';
-import { markRead, viewingSpace } from '@/lib/seek/liveSync';
+import { markRead, spaceUnreadCounts, viewingSpace } from '@/lib/seek/liveSync';
 import { flashMessage } from '@/lib/seek/liveDecisions';
 import { toUiId } from '@/lib/seek/live';
 import type { SpaceSettingsTab } from '../SpaceSettings';
@@ -41,8 +41,24 @@ const SpaceSettings = dynamic(() => import('../SpaceSettings').then((m) => m.Spa
  * Approvals and People; a client (signed in from their invite) sees only their own project space.
  */
 export function LiveClientsPage({ scheduling, inviting }: { scheduling?: boolean; inviting?: boolean }) {
-  const { s } = useSeek();
+  const { s, update } = useSeek();
   const live = useLiveClients();
+  // unread counts per client: Home's chat loads them too, but someone can open Clients first
+  const team = s.session === 'in' ? (s.orgId ?? null) : null;
+  useEffect(() => {
+    if (!team) return;
+    let alive = true;
+    void spaceUnreadCounts(team).then((counts) => {
+      if (!alive) return;
+      update((d) => {
+        d.spUnread = counts;
+        if (viewingSpace.key) delete d.spUnread[viewingSpace.key];
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [team]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!live) return null;
   if (s.session === 'client') return <ClientPortal live={live} />;
   if (scheduling) return <LiveMeetings live={live} />;
