@@ -115,3 +115,8 @@ html.dark [style*="background: var(--red)"]{background:#b03030!important;border-
   /* !important: element rules set their own animations and transitions */
   *,*:before,*:after{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.01ms!important;transition-delay:0s!important;scroll-behavior:auto!important}
 }
+
+/* task chips on narrow screens: the checkbox keeps its size; the title and details wrap as normal text */
+.task{max-width:100%;flex-wrap:wrap;row-gap:2px}
+.task i{flex:none}
+.task > span{min-width:0;flex:1 1 auto}
