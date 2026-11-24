@@ -203,3 +203,28 @@ begin
           'Cancelled: ' || m.title);
 end;
 $$;
+
+-- ---------------------------------------------------------------- 4. a client's team: only people in that workspace
+-- The team list could be given anyone's user id; now each person added must be a member (not a guest) of the
+-- workspace that owns the space.
+create or replace function seek.in_space_workspace(p_space uuid, p_user uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from seek.client_spaces s
+      join seek.workspace_members m on m.workspace_id = s.workspace_id
+     where s.id = p_space and m.user_id = p_user and m.role <> 'guest'
+  );
+$$;
+revoke all on function seek.in_space_workspace(uuid, uuid) from public, anon;
+grant execute on function seek.in_space_workspace(uuid, uuid) to authenticated;
+
+drop policy if exists "client team: team manages" on seek.client_team;
+create policy "client team: team manages" on seek.client_team
+  for all to authenticated
+  using (seek.space_side(space_id) = 'team')
+  with check (seek.space_side(space_id) = 'team' and seek.in_space_workspace(space_id, user_id));
