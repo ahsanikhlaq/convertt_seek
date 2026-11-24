@@ -249,6 +249,7 @@ function Card({ p, on, now, onOpen }: { p: Person; on: boolean; now: number; onO
           {p.me && <span className="pp-you">(you)</span>}
         </span>
         <span className="pp-ti">{p.title || <i>No title yet</i>}</span>
+        {p.email && <span className="pp-em">{p.email}</span>}
         <span className="pp-tags">
           <RoleTag role={p.role} />
         </span>
@@ -315,6 +316,11 @@ function Profile({ p, now, onMessage, onCopy }: { p: Person; now: number; onMess
           {p.pronouns && <span className="pp-pro">{p.pronouns}</span>}
         </div>
         {p.title && <p className="pp-ht">{p.title}</p>}
+        {p.email && (
+          <a href={'mailto:' + p.email} className="pp-mail pp-hm">
+            {p.email}
+          </a>
+        )}
         <div className="pp-tags">
           <RoleTag role={p.role} />
           <span className={'pp-pill' + (pres.active ? ' on' : '')}>

@@ -1,7 +1,7 @@
 -- Seek · teammates' emails always show on their profiles (People page)
---   Profiles keep a copy of the sign-in email. Some ended up empty (for example an account whose email arrived
---   after its profile was made), and the People page then showed "Hidden". Fill the gaps from the sign-in
---   account, and have org_people fall back to it, so the directory always has the email.
+--   Profiles keep a copy of the sign-in email. org_people now falls back to the sign-in account when that copy
+--   is empty, any gaps are filled, and the copy follows email changes. (Applied 24 Nov 2026: every workspace
+--   member already had an email; the only empty ones were anonymous test accounts outside any workspace.)
 
 update seek.profiles p
    set email = u.email

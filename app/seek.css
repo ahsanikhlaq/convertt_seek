@@ -1463,3 +1463,7 @@ html.dark .mcal-d.on{background:var(--son,#7c4a82)}
 .pop .dtp{border:0;padding:0;background:transparent}
 .pop-f{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--ln);margin-top:12px;padding-top:10px;font-size:13.5px;color:var(--sb)}
 html.dark .pop{background:var(--card);border-color:var(--ln)}
+
+/* People: the email under the name (list cards and the profile) */
+.pp-em{color:var(--sb);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pp-hm{display:inline-block;font-size:14.5px;margin-top:2px;word-break:break-all}
