@@ -11,13 +11,14 @@ import type { MeetingCard } from './data';
  */
 
 export type Tool = MeetingCard['tool'];
+/** The video choices when scheduling (no in-person option). */
 export const TOOLS: [Tool, string][] = [
   ['meet', 'Google Meet'],
   ['zoom', 'Zoom'],
   ['seek', 'Seek video'],
-  ['person', 'In person'],
 ];
-export const toolName = (t: Tool) => TOOLS.find((x) => x[0] === t)?.[1] ?? t;
+/** Every tool's name, including in-person meetings scheduled before that option was removed. */
+export const toolName = (t: Tool) => TOOLS.find((x) => x[0] === t)?.[1] ?? (t === 'person' ? 'In person' : t);
 
 /** Hours from UTC in a zone label such as "London (GMT+1)" or "New York (GMT-4)"; null when there is none. */
 export function offsetOf(label: string | null | undefined): number | null {
