@@ -231,8 +231,8 @@ export async function remindMe(target: { uiId?: number; task?: number }, at: Dat
 }
 
 /**
- * Turns due reminders into notifications: on start and every minute while Seek is open and on screen (a hidden tab
- * skips the rounds, and catches up as soon as it is shown again).
+ * Turns due reminders into notifications and sends due Send-later messages: on start and every minute while Seek is
+ * open (in a hidden tab too, so a scheduled message isn't held back until someone looks at Seek).
  */
 export function useReminders(me: string | null) {
   const { s } = useSeek();
@@ -242,7 +242,6 @@ export function useReminders(me: string | null) {
     // due reminders become notifications; due Send-later messages are sent
     let last = 0;
     const fire = () => {
-      if (document.visibilityState === 'hidden') return;
       last = Date.now();
       // supabase-js only sends a query once it is awaited (or then-ed)
       void sb().rpc('fire_my_reminders').then(() => {});

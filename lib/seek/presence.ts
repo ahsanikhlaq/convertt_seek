@@ -5,18 +5,20 @@ import { backendOn, sb } from './backend';
 import { PEOPLE } from './data';
 
 /**
- * Who's active. While you have Seek open and on screen, the app tells the server "I'm here" about every 3 minutes
+ * Who's active. While you have Seek open and on screen, the app tells the server "I'm here" about every 90 seconds
  * (seen_now()), and sooner when you click or type after a quiet spell; teammates count as active if that was in the
  * last 6 minutes. Everyone else shows when they were last seen. People you can see are re-checked every minute
  * while Seek is on screen (a hidden tab does nothing, and catches up as soon as it is shown again).
  */
 
-/** Active means seen in the last 6 minutes (the heartbeat is every 3, so one missed beat doesn't flicker). */
+/** Active means seen in the last 6 minutes (the heartbeat is every 90 s, so missed beats don't flicker). */
 export const ACTIVE_MS = 6 * 60_000;
-const BEAT_MS = 3 * 60_000;
+// under 2 minutes: seek-notify sends push to people it hasn't heard from for 2 minutes, so someone using Seek
+// must be re-announced before that
+const BEAT_MS = 90_000;
 // clicking or typing re-announces you sooner, so push notifications (sent when you've been away a couple of
 // minutes) don't reach someone who is actively using Seek
-const ACTIVITY_BEAT_MS = 100_000;
+const ACTIVITY_BEAT_MS = 60_000;
 type Seen = { at: number | null; status: string };
 const seen = new Map<string, Seen>();
 let version = 0;
