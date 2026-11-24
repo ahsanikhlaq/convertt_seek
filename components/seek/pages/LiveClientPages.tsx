@@ -424,6 +424,7 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
       {scheduling && (
         <ScheduleDialog
           sp={sp}
+          spaces={live.spaces}
           me={live.me}
           onClose={() => setScheduling(false)}
           onScheduled={(toClient) => setTab(toClient ? 'Client chat' : 'Team notes')}
@@ -686,7 +687,7 @@ function LiveMeetings({ live }: { live: LiveClients }) {
         right={
           sp ? (
             <button type="button" className="btn sm pri" onClick={() => setScheduling(true)}>
-              <Ic n="calendar" /> Schedule with {sp.name}
+              <Ic n="calendar" /> Schedule a meeting
             </button>
           ) : undefined
         }
@@ -697,7 +698,7 @@ function LiveMeetings({ live }: { live: LiveClients }) {
         ) : !list.length ? (
           <div className="empty">
             <b style={{ display: 'block', fontSize: 17, color: 'var(--ink)' }}>No meetings coming up</b>
-            {sp ? 'Pick a client on the left and schedule a call. The invite is posted in their Client chat with a calendar file.' : 'Add a client first, then schedule calls with them here.'}
+            {sp ? 'Press Schedule a meeting and pick the client. The invite is posted in their Client chat with a calendar file.' : 'Add a client first, then schedule calls with them here.'}
           </div>
         ) : (
           <div className="flist">
@@ -733,6 +734,7 @@ function LiveMeetings({ live }: { live: LiveClients }) {
       {scheduling && sp && (
         <ScheduleDialog
           sp={sp}
+          spaces={live.spaces}
           me={live.me}
           onClose={() => setScheduling(false)}
           onScheduled={() => setTick((t) => t + 1)}

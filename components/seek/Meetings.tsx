@@ -283,13 +283,38 @@ function DateTimePick({ value, tz, onChange, onTz }: { value: string | null; tz:
   );
 }
 
-/** "Schedule a meeting with <client>": who, a date and time in any time zone, video, agenda, send and record. */
-export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me: string | null; onClose: () => void; onScheduled: (toClient: boolean) => void }) {
+/**
+ * "Schedule a meeting with <client>": which client (any of yours), who, a date and time in any time zone, video,
+ * agenda, send and record. Only the client's people are invited at first; teammates are added one by one (or all).
+ */
+export function ScheduleDialog({
+  sp: first,
+  spaces,
+  me,
+  onClose,
+  onScheduled,
+}: {
+  sp: Space;
+  /** your client spaces: when there are several, the dialog lets you pick which client the meeting is with */
+  spaces?: Space[];
+  me: string | null;
+  onClose: () => void;
+  onScheduled: (toClient: boolean) => void;
+}) {
   const { toast } = useSeek();
+  const [sp, setSp] = useState(first);
   const clients = sp.people.filter((p) => p.userId);
   const team = sp.team.map((t) => t.userId).filter((id) => id !== me);
   const [title, setTitle] = useState('');
-  const [who, setWho] = useState<string[]>([...clients.map((p) => p.userId!), ...team]);
+  const [who, setWho] = useState<string[]>(clients.map((p) => p.userId!));
+  const pickClient = (id: string) => {
+    const next = spaces?.find((x) => x.id === id);
+    if (!next || next.id === sp.id) return;
+    setSp(next);
+    setWho(next.people.filter((p) => p.userId).map((p) => p.userId!));
+  };
+  const invited = clients.filter((p) => who.includes(p.userId!)).map((p) => p.email).filter(Boolean);
+  const allTeam = team.length > 0 && team.every((id) => who.includes(id));
   const [minutes, setMinutes] = useState(30);
   const [their, setTheir] = useState<{ offset: number | null; place: string }>({ offset: null, place: '' });
   const [custom, setCustom] = useState<string | null>(null);
@@ -426,6 +451,19 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
           void submit();
         }}
       >
+        {spaces && spaces.length > 1 && (
+          <div className="fld">
+            <label htmlFor="mt-c">Client</label>
+            <select id="mt-c" className="inp" value={sp.id} onChange={(e) => pickClient(e.target.value)}>
+              {spaces.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                  {x.project ? ' · ' + x.project : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="fld">
           <label htmlFor="mt-t">Title</label>
           <input id="mt-t" className="inp" value={title} maxLength={120} placeholder="Mobile review" autoFocus onChange={(e) => setTitle(e.target.value)} />
@@ -435,7 +473,20 @@ export function ScheduleDialog({ sp, me, onClose, onScheduled }: { sp: Space; me
           <div className="chips">
             {clients.map((p) => chip(p.userId!, (p.name.trim() || p.email.split('@')[0]).split(' ')[0] + ' (client)', true))}
             {team.map((id) => chip(id, PEOPLE[id]?.name?.split(' ')[0] ?? 'Teammate'))}
+            {team.length > 1 && (
+              <button
+                type="button"
+                className="linkbtn"
+                onClick={() => setWho((w) => (allTeam ? w.filter((x) => !team.includes(x)) : [...new Set([...w, ...team])]))}
+              >
+                {allTeam ? 'Remove the team' : 'Add the whole team'}
+              </button>
+            )}
           </div>
+          <em>
+            {invited.length ? `Client invites go to ${invited.join(', ')}.` : 'No client is invited: the meeting is for the team only.'}{' '}
+            {team.length ? 'Tap a teammate to add them.' : 'Nobody else on the team is on this client yet.'}
+          </em>
           {sp.people.some((p) => !p.userId) && <em>People who haven&apos;t joined yet can&apos;t be invited until they do.</em>}
         </div>
         <div className="fld">
