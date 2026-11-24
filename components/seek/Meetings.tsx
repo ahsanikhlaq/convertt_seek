@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { focusables, useFocusTrap } from './a11y';
 import { PEOPLE, type HuddleCard, type MeetingCard } from '@/lib/seek/data';
 import type { Space } from '@/lib/seek/liveClients';
 import {
@@ -168,11 +169,29 @@ function Popover({ anchor, onClose, children }: { anchor: RefObject<HTMLElement 
       window.removeEventListener('keydown', key, true);
     };
   }, [anchor, onClose]);
+  // keyboard: focus moves into the pop-up when it opens (the chosen day, else the first control),
+  // Tab stays inside it, and focus goes back to its button when it closes
+  useFocusTrap(box);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      const b = box.current;
+      if (!b) return;
+      (b.querySelector<HTMLElement>('[aria-pressed="true"]:not(:disabled)') ?? focusables(b)[0] ?? b).focus();
+    });
+    const a = anchor.current;
+    return () => {
+      cancelAnimationFrame(raf);
+      const f = document.activeElement;
+      // not when the click that closed it already put focus somewhere else
+      if (!f || f === document.body || box.current?.contains(f)) a?.focus();
+    };
+  }, [anchor]);
   return createPortal(
-    <div ref={box} className="pop" role="dialog" aria-label="Pick a date and time" style={pos ? { top: pos.top, left: pos.left, width: pos.width } : { visibility: 'hidden', top: 0, left: 0 }}>
+    <div ref={box} className="pop" role="dialog" aria-label="Pick a date and time" tabIndex={-1} style={pos ? { top: pos.top, left: pos.left, width: pos.width } : { visibility: 'hidden', top: 0, left: 0 }}>
       {children}
     </div>,
-    document.body,
+    // inside the dialog it belongs to (still position:fixed), so screen readers don't treat it as outside the modal
+    anchor.current?.closest<HTMLElement>('.modal') ?? document.body,
   );
 }
 

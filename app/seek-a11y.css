@@ -1,0 +1,117 @@
+/* ===== Phone, dark mode & accessibility layer =====
+   Loaded after seek.css (app/layout.tsx), so equal-specificity rules here win.
+   Light mode is unchanged except where a fix needs it; most rules are dark-only or phone-only. */
+
+/* ---------- tokens ---------- */
+/* --vtext: the accent used as text or as a thin indicator. Light: the accent itself.
+   Dark: the accent's light tint (--vd, set by applyTheme), which reads at 4.5:1+ on the dark card. */
+:root{--vtext:var(--v)}
+html.dark{
+  --vtext:var(--vd);
+  /* status colours: text tints that pass 4.5:1 on the dark card, pastel backgrounds become dark tints */
+  --red:#f28b8b;--reds:#3a1f22;
+  --ok:#7fd3a5;--oks:#1d3328;
+  --gold:#e9c37c;--golds:#3a2e17;--goldl:#5a4520;
+  --ai:#b8aaf5;--ais:#2f2a4d;
+}
+
+/* utility: hidden on screen, read by screen readers */
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
+
+/* ---------- 1. toast in dark mode: light surface, dark text ---------- */
+html.dark #toast{background:#eeeef0;color:#1a1d21;box-shadow:0 14px 30px rgba(0,0,0,.55)}
+html.dark #toast button{background:rgba(0,0,0,.08);color:#1a1d21}
+html.dark #toast button:hover{background:rgba(0,0,0,.14)}
+html.dark #toast i{opacity:.75}
+
+/* ---------- 2. accent text and indicators in dark mode ---------- */
+html.dark a:not([class]){color:var(--vtext)}
+html.dark a:not([class]):hover{color:var(--vtext);text-decoration:underline}
+html.dark :is(.rulebox li:before,.notes .ndesk,.frow>i,.nochan-ic,.notews,.wfy-row>i:not(.gold),.acct-tabs .tb.on .lic,.voice .vspeed:hover,.main .mh .btn.sm.hud:hover,.pickbtn,.pp-mail){color:var(--vtext)}
+html.dark :is(.voice .vspeed:hover,.main .mh .btn.sm.hud:hover,.pickbtn.on,.rx.me,.slot.on,.ip.on,.pf-st button.on,.nlevel.on,.nday.on,.pp-card.on,.files .file:hover,.wslogo:hover){border-color:var(--vtext)}
+html.dark :is(.inp:focus,.tagin:focus-within,.codes input:focus,.kwbox:focus-within,.dz-search:focus-within){border-color:var(--vtext)}
+html.dark .comp:focus-within{border-color:var(--vtext)!important}
+html.dark .tb.on:not(.gold),html.dark .emt button.on{border-bottom-color:var(--vtext)}
+html.dark .task i{border-color:var(--vtext)}
+html.dark .dec:not(.gold):not(.old){box-shadow:inset 4px 0 0 var(--vtext)}
+html.dark .steps .c i{border-color:var(--vtext)}
+html.dark .sw.on{background:var(--vtext)}
+html.dark :focus-visible,html.dark .pp-card:focus-visible{outline-color:var(--vtext)}
+html.dark .nlevel input{accent-color:var(--vtext)}
+/* phone tab bar: the active item and its bar */
+@media (max-width:760px){
+  html.dark .ri.on{color:var(--vtext)!important}
+  html.dark .ri.on:before{background:var(--vtext)!important}
+}
+
+/* ---------- 4. status colours used as a background under white text stay dark in dark mode ---------- */
+html.dark .offline{background:#946615}
+html.dark .wpv-m>i{background:#5a48c0}
+html.dark .timer.late{border-color:#5a2a2e}
+html.dark .timer.ok{border-color:#2c4a3a}
+html.dark .pause.on{border-color:#5a2a2e}
+/* inline styles from components (avatars, badges, the stop-recording button, danger switches) */
+html.dark [style*="background: var(--gold)"]{background:#946615!important;border-color:#946615!important}
+html.dark [style*="background: var(--red)"]{background:#b03030!important;border-color:#b03030!important}
+
+/* ---------- 3. message actions: keyboard focus, touch "⋯" button, long press ---------- */
+.msg:focus-within .mt{display:flex}
+.mtt{display:none;position:absolute;right:8px;top:6px;width:28px;height:28px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--sb);place-items:center;z-index:3}
+.mtt:after{content:"";position:absolute;inset:-6px}
+.msg.cmp .mtt{top:0;height:26px}
+.mtt[aria-expanded=true]{background:var(--soft);color:var(--ink)}
+@media (hover:none){
+  .mtt{display:grid}
+  .msg:has(>.mtt) .bd{padding-right:26px}
+  .msg.menu .mtt{visibility:hidden}
+}
+
+/* ---------- 7. phone sidebar: not focusable while it is off-screen ---------- */
+@media (max-width:760px){
+  .app:not(.side-open) .side{visibility:hidden;transition:transform .25s,visibility 0s linear .25s}
+  .app.side-open .side{visibility:visible;transition:transform .25s,visibility 0s}
+}
+
+/* ---------- 8. tap targets of at least 40×40 on phones ---------- */
+@media (max-width:760px){
+  :where(.btn.sm,.rx,.tagin span button,.dz-x,.ph .x){position:relative}
+  /* 30px-high small buttons: an invisible hit area reaching 40px */
+  .btn.sm:after{content:"";position:absolute;inset:-5px 0}
+  .modal .mhd .btn.sm{height:40px;min-width:40px;padding:0 8px;margin:-4px -6px -4px 0}
+  .mt button{width:40px;height:40px}
+  .rx:after{content:"";position:absolute;inset:-7px -2px}
+  .reacts{gap:6px;row-gap:12px}
+  .tagin span button:after{content:"";position:absolute;inset:-10px}
+  .dz-x:after{content:"";position:absolute;inset:-8px}
+  .ph .x{width:40px;height:40px}
+  .sw{position:relative}
+  .sw:before{content:"";position:absolute;inset:-9px 0}
+  .mcal{width:100%}
+  .mcal-d{height:40px}
+  .mcal-nav{width:40px;height:40px}
+}
+
+/* ---------- 9. on-screen keyboard ---------- */
+.pop,.bpop{max-height:calc(100dvh - 16px)}
+.bscroll{max-height:52dvh}
+.notes{max-height:70dvh}
+.mm{max-height:min(420px,70dvh)}
+.slp .sll{max-height:min(320px,50dvh)}
+@media (max-width:760px){
+  .modal{max-height:min(92%,92dvh)}
+  /* while typing, the bottom tab bar steps aside so the field stays above the keyboard */
+  .app:has(:is(textarea,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]),[contenteditable=true]):focus) .rail{display:none!important}
+  .app:has(:is(textarea,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]),[contenteditable=true]):focus){padding-bottom:0!important}
+  .app:has(:is(textarea,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]),[contenteditable=true]):focus) :is(.side,.pane){bottom:0}
+}
+
+/* ---------- small: the space tab strip scrolls on phones, with a fade at the right edge ---------- */
+@media (max-width:760px){
+  .main .tabs{padding-right:32px;scroll-padding-inline:8px 32px;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent)}
+}
+
+/* ---------- 10. reduced motion ---------- */
+@media (prefers-reduced-motion:reduce){
+  /* !important: element rules set their own animations and transitions */
+  *,*:before,*:after{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.01ms!important;transition-delay:0s!important;scroll-behavior:auto!important}
+}

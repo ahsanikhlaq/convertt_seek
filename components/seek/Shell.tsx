@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { backendOn, forgetAccount, preferOrg } from '@/lib/seek/backend';
 import Link from 'next/link';
@@ -15,6 +15,7 @@ import { Ic } from './icons';
 import { HelpDialog } from './HelpDialog';
 import { useResync } from '@/lib/seek/resync';
 import { unreadCounts } from '@/lib/seek/liveSync';
+import { usePhone } from './a11y';
 
 export function useWorkspaceSwitch() {
   const { s, update, setUI, toast } = useSeek();
@@ -154,7 +155,11 @@ function Rail({ active }: { active: RouteKey }) {
           <Link key={r} href={ROUTES[r]} className={'ri' + (on ? ' on' : '')} aria-current={on ? 'page' : undefined} onClick={() => setUI({ sideOpen: false, home: false })}>
             {i === 'people' ? <PeopleIcon /> : <Icon name={i} />}
             {l}
-            {dot[r] && <span className="dot"></span>}
+            {dot[r] && (
+              <span className="dot">
+                <span className="sr-only">, unread</span>
+              </span>
+            )}
           </Link>
         );
       })}
@@ -222,11 +227,31 @@ function TopBar() {
 
 /** Left list column (becomes a full-screen drawer on phones). */
 export function Sidebar({ title, sub, action, children, mark }: { title: string; sub: string; action?: React.ReactNode; children: React.ReactNode; /** a letter shown before the title (the workspace's initial) */ mark?: string }) {
-  const { s, setUI } = useSeek();
+  const { s, ui, setUI } = useSeek();
   const { items } = useWorkspaceList();
   const pop = usePopovers();
+  // phones: the list is a drawer. Closed, it is inert (no Tab stops off-screen); opened, focus moves to its Close button
+  const phone = usePhone();
+  const closed = phone && !ui.sideOpen;
+  const closeBtn = useRef<HTMLButtonElement>(null);
+  const sideRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!phone || !ui.sideOpen) return;
+    const prev = document.activeElement as HTMLElement | null;
+    closeBtn.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !e.defaultPrevented && !document.querySelector('.scrim')) setUI({ sideOpen: false });
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      // back to the Menu button, unless something else (a page that opened) has taken focus
+      const f = document.activeElement;
+      if (prev?.isConnected && (!f || f === document.body || sideRef.current?.contains(f))) prev.focus();
+    };
+  }, [phone, ui.sideOpen, setUI]);
   return (
-    <aside className="side" aria-label={title}>
+    <aside ref={sideRef} className="side" aria-label={title} inert={closed || undefined}>
       <div className="sh">
         <div className="dbrand">
           <Logo />
@@ -257,7 +282,7 @@ export function Sidebar({ title, sub, action, children, mark }: { title: string;
             {title}
           </b>
           {action}
-          <button type="button" className="btn sm ghost close" style={{ display: 'none' }} onClick={() => setUI({ sideOpen: false })} aria-label="Close menu">
+          <button ref={closeBtn} type="button" className="btn sm ghost close" style={{ display: 'none' }} onClick={() => setUI({ sideOpen: false })} aria-label="Close menu">
             <Ic n="close" />
           </button>
         </div>

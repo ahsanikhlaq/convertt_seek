@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Ic } from './icons';
+import { useFocusTrap } from './a11y';
 
 /** Centred modal (bottom sheet on phones). Closes on Escape and on a click outside. */
 export function Modal({
@@ -25,6 +26,8 @@ export function Modal({
   const box = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  // Tab and Shift+Tab stay inside the dialog
+  useFocusTrap(box);
   useEffect(() => {
     // capture phase, so only this dialog closes: drawers and popovers underneath see defaultPrevented
     const onKey = (e: KeyboardEvent) => {

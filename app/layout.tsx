@@ -5,6 +5,7 @@ import { PopoverProvider } from '@/components/seek/Popovers';
 import { SeekProvider } from '@/lib/seek/store';
 import './fonts.css';
 import './seek.css';
+import './seek-a11y.css';
 
 // Inter: a clear, professional typeface made for screens (self-hosted by Next.js at build time)
 const inter = Inter({ subsets: ['latin', 'latin-ext'], display: 'swap', variable: '--font-sans' });
@@ -20,6 +21,8 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  // the on-screen keyboard shrinks the page, so the composer and dialogs stay above it
+  interactiveWidget: 'resizes-content',
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#3f0e40' },
     { media: '(prefers-color-scheme: dark)', color: '#1a1d21' },

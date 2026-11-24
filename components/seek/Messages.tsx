@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PEOPLE, type ChatMessage, type DecisionCard, type FeedItem, type PersonKey, type State } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
@@ -270,11 +270,20 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
   };
 
   const rowRef = useRef<HTMLDivElement>(null);
+  // touch: a long press (about 450 ms) on the message opens its actions
+  const press = useRef<{ t: number; x: number; y: number } | null>(null);
+  const pressedAt = useRef(0);
+  const endPress = () => {
+    if (press.current) clearTimeout(press.current.t);
+    press.current = null;
+  };
+  useEffect(() => endPress, []);
   // close the "More" menu on a click elsewhere
   useEffect(() => {
     if (!menuOpen) return;
     const onDown = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
+      if (Date.now() - pressedAt.current < 800 && rowRef.current?.contains(t)) return; // the finger lifting after a long press
       if (rowRef.current?.querySelector('.mm')?.contains(t) || t.closest?.('[data-more="' + m.id + '"]')) return;
       setUI({ menu: null });
     };
@@ -330,8 +339,62 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
     return () => document.removeEventListener('keydown', onKey);
   });
 
+  // the "More" menu: focus moves to its first item when it opens
+  useEffect(() => {
+    if (menuOpen) rowRef.current?.querySelector<HTMLElement>('.mm [role=menuitem]')?.focus({ preventScroll: true });
+  }, [menuOpen]);
+  /** Arrow keys, Home and End move through the menu; Escape and Tab close it, Escape back to its button. */
+  const menuKeys = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role=menuitem]'));
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    const go = (n: number) => {
+      e.preventDefault();
+      items[(n + items.length) % items.length]?.focus();
+    };
+    if (e.key === 'ArrowDown') go(i + 1);
+    else if (e.key === 'ArrowUp') go(i < 0 ? items.length - 1 : i - 1);
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(items.length - 1);
+    else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      setUI({ menu: null });
+      rowRef.current?.querySelector<HTMLElement>('.mt [data-more]')?.focus();
+    } else if (e.key === 'Tab') {
+      // Tab leaves the menu: close it and land on its button rather than lose focus
+      e.preventDefault();
+      setUI({ menu: null });
+      rowRef.current?.querySelector<HTMLElement>('.mt [data-more]')?.focus();
+    }
+  };
+
   return (
-    <div ref={rowRef} className={'msg' + (compact ? ' cmp' : '') + (m.ai ? ' ai' : '') + (m.client ? ' client' : '') + (menuOpen ? ' menu' : '') + (m.flash ? ' flash' : '')} data-id={m.id}>
+    <div
+      ref={rowRef}
+      className={'msg' + (compact ? ' cmp' : '') + (m.ai ? ' ai' : '') + (m.client ? ' client' : '') + (menuOpen ? ' menu' : '') + (m.flash ? ' flash' : '')}
+      data-id={m.id}
+      onPointerDown={(e) => {
+        if (e.pointerType !== 'touch' || inThread || (e.target as HTMLElement).closest('button,a,input,textarea,select,audio,video')) return;
+        endPress();
+        const t = window.setTimeout(() => {
+          press.current = null;
+          pressedAt.current = Date.now();
+          setUI({ menu: m.id });
+          navigator.vibrate?.(10);
+        }, 450);
+        press.current = { t, x: e.clientX, y: e.clientY };
+      }}
+      onPointerMove={(e) => {
+        const p0 = press.current;
+        if (p0 && Math.hypot(e.clientX - p0.x, e.clientY - p0.y) > 10) endPress(); // scrolling, not pressing
+      }}
+      onPointerUp={endPress}
+      onPointerCancel={endPress}
+      onContextMenu={(e) => {
+        // no browser menu on top of the message actions after a long press
+        if (Date.now() - pressedAt.current < 800) e.preventDefault();
+      }}
+    >
       {compact ? (
         <span className="gut" title={m.time}>
           {clockOf12(m).replace(/\s?[AP]M$/i, '')}
@@ -426,12 +489,17 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
           </button>
         )}
         {(isSaved || (backendOn && m.pinned)) && (
-          <div style={{ fontSize: 12.5, color: 'var(--v)', marginTop: 4, fontWeight: 600, display: 'flex', gap: 10 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--vtext)', marginTop: 4, fontWeight: 600, display: 'flex', gap: 10 }}>
             {backendOn && m.pinned && <span className="mtl"><Ic n="pin" size={12} /> Pinned</span>}
             {isSaved && <span className="mtl"><Ic n="star" size={12} /> Saved</span>}
           </div>
         )}
       </div>
+      {!inThread && (
+        <button type="button" className="mtt" data-more={m.id} aria-haspopup="menu" aria-expanded={menuOpen} aria-label="Message actions" onClick={() => setUI({ menu: menuOpen ? null : m.id })}>
+          <Ic n="more" size={17} />
+        </button>
+      )}
       {!inThread && (
         <div className="mt">
           <button type="button" title="Add reaction" aria-label="Add reaction" onClick={(ev) => pop.openEmoji(ev.currentTarget, react)}>
@@ -463,13 +531,13 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
               <Ic n="bookmark" size={17} />
             </button>
           )}
-          <button type="button" data-more={m.id} aria-expanded={menuOpen} title="More actions" aria-label="More actions" onClick={() => setUI({ menu: menuOpen ? null : m.id })}>
+          <button type="button" data-more={m.id} aria-haspopup="menu" aria-expanded={menuOpen} title="More actions" aria-label="More actions" onClick={() => setUI({ menu: menuOpen ? null : m.id })}>
             <Ic n="more" size={17} />
           </button>
         </div>
       )}
       {menuOpen && backendOn && (
-        <div className="mm" role="menu">
+        <div className="mm" role="menu" aria-label="Message actions" onKeyDown={menuKeys}>
           {live && canLog && (
             <button
               type="button"
@@ -557,7 +625,7 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
         </div>
       )}
       {menuOpen && !backendOn && (
-        <div className="mm" role="menu">
+        <div className="mm" role="menu" aria-label="Message actions" onKeyDown={menuKeys}>
           <button type="button" role="menuitem" onClick={makeTask}>
             <Ic n="task" /> Make task <kbd>T</kbd>
           </button>
@@ -755,8 +823,30 @@ export function Feed({ feed, banner, footer, children }: { feed: FeedRef; banner
     count.current = items.length;
   }, [items.length, last]);
 
+  // screen readers: "New message from …" for messages that arrive while the conversation is open (not the history)
+  const [said, setSaid] = useState<{ text: string; n: number } | null>(null);
+  const seen = useRef<{ where: string; at: number; last: number | null }>({ where: '', at: 0, last: null });
+  useEffect(() => {
+    const msgs = items.filter((x): x is ChatMessage => x.kind === 'msg');
+    const tail = msgs.length ? msgs[msgs.length - 1].id : null;
+    const was = seen.current;
+    seen.current = { where: feed.where, at: was.where === feed.where ? was.at : Date.now(), last: tail };
+    // a different conversation, the first load, or the history still arriving: nothing to say
+    if (was.where !== feed.where || was.last == null || Date.now() - was.at < 1500) return;
+    const from = msgs.findIndex((x) => x.id === was.last);
+    if (from < 0) return;
+    const fresh = msgs.slice(from + 1).filter((x) => x.who !== 'AH' && !x.failed);
+    if (!fresh.length) return;
+    const text =
+      fresh.length === 1 ? 'New message from ' + (PEOPLE[fresh[0].who]?.name ?? 'someone') : fresh.length + ' new messages, the last from ' + (PEOPLE[fresh[fresh.length - 1].who]?.name ?? 'someone');
+    setSaid((p) => ({ text, n: (p?.n ?? 0) + 1 }));
+  }, [items, feed.where]);
+
   return (
     <div className="feed" id="feed" ref={ref}>
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {said && <span key={said.n}>{said.text}</span>}
+      </div>
       {banner}
       {layoutFeed(items).map((x) =>
         'day' in x ? (
@@ -840,6 +930,7 @@ export function Composer({
   const [v, setV] = useState('');
   const [also, setAlso] = useState(false);
   const [mn, setMn] = useState<{ items: MentionItem[]; i: number } | null>(null);
+  const mnId = useId();
 
   useEffect(() => {
     if (autoFocus) ta.current?.focus();
@@ -985,6 +1076,10 @@ export function Composer({
         rows={1}
         placeholder={placeholder}
         aria-label={placeholder}
+        // the @mention list: a textarea can't take role=combobox, so it is a textbox with list autocomplete
+        aria-autocomplete="list"
+        aria-controls={mn ? mnId : undefined}
+        aria-activedescendant={mn ? mnId + '-' + mn.i : undefined}
         value={v}
         onChange={(e) => {
           setV(e.target.value);
@@ -1028,13 +1123,15 @@ export function Composer({
         onBlur={() => setTimeout(() => setMn(null), 120)}
       />
       {mn && (
-        <div className="mnp" role="listbox" aria-label="Mention someone">
+        <div className="mnp" id={mnId} role="listbox" aria-label="Mention someone">
           <div className="mnh">Mention someone</div>
           {mn.items.map((x, i) => (
             <button
               key={x.n}
               type="button"
               role="option"
+              id={mnId + '-' + i}
+              tabIndex={-1}
               aria-selected={i === mn.i}
               className={'mni' + (i === mn.i ? ' on' : '')}
               onMouseDown={(e) => {
@@ -1045,7 +1142,7 @@ export function Composer({
               {x.k ? (
                 <Avatar k={x.k} size={26} />
               ) : (
-                <span className="av" style={{ width: 26, height: 26, background: 'var(--soft)', color: 'var(--v)', fontSize: 14.5 }}>
+                <span className="av" style={{ width: 26, height: 26, background: 'var(--soft)', color: 'var(--vtext)', fontSize: 14.5 }}>
                   <Ic n="at" size={19} />
                 </span>
               )}
