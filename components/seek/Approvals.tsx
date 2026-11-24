@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { PEOPLE, type Approval } from '@/lib/seek/data';
+import { PEOPLE, type Approval, type ApprovalRef } from '@/lib/seek/data';
 import {
   approvalDraft,
   dueLabel,
@@ -13,7 +13,11 @@ import {
   workingDaysFromNow,
 } from '@/lib/seek/liveApprovals';
 import { useSeek } from '@/lib/seek/store';
-import { Modal, PromptDialog } from './Dialogs';
+import { laneKey } from '@/lib/seek/liveClients';
+import { toDbId } from '@/lib/seek/live';
+import { sizeLabel, spaceFiles, type SharedFile } from '@/lib/seek/liveFiles';
+import { Modal, PromptDialog, useConfirm } from './Dialogs';
+import { useOpenFile } from './Files';
 import { Ic } from './icons';
 
 export type Approver = { userId: string; name: string };
@@ -27,30 +31,210 @@ function StateTag({ a }: { a: Approval }) {
   return <span className="tag gold">Waiting · {dueLabel(a.due)}</span>;
 }
 
+type Attach = 'none' | 'file' | 'message' | 'link';
+const short = (t: string, n = 90) => (t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t);
+const HTTPS = /^https:\/\/\S+$/i;
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+};
+
+/** What the approval is about: a file or message from Client chat, or a link. Everyone in the space can open it. */
+function AttachPicker({ space, value, onChange }: { space: string; value: ApprovalRef | null; onChange: (r: ApprovalRef | null) => void }) {
+  const { s } = useSeek();
+  const [kind, setKind] = useState<Attach>(value?.kind ?? 'none');
+  const [files, setFiles] = useState<SharedFile[] | null>(null);
+  const [url, setUrl] = useState(value?.kind === 'link' ? value.url : '');
+  const [label, setLabel] = useState(value?.kind === 'link' ? (value.label ?? '') : '');
+  useEffect(() => {
+    if (kind !== 'file' || files) return;
+    // only Client chat files: the client must be able to open what they approve
+    void spaceFiles(space).then((f) => setFiles((f ?? []).filter((x) => x.lane === 'client')));
+  }, [kind, files, space]);
+  // the latest messages in Client chat (newest first)
+  const msgs = (s.lc?.[laneKey(space, 'client')] ?? [])
+    .filter((m): m is Extract<typeof m, { kind: 'msg' }> => m.kind === 'msg' && toDbId(m.id) != null && !!m.text.trim() && !m.card)
+    .slice(-30)
+    .reverse();
+  const pick = (k: Attach) => {
+    setKind(k);
+    onChange(k === 'link' && HTTPS.test(url.trim()) ? { kind: 'link', url: url.trim(), label: label.trim() } : null);
+  };
+  return (
+    <div className="fld">
+      <label>
+        Attach what&apos;s being approved <span style={{ color: 'var(--sb)', fontWeight: 400 }}>(optional)</span>
+      </label>
+      <div className="chips" role="radiogroup" aria-label="Attach">
+        {(
+          [
+            ['none', 'Nothing'],
+            ['file', 'A file'],
+            ['message', 'A message'],
+            ['link', 'A link'],
+          ] as [Attach, string][]
+        ).map(([k, l]) => (
+          <button key={k} type="button" role="radio" aria-checked={kind === k} className={'chip' + (kind === k ? ' on' : '')} onClick={() => pick(k)}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {kind === 'file' &&
+        (!files ? (
+          <em>Loading files…</em>
+        ) : !files.length ? (
+          <em>No files in Client chat yet. Share the file there first (the client must be able to open it), then attach it here.</em>
+        ) : (
+          <select
+            className="inp"
+            aria-label="File"
+            value={value?.kind === 'file' ? value.path : ''}
+            onChange={(e) => {
+              const f = files.find((x) => x.path === e.target.value);
+              onChange(f ? { kind: 'file', path: f.path, name: f.name, size: f.size, type: f.type } : null);
+            }}
+          >
+            <option value="">Pick a file from Client chat</option>
+            {files.map((f) => (
+              <option key={f.path} value={f.path}>
+                {f.name} · {sizeLabel(f.size)} · {new Date(f.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              </option>
+            ))}
+          </select>
+        ))}
+      {kind === 'message' &&
+        (!msgs.length ? (
+          <em>No messages in Client chat to attach yet.</em>
+        ) : (
+          <select
+            className="inp"
+            aria-label="Message"
+            value={value?.kind === 'message' ? String(value.id) : ''}
+            onChange={(e) => {
+              const m = msgs.find((x) => String(toDbId(x.id)) === e.target.value);
+              onChange(m ? { kind: 'message', id: toDbId(m.id)!, text: m.text.slice(0, 200) } : null);
+            }}
+          >
+            <option value="">Pick a message from Client chat</option>
+            {msgs.map((m) => (
+              <option key={m.id} value={String(toDbId(m.id))}>
+                {(PEOPLE[m.who]?.name ?? 'Someone').split(' ')[0]} · {m.time}: {short(m.text.replace(/\s+/g, ' '), 70)}
+              </option>
+            ))}
+          </select>
+        ))}
+      {kind === 'link' && (
+        <div className="copyrow" style={{ flexWrap: 'wrap' }}>
+          <input
+            className="inp"
+            type="url"
+            aria-label="Link"
+            placeholder="https://figma.com/…"
+            value={url}
+            maxLength={500}
+            style={{ flex: '2 1 220px' }}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              const v = e.target.value.trim();
+              onChange(HTTPS.test(v) ? { kind: 'link', url: v, label: label.trim() } : null);
+            }}
+          />
+          <input
+            className="inp"
+            aria-label="Link name (optional)"
+            placeholder="Name (optional)"
+            value={label}
+            maxLength={120}
+            style={{ flex: '1 1 140px' }}
+            onChange={(e) => {
+              setLabel(e.target.value);
+              if (value?.kind === 'link') onChange({ ...value, label: e.target.value.trim() });
+            }}
+          />
+          {url.trim() && !HTTPS.test(url.trim()) && <em style={{ flexBasis: '100%' }}>Links must start with https://</em>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The attached file, message or link on an approval card, with Open. */
+function RefPreview({ r, onOpenMessage }: { r: ApprovalRef; onOpenMessage?: (dbId: number) => void }) {
+  const openFile = useOpenFile();
+  return (
+    <div className="aref">
+      <span className="aref-i" aria-hidden="true">
+        <Ic n={r.kind === 'link' ? 'link' : r.kind === 'file' ? 'download' : 'message'} size={15} />
+      </span>
+      <span className="x">
+        {r.kind === 'file' && (
+          <>
+            <b>{r.name}</b>
+            <small>File in Client chat{r.size ? ' · ' + sizeLabel(r.size) : ''}</small>
+          </>
+        )}
+        {r.kind === 'message' && (
+          <>
+            <b>“{short(r.text.replace(/\s+/g, ' '), 140)}”</b>
+            <small>Message in Client chat</small>
+          </>
+        )}
+        {r.kind === 'link' && (
+          <>
+            <b>{r.label || hostOf(r.url)}</b>
+            <small>{hostOf(r.url)}</small>
+          </>
+        )}
+      </span>
+      {r.kind === 'file' && (
+        <button type="button" className="btn sm" onClick={() => void openFile({ path: r.path, name: r.name, size: r.size, type: r.type })} aria-label={'Open ' + r.name}>
+          Open
+        </button>
+      )}
+      {r.kind === 'message' && onOpenMessage && (
+        <button type="button" className="btn sm" onClick={() => onOpenMessage(r.id)} aria-label="Open the message in Client chat">
+          Open
+        </button>
+      )}
+      {r.kind === 'link' && (
+        <a className="btn sm" href={r.url} target="_blank" rel="noopener noreferrer" aria-label={'Open ' + (r.label || hostOf(r.url)) + ' (new tab)'}>
+          Open
+        </a>
+      )}
+    </div>
+  );
+}
+
 /** The form for asking a client approver to sign off (and for sending it again after changes). */
 function RequestDialog({
+  space,
   approvers,
   again,
   initial,
   onSubmit,
   onCancel,
 }: {
+  space: string;
   approvers: Approver[];
   again?: Approval;
   initial?: { title: string };
-  onSubmit: (v: { title: string; items: string; approver: string; due: string }) => Promise<void>;
+  onSubmit: (v: { title: string; items: string; approver: string; due: string; ref: ApprovalRef | null }) => Promise<void>;
   onCancel: () => void;
 }) {
   const [title, setTitle] = useState(again?.title ?? initial?.title ?? '');
   const [items, setItems] = useState(again?.items ?? '');
   const [approver, setApprover] = useState(again?.approver ?? approvers[0]?.userId ?? '');
   const [due, setDue] = useState(workingDaysFromNow(3));
+  const [ref, setRef] = useState<ApprovalRef | null>(null);
   const [busy, setBusy] = useState(false);
   const ok = title.trim() && approver && !busy;
   const submit = async () => {
     if (!ok) return;
     setBusy(true);
-    await onSubmit({ title, items, approver, due });
+    await onSubmit({ title, items, approver, due, ref });
     setBusy(false);
   };
   return (
@@ -97,6 +281,7 @@ function RequestDialog({
             </select>
           </div>
         )}
+        {!again && <AttachPicker space={space} value={ref} onChange={setRef} />}
         <div className="fld">
           <label htmlFor="ap-d">Due</label>
           <input id="ap-d" className="inp" type="date" value={due} min={workingDaysFromNow(0)} onChange={(e) => setDue(e.target.value)} />
@@ -120,6 +305,7 @@ export function ApprovalsTab({
   approvers,
   pendingApprovers,
   focus,
+  onOpenMessage,
 }: {
   space: string;
   list: Approval[] | null;
@@ -132,8 +318,11 @@ export function ApprovalsTab({
   pendingApprovers?: string[];
   /** an approval to scroll to and highlight (opened from "Waiting for you") */
   focus?: number | null;
+  /** opens a message attached to an approval in Client chat (database id) */
+  onOpenMessage?: (dbId: number) => void;
 }) {
   const { toast } = useSeek();
+  const [confirmAsk, confirmDialog] = useConfirm();
   const [asking, setAsking] = useState<{ decision?: number; title?: string } | null>(null);
   const [again, setAgain] = useState<Approval | null>(null);
   const [changing, setChanging] = useState<Approval | null>(null);
@@ -201,6 +390,7 @@ export function ApprovalsTab({
                 <StateTag a={a} />
               </div>
               {a.items && <div>{a.items}</div>}
+              {a.ref && <RefPreview r={a.ref} onOpenMessage={onOpenMessage} />}
               <small>
                 Approver: {nameFor(a.approver, me)} · asked by {nameFor(a.requestedBy, me)} on {dayTime(a.requestedAt)}
               </small>
@@ -221,7 +411,7 @@ export function ApprovalsTab({
                     type="button"
                     className="btn gold big"
                     onClick={async () => {
-                      if (!confirm(`Approve “${a.title}${a.items ? ' · ' + a.items : ''}”? Your name and the time are recorded.`)) return;
+                      if (!(await confirmAsk({ title: `Approve “${a.title}”?`, body: (a.items ? a.items + '. ' : '') + 'Your name and the time are recorded, and it is logged as a decision.', confirm: 'Approve' }))) return;
                       done(await respondApproval(a.id, true), 'Approved · the team has been told');
                     }}
                   >
@@ -254,7 +444,7 @@ export function ApprovalsTab({
                     type="button"
                     className="btn sm ghost"
                     onClick={async () => {
-                      if (!confirm(`Withdraw the approval request “${a.title}”?`)) return;
+                      if (!(await confirmAsk({ title: 'Withdraw this request?', body: `“${a.title}” is removed and ${nameFor(a.approver, me)} can no longer approve it.`, confirm: 'Withdraw', danger: true }))) return;
                       done(await withdrawApproval(a.id), 'Request withdrawn');
                     }}
                   >
@@ -268,6 +458,7 @@ export function ApprovalsTab({
       )}
       {asking && (
         <RequestDialog
+          space={space}
           approvers={approvers}
           initial={asking.title ? { title: asking.title } : undefined}
           onCancel={() => setAsking(null)}
@@ -279,6 +470,7 @@ export function ApprovalsTab({
       )}
       {again && (
         <RequestDialog
+          space={space}
           approvers={approvers}
           again={again}
           onCancel={() => setAgain(null)}
@@ -301,6 +493,7 @@ export function ApprovalsTab({
           }}
         />
       )}
+      {confirmDialog}
     </div>
   );
 }

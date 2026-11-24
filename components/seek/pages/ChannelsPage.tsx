@@ -6,16 +6,17 @@ import { WORKSPACES, type PersonKey } from '@/lib/seek/data';
 import { useLiveChat } from '@/lib/seek/liveProvider';
 import { channelId } from '@/lib/seek/format';
 import { useSeek } from '@/lib/seek/store';
-import { PromptDialog } from '../Dialogs';
+import { Modal, PromptDialog } from '../Dialogs';
 import { Composer, Feed, ThreadPane, useSendTo, type FeedRef } from '../Messages';
 import { MainHeader, Shell, Sidebar } from '../Shell';
-import { Avatar } from '../ui';
+import { Avatar, OrgMark } from '../ui';
 import { FileList, useAttach } from '../Files';
 import { startHuddle } from '@/lib/seek/liveExtras';
 import { CanvasEditor, PinsList, SavedDialog, ScheduledDialog, TasksDialog, useSchedule } from '../Extras';
 import { channelFiles, type SharedFile } from '@/lib/seek/liveFiles';
 import { Ic } from '../icons';
 import { ChannelList, DmList } from '../HomeSide';
+import { NotifyMenu, type Level } from '../NotifyMenu';
 import { useRouter } from 'next/navigation';
 import { ROUTES } from '@/lib/seek/routes';
 import dynamic from 'next/dynamic';
@@ -26,6 +27,7 @@ const NewChannelDialog = dynamic(() => import('../ChannelDialogs').then((m) => m
 const ChannelMembersDialog = dynamic(() => import('../ChannelDialogs').then((m) => m.ChannelMembersDialog), { ssr: false });
 const BrowseChannelsDialog = dynamic(() => import('../ChannelDialogs').then((m) => m.BrowseChannelsDialog), { ssr: false });
 const CatchUpDialog = dynamic(() => import('../AiDialogs').then((m) => m.CatchUpDialog), { ssr: false });
+const WorkspaceSettings = dynamic(() => import('../WorkspaceSettings').then((m) => m.WorkspaceSettings), { ssr: false });
 
 const TEAM: PersonKey[] = ['AH', 'SY', 'MO', 'ZA'];
 const TABS = ['Messages', 'Files', 'Canvas', 'Pins'];
@@ -38,6 +40,7 @@ export function ChannelsPage() {
   const [listing, setListing] = useState<null | 'saved' | 'tasks' | 'scheduled'>(null);
   const [catchUp, setCatchUp] = useState(false);
   const [browsing, setBrowsing] = useState(false);
+  const [wsOpen, setWsOpen] = useState(false);
   const myOpenTasks = (s.ltasks ?? []).filter((t) => t.status === 'open' && t.owner === s.meId).length;
   // with a backend: real channels and messages, live (lib/seek/live.ts); in demo mode this is null
   const live = useLiveChat();
@@ -78,6 +81,8 @@ export function ChannelsPage() {
     <Sidebar
       mark={String(wsName || 'S').charAt(0).toUpperCase()}
       title={wsName}
+      onTitle={live ? () => setWsOpen(true) : undefined}
+      titleHint={live ? (live.admin ? 'Workspace settings' : 'About this workspace') : undefined}
       sub={backendOn ? `Team · ${ws.channels.length} ${ws.channels.length === 1 ? 'channel' : 'channels'} · ${team.length} ${team.length === 1 ? 'person' : 'people'}` : WORKSPACES[wsId].sub}
       action={
         <button type="button" className="btn sm" onClick={() => setCreating(true)} aria-label="New channel">
@@ -321,29 +326,26 @@ export function ChannelsPage() {
                 <Avatar key={k} k={k} size={26} />
               ))}
             </span>
-            <button
-              type="button"
-              className="btn sm hide-m"
-              title={live ? 'Normal: your default (Account settings) · Everything: every new message · Digest: waits for the summary · Mute: only mentions' : undefined}
-              onClick={async () => {
+            <NotifyMenu
+              channel={ch}
+              value={
+                (live
+                  ? c.tier === 'Digest' ? 'digest' : c.tier === 'Muted' ? 'mute' : c.tier === 'Everything' ? 'all' : 'normal'
+                  : ({ Normal: 'normal', Everything: 'all', Digest: 'digest', Mute: 'mute' } as Record<string, Level>)[s.notif] ?? 'normal') as Level
+              }
+              onPick={async (next) => {
                 if (live) {
-                  // your level for this channel: Normal → Everything → Digest → Mute
-                  const cur = c.tier === 'Digest' ? 'digest' : c.tier === 'Muted' ? 'mute' : c.tier === 'Everything' ? 'all' : 'normal';
-                  const next = cur === 'normal' ? 'all' : cur === 'all' ? 'digest' : cur === 'digest' ? 'mute' : 'normal';
                   const err = await live.setLevel(ch, next);
                   toast(err ?? (next === 'mute' ? '#' + ch + ' muted. Mentions still reach you' : next === 'digest' ? '#' + ch + ' set to Digest' : next === 'all' ? 'Every new message in #' + ch + ' notifies you' : '#' + ch + ' follows your default'));
                   return;
                 }
-                const o = ['Normal', 'Digest', 'Mute'];
-                const n = o[(o.indexOf(s.notif) + 1) % o.length];
+                const n = next === 'all' ? 'Everything' : next === 'digest' ? 'Digest' : next === 'mute' ? 'Mute' : 'Normal';
                 update((d) => {
                   d.notif = n;
                 });
                 toast('Notifications: ' + n);
               }}
-            >
-              <Ic n="bell" /> {live ? (c.tier === 'Muted' ? 'Mute' : c.tier ?? 'Normal') : s.notif}
-            </button>
+            />
             {live && c.cid && (
               <button type="button" className="btn sm" onClick={() => setMembersOf(ch)} aria-label={'Members of #' + ch} title="Members and channel settings">
                 <Ic n="users" /> <span className="hide-m">Members</span>
@@ -368,6 +370,54 @@ export function ChannelsPage() {
       />
       {body}
       {listing === 'saved' && <SavedDialog me={live?.me ?? null} onClose={() => setListing(null)} />}
+      {wsOpen && live?.admin && <WorkspaceSettings onClose={() => setWsOpen(false)} />}
+      {wsOpen && live && !live.admin && (
+        <Modal
+          title={
+            <span className="joinorg">
+              <OrgMark name={s.ws.name} logo={s.ws.logo} size={28} />
+              {s.ws.name}
+            </span>
+          }
+          onClose={() => setWsOpen(false)}
+          width={420}
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setWsOpen(false);
+                  setInviting(true);
+                }}
+              >
+                <Ic n="users" /> Invite people
+              </button>
+              <button type="button" className="btn pri" onClick={() => setWsOpen(false)}>
+                Done
+              </button>
+            </>
+          }
+        >
+          <div className="mb">
+            <div className="kv">
+              <div>
+                <span>People</span>
+                <b>{team.length}</b>
+              </div>
+              <div>
+                <span>Your channels</span>
+                <b>{ws.channels.length}</b>
+              </div>
+              <div>
+                <span>Your role</span>
+                <b>Member</b>
+              </div>
+            </div>
+            <small style={{ color: 'var(--mu)' }}>Only the workspace&apos;s owners and admins can change its name, logo and people. Ask one of them if something needs changing.</small>
+          </div>
+        </Modal>
+      )}
       {catchUp && c.cid && <CatchUpDialog conv={'ch:' + c.cid} where={'#' + ch} onClose={() => setCatchUp(false)} />}
       {listing === 'tasks' && <TasksDialog me={live?.me ?? null} onClose={() => setListing(null)} />}
       {listing === 'scheduled' && <ScheduledDialog onClose={() => setListing(null)} />}

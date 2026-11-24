@@ -26,8 +26,13 @@ const codeOf = (name: string) =>
     .replace(/[^A-Za-z0-9]/g, '')
     .slice(0, 2)
     .toUpperCase() || 'C';
+// personal email providers say nothing about the client's company, so no name is suggested from them
+const PERSONAL = ['gmail.com', 'googlemail.com', 'outlook.com', 'yahoo.com', 'hotmail.com', 'icloud.com', 'me.com', 'proton.me', 'protonmail.com', 'live.com', 'msn.com', 'aol.com'];
+/** "Acme" from chris@acme.com; '' for personal addresses (gmail.com, outlook.com, …). */
 const spaceFromEmail = (e: string) => {
-  const d = e.split('@')[1]?.split('.')[0] ?? '';
+  const domain = e.split('@')[1]?.toLowerCase() ?? '';
+  if (!domain || PERSONAL.includes(domain) || /^(yahoo|hotmail|outlook|live)\./.test(domain)) return '';
+  const d = domain.split('.')[0] ?? '';
   return d ? d.charAt(0).toUpperCase() + d.slice(1) : '';
 };
 
@@ -41,6 +46,9 @@ export function ClientInviteDialog({ onClose, onCreated }: { onClose: () => void
   const [team, setTeam] = useState<string[]>([]);
   const [made, setMade] = useState<{ id: string; email: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // the space name is filled in from a company email until you type your own (never from gmail.com and the like)
+  const [named, setNamed] = useState(false);
+  const [tried, setTried] = useState(false);
 
   // your workspace and its team, to pick who works on this client
   useEffect(() => {
@@ -56,13 +64,23 @@ export function ClientInviteDialog({ onClose, onCreated }: { onClose: () => void
   }, []);
 
   const e = email.trim().toLowerCase();
-  const spaceName = space.trim() || spaceFromEmail(e) || 'Client space';
+  const spaceName = space.trim();
+  const onEmail = (v: string) => {
+    setEmail(v);
+    if (!named) setSpace(spaceFromEmail(v.trim().toLowerCase()));
+  };
 
   /** Creates the client's space once (pressing again reuses it). */
   const ensureSpace = async (): Promise<string | null> => {
     if (made && made.email === e) return made.id;
+    setTried(true);
     if (!isEmail(e)) {
       toast('Enter the client’s email');
+      return null;
+    }
+    if (!spaceName) {
+      toast('Name the client space');
+      document.getElementById('ci-s')?.focus();
       return null;
     }
     if (!org) return null;
@@ -122,7 +140,7 @@ export function ClientInviteDialog({ onClose, onCreated }: { onClose: () => void
       title="Invite a client"
       icon={
         <span className="av" style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--gold)', fontSize: 13 }}>
-          {codeOf(spaceName)}
+          {spaceName ? codeOf(spaceName) : <Ic n="users" size={16} />}
         </span>
       }
       onClose={() => {
@@ -151,11 +169,29 @@ export function ClientInviteDialog({ onClose, onCreated }: { onClose: () => void
         <p style={{ margin: 0, color: 'var(--mu)', fontSize: 15 }}>They get their own private space and an email with a Join now button. Clicking it emails them a sign-in code. No password.</p>
         <div className="fld">
           <label htmlFor="ci-e">Client email</label>
-          <input className="inp" id="ci-e" type="email" placeholder="chris@client.com" value={email} disabled={!!made} autoFocus onChange={(ev) => setEmail(ev.target.value)} />
+          <input className="inp" id="ci-e" type="email" placeholder="chris@client.com" value={email} disabled={!!made} autoFocus onChange={(ev) => onEmail(ev.target.value)} />
         </div>
         <div className="fld">
           <label htmlFor="ci-s">Space name</label>
-          <input className="inp" id="ci-s" placeholder={spaceFromEmail(e) || 'Hollow & Bright'} maxLength={80} value={space} disabled={!!made} onChange={(ev) => setSpace(ev.target.value)} />
+          <input
+            className="inp"
+            id="ci-s"
+            placeholder="The client’s company, e.g. Hollow & Bright"
+            maxLength={80}
+            required
+            aria-required="true"
+            aria-invalid={tried && !spaceName ? true : undefined}
+            aria-describedby="ci-s-h"
+            value={space}
+            disabled={!!made}
+            onChange={(ev) => {
+              setSpace(ev.target.value);
+              setNamed(true);
+            }}
+          />
+          <em id="ci-s-h" style={tried && !spaceName ? { color: 'var(--red)' } : undefined}>
+            {tried && !spaceName ? 'Name the space: usually the client’s company.' : 'Usually the client’s company. You can change it later in Space settings.'}
+          </em>
         </div>
         <div className="fld">
           <label htmlFor="ci-m">
@@ -180,7 +216,7 @@ export function ClientInviteDialog({ onClose, onCreated }: { onClose: () => void
               })}
             </div>
           ) : (
-            <em>Just you for now. Teammates you invite to {s.ws.name || 'your workspace'} can be added later from People.</em>
+            <em>Just you for now. Once teammates join {s.ws.name || 'your workspace'}, add them to this client from its Space settings (the gear at the top of the space).</em>
           )}
         </div>
       </form>

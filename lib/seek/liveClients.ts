@@ -94,6 +94,11 @@ function keepSpaces(key: string, list: Space[]) {
     localStorage.setItem(SPACES, JSON.stringify({ key, list }));
   } catch {}
 }
+/** The client spaces this device last loaded for you in this workspace (for search jumps); [] when none. */
+export function spacesOnDevice(meId: string | null | undefined, orgId: string | null | undefined): Space[] {
+  if (!meId || !orgId) return [];
+  return cachedSpaces(meId + ':' + orgId) ?? [];
+}
 const clientIdsOf = (list: Space[]) => new Set(list.flatMap((x) => x.people.map((p) => p.userId).filter((v): v is string => !!v)));
 
 export function useLiveClients(): LiveClients | null {

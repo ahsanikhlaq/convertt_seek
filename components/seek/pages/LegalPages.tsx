@@ -27,7 +27,7 @@ export function PrivacyPage() {
       <ul>
         <li>Your email address, and your name, title and time zone if you add them.</li>
         <li>If you sign in with Google: your name, email address and profile picture from your Google account. We don&apos;t get your Google password or anything else from your Google account.</li>
-        <li>What you and your team put in Seek: organisations, channels, messages, reactions, client spaces and logos.</li>
+        <li>What you and your team put in Seek: workspaces, channels, messages, reactions, client spaces and logos.</li>
       </ul>
       <h2 style={{ fontSize: 19, margin: '14px 0 0' }}>How we use it</h2>
       <ul>
@@ -37,11 +37,11 @@ export function PrivacyPage() {
       <p>We don&apos;t sell your data or use it for advertising.</p>
       <h2 style={{ fontSize: 19, margin: '14px 0 0' }}>Who can see it</h2>
       <ul>
-        <li>People in your organisation see the channels they belong to. Clients see only their own client space and never your Team notes.</li>
+        <li>People in your workspace see the channels they belong to. Clients see only their own client space and never your Team notes.</li>
         <li>We use Supabase to store data and sign people in, Vercel to host the app, and Brevo to send emails. They process data for us only to run Seek.</li>
       </ul>
       <h2 style={{ fontSize: 19, margin: '14px 0 0' }}>Your choices</h2>
-      <p>You can change your profile at any time. To delete your account or your organisation&apos;s data, ask your workspace owner or contact the Convertt team.</p>
+      <p>You can change your profile at any time. To delete your account or your workspace&apos;s data, ask your workspace owner or contact the Convertt team.</p>
     </Legal>
   );
 }
@@ -52,7 +52,7 @@ export function TermsPage() {
       <p>These terms apply when you use Seek, team chat for agencies made by Convertt.</p>
       <ul>
         <li>You are responsible for what you post and for keeping your sign-in email secure.</li>
-        <li>Workspace owners and admins decide who joins their organisation and which channels people can see.</li>
+        <li>Workspace owners and admins decide who joins their workspace and which channels people can see.</li>
         <li>Don&apos;t use Seek to break the law, send spam or harm other people.</li>
         <li>Seek is in early access. We work to keep it available and your data safe, but it is provided as it is, without guarantees.</li>
         <li>We may update these terms; the date above shows the latest version.</li>

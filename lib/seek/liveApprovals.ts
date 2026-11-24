@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { backendOn, DB_SCHEMA, sb } from './backend';
-import type { Approval } from './data';
+import type { Approval, ApprovalRef } from './data';
 
 /**
  * Formal approvals in a client space (backend mode). The team asks a client approver to sign off something exact by
@@ -23,6 +23,7 @@ type Row = {
   requested_at: string;
   responded_at: string | null;
   last_nudged_at: string | null;
+  ref?: ApprovalRef | null;
 };
 const COLS = 'id, space_id, title, items, approver_id, due_on, status, note, requested_by, requested_at, responded_at, last_nudged_at';
 const toApproval = (r: Row): Approval => ({
@@ -38,6 +39,7 @@ const toApproval = (r: Row): Approval => ({
   requestedAt: r.requested_at,
   respondedAt: r.responded_at,
   nudgedAt: r.last_nudged_at,
+  ref: r.ref ?? null,
 });
 
 /** Turns a database error into something a person can act on. */
@@ -50,7 +52,10 @@ const why = (m: string, fallback: string) => {
     'already nudged in the last 24 hours',
     'this approval isn’t waiting',
     'only the team on this client can',
-  ].find((k) => m.includes(k));
+    'attach a file from this Client chat',
+    'attach a message from this Client chat',
+    'links must start with https://',
+  ].find((k) => m.toLowerCase().includes(k.toLowerCase()));
   if (!known) return fallback;
   if (known.startsWith('already nudged')) return 'Already nudged in the last 24 hours';
   return known.charAt(0).toUpperCase() + known.slice(1);
@@ -70,8 +75,11 @@ export function useApprovals(space: string | null) {
     let alive = true;
     setList(null);
     const load = async () => {
-      const { data, error } = await sb().from('approvals').select(COLS).eq('space_id', space).order('created_at', { ascending: false });
-      if (alive && !error) setList(((data ?? []) as Row[]).map(toApproval));
+      const q = (cols: string) => sb().from('approvals').select(cols).eq('space_id', space).order('created_at', { ascending: false });
+      // with what each one is about (ref); without it if the database is older
+      let { data, error } = await q(COLS + ', ref');
+      if (error) ({ data, error } = await q(COLS));
+      if (alive && !error) setList(((data ?? []) as unknown as Row[]).map(toApproval));
     };
     void load();
     const ch = sb()
@@ -91,7 +99,7 @@ export function useApprovals(space: string | null) {
   return { list, reload: () => setTick((t) => t + 1) };
 }
 
-export async function requestApproval(space: string, a: { title: string; items: string; approver: string; due: string | null; decision?: number | null }) {
+export async function requestApproval(space: string, a: { title: string; items: string; approver: string; due: string | null; decision?: number | null; ref?: ApprovalRef | null }) {
   const { error } = await sb().rpc('request_approval', {
     p_space: space,
     p_title: a.title.trim().slice(0, 120),
@@ -99,6 +107,8 @@ export async function requestApproval(space: string, a: { title: string; items: 
     p_approver: a.approver,
     p_due: a.due || null,
     p_decision: a.decision ?? null,
+    // only sent when something is attached, so asking still works before the database has the new column
+    ...(a.ref ? { p_ref: a.ref } : {}),
   });
   return error ? why(error.message, 'Couldn’t send the request. Check your connection') : null;
 }

@@ -1505,3 +1505,54 @@ html.dark .wfy-done{color:#7fd3a5}
  .wfy-row .x{flex:1 1 calc(100% - 50px)}
  .wfy-row .x b{white-space:normal}
 }
+
+/* ---------- team fixes (phase 3) ---------- */
+/* what an approval is about: file, message or link, with Open */
+.aref{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--ln);border-radius:10px;background:var(--soft)}
+.aref .aref-i{width:30px;height:30px;flex:none;border-radius:8px;display:grid;place-items:center;background:var(--card,#fff);color:var(--vtext,var(--v));border:1px solid var(--ln)}
+.aref .x{flex:1;min-width:0;display:flex;flex-direction:column}
+.aref .x b{font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aref .x small{font-size:13px}
+/* space settings: the checklist editor */
+.stepedit{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.stepedit li{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.stepedit li .n{width:24px;flex:none;text-align:right;color:var(--sb);font-weight:700;font-size:13.5px}
+.stepedit li>.inp:first-of-type{flex:1 1 200px;min-width:0}
+.stepedit li select.inp{width:auto}
+.stepedit li .acts{display:inline-flex;gap:2px}
+/* channel notification menu */
+.nmenu-w{position:relative;display:inline-flex}
+.nmenu{position:absolute;right:0;top:calc(100% + 6px);z-index:60;width:290px;background:var(--card,#fff);border:1px solid var(--ln);border-radius:12px;box-shadow:0 16px 40px rgba(38,19,37,.2);padding:6px;display:flex;flex-direction:column;gap:2px;animation:fi .12s}
+.nmenu-h{font-size:12.5px;font-weight:700;color:var(--sb);padding:6px 8px 4px;text-transform:uppercase;letter-spacing:.03em}
+.nmenu button{display:flex;align-items:flex-start;gap:8px;text-align:left;border:0;background:none;border-radius:8px;padding:8px;color:var(--ink);cursor:pointer}
+.nmenu button:hover,.nmenu button:focus-visible{background:var(--soft)}
+.nmenu button.on b{color:var(--vtext,var(--v))}
+.nmenu .ck{width:16px;flex:none;color:var(--vtext,var(--v));padding-top:2px}
+.nmenu .x{display:flex;flex-direction:column;gap:1px}
+.nmenu .x b{font-size:14.5px}
+.nmenu .x small{font-size:13px;color:var(--mu)}
+@media (max-width:760px){.nmenu{position:fixed;left:8px;right:8px;top:auto;bottom:calc(68px + env(safe-area-inset-bottom));width:auto}}
+/* phones: five tabs, the rest under More */
+.ri.pm{display:none}
+@media (max-width:760px){.rail .ri.pm{display:flex}}
+.morel .si{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;color:var(--ink);text-decoration:none}
+.morel .si .h{width:24px;display:grid;place-items:center;color:var(--vtext,var(--v))}
+.morel .si .h svg{width:20px;height:20px}
+.morel .si .x{flex:1;display:flex;flex-direction:column}
+.morel .si .x small{color:var(--sb);font-size:13px}
+.morel .si.on{background:var(--soft)}
+/* the workspace name in the sidebar opens workspace settings */
+.side .sh .t b .wstitle{display:flex;align-items:center;gap:10px;min-width:0;max-width:100%;border:0;background:none;padding:2px 6px 2px 0;margin:-2px 0;border-radius:8px;color:inherit;font:inherit;letter-spacing:inherit;cursor:pointer;text-align:left}
+.side .sh .t b .wstitle .wsn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side .sh .t b .wstitle:hover{background:var(--shov,rgba(0,0,0,.05))}
+.side .sh .t b .wstitle .lic{flex:none;opacity:.7}
+/* time zone picker: search, then the full list */
+.tzpick{display:flex;flex-direction:column;gap:6px}
+/* "What should people call you?" after setup */
+.nameprompt{position:fixed;right:20px;top:64px;z-index:40;width:340px;max-width:calc(100vw - 32px);background:var(--card,#fff);border:1px solid var(--ln);border-radius:14px;box-shadow:0 18px 44px rgba(38,19,37,.22);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.nameprompt b{font-size:15.5px}
+.nameprompt small{color:var(--mu);font-size:13.5px;line-height:1.45}
+.nameprompt .copyrow .inp{flex:1;min-width:0}
+.nameprompt .linkbtn{align-self:flex-start}
+@media (max-width:760px){.nameprompt{left:12px;right:12px;width:auto;top:calc(60px + env(safe-area-inset-top))}}
+html.dark .nmenu,html.dark .nameprompt{box-shadow:0 18px 44px rgba(0,0,0,.5)}

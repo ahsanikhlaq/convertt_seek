@@ -25,10 +25,16 @@ import { useApprovals } from '@/lib/seek/liveApprovals';
 import { spaceFiles, type SharedFile } from '@/lib/seek/liveFiles';
 import { Ic } from '../icons';
 import { DraftUpdateDialog, ScopeHoursTab } from '../ScopeHours';
+import { useConfirm } from '../Dialogs';
+import { markRead, viewingSpace } from '@/lib/seek/liveSync';
+import { flashMessage } from '@/lib/seek/liveDecisions';
+import { toUiId } from '@/lib/seek/live';
+import type { SpaceSettingsTab } from '../SpaceSettings';
 import dynamic from 'next/dynamic';
 
-// the new-client dialog opens on a click, so it loads then (not with the page)
+// the new-client and space settings dialogs open on a click, so they load then (not with the page)
 const ClientInviteDialog = dynamic(() => import('../ClientInviteDialog').then((m) => m.ClientInviteDialog), { ssr: false });
+const SpaceSettings = dynamic(() => import('../SpaceSettings').then((m) => m.SpaceSettings), { ssr: false });
 
 /**
  * Client spaces with a real backend. The agency's team sees every client with Client chat, Team notes, Status,
@@ -68,7 +74,9 @@ function progress(sp: Space, side?: 'client' | 'team') {
 
 /** The Clients sidebar: every client space, newest first. */
 function ClientList({ live, current, onOpen, waits, onNew }: { live: LiveClients; current: Space | null; onOpen: (id: string) => void; waits?: Map<string, Wait>; onNew?: () => void }) {
-  const tzLabel = useSeek().s.ws.tz;
+  const { s } = useSeek();
+  const tzLabel = s.ws.tz;
+  const unreadIn = (id: string) => (s.spUnread?.[laneKey(id, 'client')] ?? 0) + (s.spUnread?.[laneKey(id, 'team')] ?? 0);
   return (
     <Sidebar
       title="Clients"
@@ -84,13 +92,20 @@ function ClientList({ live, current, onOpen, waits, onNew }: { live: LiveClients
         live.spaces.map((x) => {
           const p = progress(x);
           const w = waitFor(waits?.get(x.id), x.replyTarget, tzLabel);
+          const n = unreadIn(x.id);
           return (
-            <button key={x.id} type="button" className={'si' + (x.id === current?.id ? ' on' : '')} aria-current={x.id === current?.id ? 'page' : undefined} onClick={() => onOpen(x.id)}>
+            <button key={x.id} type="button" className={'si' + (x.id === current?.id ? ' on' : '') + (n ? ' unread' : '')} aria-current={x.id === current?.id ? 'page' : undefined} onClick={() => onOpen(x.id)}>
               <SpaceMark sp={x} />
               <span className="x">
                 <b>{x.name}</b>
                 <small>{x.project || 'Client space'}</small>
               </span>
+              {n > 0 && (
+                <span className="badge" title={n + ' unread in Client chat and Team notes'}>
+                  {n > 99 ? '99+' : n}
+                  <span className="sr-only"> unread</span>
+                </span>
+              )}
               {w ? (
                 <span className={'tag' + (w.over ? ' red' : '')} title={'Waiting for a reply · ' + w.label + ' of working time'}>
                   {w.label}
@@ -136,7 +151,24 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
   const [scheduling, setScheduling] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [newClient, setNewClient] = useState(!!inviting);
+  const [settings, setSettings] = useState<SpaceSettingsTab | null>(null);
   const router = useRouter();
+
+  // the open Client chat or Team notes counts as read while it is on screen (and new messages in it too)
+  const viewKey = sp && (tab === 'Client chat' || tab === 'Team notes') ? laneKey(sp.id, tab === 'Team notes' ? 'team' : 'client') : null;
+  const seen = viewKey ? (s.lc?.[viewKey]?.length ?? 0) : 0;
+  useEffect(() => {
+    viewingSpace.key = viewKey;
+    if (!viewKey) return;
+    markRead('sp:' + viewKey);
+    if (s.spUnread?.[viewKey])
+      update((d) => {
+        if (d.spUnread) delete d.spUnread[viewKey];
+      });
+    return () => {
+      if (viewingSpace.key === viewKey) viewingSpace.key = null;
+    };
+  }, [viewKey, seen]); // eslint-disable-line react-hooks/exhaustive-deps
   const closeNew = (id?: string) => {
     setNewClient(false);
     if (id) {
@@ -290,7 +322,7 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
             ))}
           </div>
         </div>
-        <Checklist live={live} sp={sp} />
+        <Checklist live={live} sp={sp} onEdit={() => setSettings('Checklist')} />
       </>
     );
   } else if (tab === 'Scope & hours') {
@@ -305,6 +337,10 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
         team
         approvers={approvers}
         pendingApprovers={sp.people.filter((p) => p.role === 'approver' && !p.userId).map(firstName)}
+        onOpenMessage={(id) => {
+          setTab('Client chat');
+          flashMessage(toUiId(id));
+        }}
       />
     );
   } else if (tab === 'Files') {
@@ -321,7 +357,7 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
       </div>
     );
   } else {
-    body = <PeopleTab live={live} sp={sp} />;
+    body = <PeopleTab live={live} sp={sp} onManageTeam={() => setSettings('Team')} />;
   }
 
   const pane = ui.paneOpen ? (
@@ -351,6 +387,9 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
             </span>
           </div>
         ))}
+        <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => setSettings('Team')}>
+          Manage your team on this client
+        </button>
       </div>
       {(() => {
         const w = waitFor(waits.get(sp.id), sp.replyTarget, tzLabel);
@@ -417,6 +456,9 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
             <button type="button" className="btn sm" onClick={() => setScheduling(true)} title="Schedule a call">
               <Ic n="calendar" /> <span className="hide-m">Schedule</span>
             </button>
+            <button type="button" className="btn sm" onClick={() => setSettings('General')} aria-label="Space settings" title="Space settings: name, team, checklist, archive">
+              <Ic n="settings" />
+            </button>
             <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Space details" aria-pressed={ui.paneOpen}>
               <Ic n="info" />
             </button>
@@ -447,6 +489,7 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
         />
       )}
       {newDialog}
+      {settings && <SpaceSettings live={live} sp={sp} tab={settings} onClose={() => setSettings(null)} onArchived={() => setSettings(null)} />}
     </Shell>
   );
 }
@@ -471,7 +514,7 @@ function HowSpacesWork() {
 }
 
 /** The onboarding checklist (team view: both sides; client view: only their steps). */
-function Checklist({ live, sp, client }: { live: LiveClients; sp: Space; client?: boolean }) {
+function Checklist({ live, sp, client, onEdit }: { live: LiveClients; sp: Space; client?: boolean; /** team: opens Space settings → Checklist */ onEdit?: () => void }) {
   const { toast } = useSeek();
   const steps = client ? sp.steps.filter((x) => x.side === 'client') : sp.steps;
   const done = steps.filter((x) => x.doneAt).length;
@@ -482,6 +525,11 @@ function Checklist({ live, sp, client }: { live: LiveClients; sp: Space; client?
         <div className="ct">
           <b>{client ? 'Getting started' : 'Onboarding'}</b>
           <span className={'tag ' + (done === steps.length && steps.length ? 'ok' : 'gold')}>{`${done} of ${steps.length} done`}</span>
+          {!client && onEdit && (
+            <button type="button" className="btn sm" onClick={onEdit}>
+              <Ic n="edit" size={14} /> {steps.length ? 'Edit checklist' : 'Add steps'}
+            </button>
+          )}
         </div>
         {!client && (
           <small style={{ color: 'var(--mu)' }}>
@@ -489,10 +537,10 @@ function Checklist({ live, sp, client }: { live: LiveClients; sp: Space; client?
               ? 'All steps are done. This client space is now ongoing.'
               : next
                 ? `Next: ${next.title} · ${next.side === 'client' ? 'on the client' : 'on your team'}`
-                : 'Add steps to track onboarding.'}
+                : 'No steps yet. Add the things the client or your team must do to get started, and track them here.'}
           </small>
         )}
-        {!steps.length && <small style={{ color: 'var(--sb)' }}>No steps for this client.</small>}
+        {!steps.length && client && <small style={{ color: 'var(--sb)' }}>No steps for this client.</small>}
         {steps.map((x, i) => {
           const mine = client ? x.side === 'client' : true;
           return (
@@ -529,8 +577,9 @@ function Checklist({ live, sp, client }: { live: LiveClients; sp: Space; client?
 }
 
 /** People at the client: roles, invite status, add / resend / remove. */
-function PeopleTab({ live, sp }: { live: LiveClients; sp: Space }) {
+function PeopleTab({ live, sp, onManageTeam }: { live: LiveClients; sp: Space; onManageTeam: () => void }) {
   const { toast } = useSeek();
+  const [ask, confirmDialog] = useConfirm();
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState<ClientRole>('contributor');
@@ -588,7 +637,7 @@ function PeopleTab({ live, sp }: { live: LiveClients; sp: Space }) {
               type="button"
               className="btn sm ghost"
               onClick={async () => {
-                if (!confirm(`Remove ${personName(p)} from ${sp.name}? They are signed out of the space at once. Their messages stay in the record.`)) return;
+                if (!(await ask({ title: `Remove ${personName(p)}?`, body: `They are signed out of ${sp.name} at once. Their messages stay in the record.`, confirm: 'Remove', danger: true }))) return;
                 const err = await live.remove(p.id);
                 toast(err ?? personName(p) + ' removed');
               }}
@@ -625,6 +674,9 @@ function PeopleTab({ live, sp }: { live: LiveClients; sp: Space }) {
       <div className="card">
         <div className="ct">
           <b>Your team on this client</b>
+          <button type="button" className="btn sm" onClick={onManageTeam}>
+            <Ic n="users" size={14} /> Manage team
+          </button>
         </div>
         <div className="ppl">
           {sp.team.map((t) => {
@@ -642,8 +694,10 @@ function PeopleTab({ live, sp }: { live: LiveClients; sp: Space }) {
               </div>
             );
           })}
+          {!sp.team.length && <small style={{ color: 'var(--sb)' }}>Nobody on your team is on this client yet. Press Manage team to add people.</small>}
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }
@@ -906,7 +960,21 @@ function ClientPortal({ live }: { live: LiveClients }) {
       </>
     );
   } else if (tab === 'approvals') {
-    body = <ApprovalsTab space={sp.id} list={appr.list} reload={appr.reload} me={live.me} team={false} approvers={[]} focus={focusAppr} />;
+    body = (
+      <ApprovalsTab
+        space={sp.id}
+        list={appr.list}
+        reload={appr.reload}
+        me={live.me}
+        team={false}
+        approvers={[]}
+        focus={focusAppr}
+        onOpenMessage={(id) => {
+          open('chat');
+          flashMessage(toUiId(id));
+        }}
+      />
+    );
   } else if (tab === 'calls') {
     body = (
       <div className="pg">
@@ -1096,7 +1164,7 @@ function ClientSettings({ agency }: { agency: string }) {
           <option value="daily">Once a day (summary)</option>
           <option value="off">Never (I’ll check Seek)</option>
         </select>
-        <em>Saved now; email starts once {agency}’s Seek email sending is set up. You always see updates here and under the bell.</em>
+        <em>You always see updates here and under the bell too.</em>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button

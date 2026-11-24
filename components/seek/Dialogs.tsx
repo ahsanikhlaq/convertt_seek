@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Ic } from './icons';
 import { useFocusTrap } from './a11y';
 
@@ -123,6 +124,41 @@ export function PromptDialog({
       </form>
     </Modal>
   );
+}
+
+type ConfirmOpts = { title: string; body?: string; confirm: string; danger?: boolean };
+type PromptOpts = { title: string; label: string; initial?: string; confirm?: string; multiline?: boolean };
+
+/**
+ * In place of the browser's confirm(): `const [ask, dialog] = useConfirm()`, render `dialog`, then
+ * `if (!(await ask({ title, body, confirm: 'Delete', danger: true }))) return;`.
+ */
+export function useConfirm() {
+  const [open, setOpen] = useState<(ConfirmOpts & { done: (ok: boolean) => void }) | null>(null);
+  const ask = useCallback((o: ConfirmOpts) => new Promise<boolean>((done) => setOpen({ ...o, done })), []);
+  const finish = (ok: boolean) => {
+    open?.done(ok);
+    setOpen(null);
+  };
+  // on the page itself, so it sits above whatever opened it (drawers, panes, other dialogs)
+  const dialog = open
+    ? createPortal(<ConfirmDialog title={open.title} body={open.body} confirm={open.confirm} danger={open.danger} onConfirm={() => finish(true)} onCancel={() => finish(false)} />, document.body)
+    : null;
+  return [ask, dialog] as const;
+}
+
+/** In place of the browser's prompt(): resolves to the text entered, or null when cancelled. */
+export function usePrompt() {
+  const [open, setOpen] = useState<(PromptOpts & { done: (v: string | null) => void }) | null>(null);
+  const ask = useCallback((o: PromptOpts) => new Promise<string | null>((done) => setOpen({ ...o, done })), []);
+  const finish = (v: string | null) => {
+    open?.done(v);
+    setOpen(null);
+  };
+  const dialog = open
+    ? createPortal(<PromptDialog title={open.title} label={open.label} initial={open.initial} confirm={open.confirm} multiline={open.multiline} onSubmit={(v) => finish(v)} onCancel={() => finish(null)} />, document.body)
+    : null;
+  return [ask, dialog] as const;
 }
 
 export function ConfirmDialog({

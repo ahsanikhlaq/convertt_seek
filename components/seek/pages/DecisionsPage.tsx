@@ -9,7 +9,7 @@ import { decisionRoute, decisionsCsv, flashMessage, historyOf, loadDecisions, op
 import { initialsOf, now } from '@/lib/seek/format';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
-import { PromptDialog } from '../Dialogs';
+import { PromptDialog, useConfirm } from '../Dialogs';
 import { MainHeader, Shell, Sidebar } from '../Shell';
 import { Ic, type IconKey } from '../icons';
 import { Avatar } from '../ui';
@@ -236,7 +236,9 @@ function SideRow({ on, icon, label, n, onClick }: { on: boolean; icon: IconKey; 
 function LiveDecisionsPage() {
   const { s, ui, update, setUI, toast } = useSeek();
   const router = useRouter();
-  const [me, setMe] = useState<string | null>(null);
+  // only the person who logged a decision may remove it (the database checks too)
+  const [me, setMe] = useState<string | null>(s.meId ?? null);
+  const [ask, confirmDialog] = useConfirm();
   const [editing, setEditing] = useState<LiveDecision | null>(null);
   const [q, setQ] = useState('');
   const all = s.ldecs ?? [];
@@ -280,7 +282,8 @@ function LiveDecisionsPage() {
   );
 
   const remove = async (d: LiveDecision) => {
-    if (!confirm(`Remove “${d.text}” from the log?` + (d.replaces != null ? ' The previous version comes back.' : ''))) return;
+    const undoEdit = d.replaces != null;
+    if (!(await ask({ title: undoEdit ? 'Undo this edit?' : 'Remove this decision?', body: `“${d.text}”` + (undoEdit ? ' goes, and the previous version comes back.' : ' is removed from the log for everyone.'), confirm: undoEdit ? 'Undo edit' : 'Remove', danger: true }))) return;
     if (await undoDecision(d.id)) {
       await reload();
       toast('Decision removed');
@@ -476,6 +479,7 @@ function LiveDecisionsPage() {
           }}
         />
       )}
+      {confirmDialog}
     </Shell>
   );
 }

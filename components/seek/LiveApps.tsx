@@ -5,6 +5,7 @@ import { connectGoogle, disconnectGoogle, finishGoogle, googleStatus, knownGoogl
 import { connectZoom, disconnectZoom, finishZoom, knownZoomStatus, zoomStatus, type ZoomStatus } from '@/lib/seek/zoom';
 import { useSeek } from '@/lib/seek/store';
 import { Ic } from './icons';
+import { useConfirm } from './Dialogs';
 
 type Status = GoogleStatus | ZoomStatus;
 
@@ -72,6 +73,7 @@ function AppCard(p: {
 /** Apps you can connect (backend mode): Google Calendar & Meet, and Zoom, per person. */
 export function LiveApps() {
   const { toast } = useSeek();
+  const [ask, confirmDialog] = useConfirm();
   // shown at once from what this device last saw, then refreshed from the server
   const [g, setG] = useState<GoogleStatus | null>(() => knownGoogleStatus());
   const [z, setZ] = useState<ZoomStatus | null>(() => knownZoomStatus());
@@ -141,7 +143,7 @@ export function LiveApps() {
           setupHint="Not set up yet: an admin adds the Google client ID and secret in Supabase (Edge Functions → Secrets)."
           onConnect={() => void connect(connectGoogle)}
           onDisconnect={async () => {
-            if (!confirm('Disconnect Google? Meetings already scheduled keep their links.')) return;
+            if (!(await ask({ title: 'Disconnect Google?', body: 'Meetings already scheduled keep their links. You can connect again at any time.', confirm: 'Disconnect', danger: true }))) return;
             setBusy(true);
             const e = await disconnectGoogle();
             setBusy(false);
@@ -158,7 +160,7 @@ export function LiveApps() {
           setupHint="Not set up yet: an admin adds the Zoom client ID and secret in Supabase (Edge Functions → Secrets)."
           onConnect={() => void connect(connectZoom)}
           onDisconnect={async () => {
-            if (!confirm('Disconnect Zoom? Meetings already scheduled keep their links.')) return;
+            if (!(await ask({ title: 'Disconnect Zoom?', body: 'Meetings already scheduled keep their links. You can connect again at any time.', confirm: 'Disconnect', danger: true }))) return;
             setBusy(true);
             const e = await disconnectZoom();
             setBusy(false);
@@ -167,6 +169,7 @@ export function LiveApps() {
           }}
         />
       </div>
+      {confirmDialog}
     </>
   );
 }

@@ -22,7 +22,7 @@ import {
 import { useSeek } from '@/lib/seek/store';
 import { attachGoogleEvent, connectGoogle, googleMeeting, googleStatus, type GoogleStatus } from '@/lib/seek/gcal';
 import { attachZoomMeeting, connectZoom, zoomMeeting, zoomStatus, type ZoomStatus } from '@/lib/seek/zoom';
-import { Modal } from './Dialogs';
+import { Modal, useConfirm } from './Dialogs';
 import { Switch } from './ui';
 import { Ic } from './icons';
 
@@ -356,6 +356,15 @@ export function ScheduleDialog({
   const autoMeet = tool === 'meet' && !!google?.connected && !link.trim();
   // Zoom with Zoom connected and no link pasted: Seek makes the Zoom meeting
   const autoZoom = tool === 'zoom' && !!zoom?.connected && !link.trim();
+  // Google Meet or Zoom without a connected account and no link pasted: a Seek video room, so there is always a Join
+  const roomInstead = tool !== 'seek' && tool !== 'person' && !autoMeet && !autoZoom && !link.trim();
+  /** The pasted link with https:// added when it was left off ("meet.google.com/abc" → "https://meet.google.com/abc"). */
+  const pasted = (() => {
+    const v = link.trim();
+    if (!v) return '';
+    return /^[a-z][a-z0-9+.-]*:/i.test(v) ? v : 'https://' + v.replace(/^\/+/, '');
+  })();
+  const badLink = !!pasted && tool !== 'person' && !/^https:\/\/[^\s]+\.[^\s]+/i.test(pasted);
 
   // the client's time zone (from their profile) shapes the suggested times
   useEffect(() => {
@@ -368,7 +377,7 @@ export function ScheduleDialog({
   // the picked day and time, read on the chosen zone's clock
   const startsAt = custom ? zoned(custom, tz) : null;
   const clientNames = clients.filter((p) => who.includes(p.userId!)).map((p) => (p.name.trim() || p.email.split('@')[0]).split(' ')[0]);
-  const ok = !!title.trim() && !!startsAt && !Number.isNaN(startsAt.getTime()) && !busy && (tool !== 'person' || !!link.trim());
+  const ok = !!title.trim() && !!startsAt && !Number.isNaN(startsAt.getTime()) && !busy && (tool !== 'person' || !!link.trim()) && !badLink;
 
   const submit = async () => {
     if (!ok || !startsAt) return;
@@ -376,9 +385,16 @@ export function ScheduleDialog({
       toast('Pick a time in the future');
       return;
     }
+    if (badLink) {
+      toast('The meeting link must start with https://');
+      return;
+    }
     setBusy(true);
     const attendees = who.filter((id) => send || !clients.some((p) => p.userId === id));
-    let meetLink = tool === 'seek' && !link.trim() ? seekRoom() : link;
+    // no link and nothing connected to make one: a Seek video room (saved as Seek video, so the card says so)
+    const useRoom = tool === 'seek' ? !pasted : roomInstead;
+    const savedTool: Tool = useRoom ? 'seek' : tool;
+    let meetLink = useRoom ? seekRoom() : tool === 'person' ? link.trim() : pasted;
     let eventId: string | null = null;
     if (autoMeet) {
       const g = await googleMeeting({ space: sp.id, title, startsAt, minutes, agenda, attendees });
@@ -401,12 +417,18 @@ export function ScheduleDialog({
       meetLink = zm.data.link;
       zoomId = zm.data.zoomId;
     }
+    // an online meeting is never saved without a link people can join
+    if (savedTool !== 'person' && !/^https:\/\//i.test(meetLink)) {
+      setBusy(false);
+      toast('Add a meeting link that starts with https://, or pick Seek video');
+      return;
+    }
     const { error: err, id } = await scheduleMeeting({
       space: sp.id,
       title,
       startsAt,
       minutes,
-      tool,
+      tool: savedTool,
       link: meetLink,
       agenda,
       sendToClient: send,
@@ -421,7 +443,7 @@ export function ScheduleDialog({
       return;
     }
     const told = send && clientNames.length ? ` · ${clientNames.join(' and ')} ${clientNames.length > 1 ? 'have' : 'has'} been told` : ' · posted in Team notes';
-    toast(eventId ? 'Meeting scheduled with Google Meet · invitations sent from your calendar' : (zoomId ? 'Meeting scheduled with a new Zoom meeting' : 'Meeting scheduled') + told);
+    toast(eventId ? 'Meeting scheduled with Google Meet · invitations sent from your calendar' : (zoomId ? 'Meeting scheduled with a new Zoom meeting' : useRoom && tool !== 'seek' ? 'Meeting scheduled with a Seek video room' : 'Meeting scheduled') + told);
     onScheduled(send);
     onClose();
   };
@@ -617,8 +639,20 @@ export function ScheduleDialog({
               placeholder={tool === 'person' ? 'Where (e.g. Convertt office, 3rd floor)' : autoMeet || (tool === 'meet' && google?.connected) ? 'Leave empty: Seek creates the Meet link' : autoZoom || (tool === 'zoom' && zoom?.connected) ? 'Leave empty: Seek creates the Zoom meeting' : `Paste the ${toolName(tool)} link (optional)`}
               value={link}
               maxLength={500}
+              aria-invalid={badLink || undefined}
+              aria-describedby={roomInstead || badLink ? 'mt-room' : undefined}
               onChange={(e) => setLink(e.target.value)}
             />
+          )}
+          {badLink && (
+            <em id="mt-room" style={{ color: 'var(--red)' }}>
+              The link must start with https://
+            </em>
+          )}
+          {roomInstead && (
+            <em id="mt-room" className="gmeet ok">
+              <Ic n="video" size={13} /> No link? We&apos;ll create a Seek video room for this call, so everyone has a Join button.
+            </em>
           )}
         </div>
         <div className="fld">
@@ -647,6 +681,7 @@ export function ScheduleDialog({
 /** The MEETING card in a client space feed: when (your time), the tool, Join, Add to calendar, and Cancel for the team. */
 export function MeetingCardView({ c }: { c: MeetingCard }) {
   const { s, toast } = useSeek();
+  const [ask, confirmDialog] = useConfirm();
   const team = s.session === 'in';
   const start = new Date(c.starts_at);
   const end = new Date(start.getTime() + c.duration * 60e3);
@@ -681,7 +716,7 @@ export function MeetingCardView({ c }: { c: MeetingCard }) {
               type="button"
               className="btn sm ghost"
               onClick={async () => {
-                if (!confirm(`Cancel “${c.title}”? Everyone in this conversation sees that it’s cancelled.`)) return;
+                if (!(await ask({ title: `Cancel “${c.title}”?`, body: 'Everyone in this conversation sees that it’s cancelled.', confirm: 'Cancel meeting', danger: true }))) return;
                 const err = await cancelMeeting(c.id);
                 toast(err ?? 'Meeting cancelled');
               }}
@@ -691,6 +726,7 @@ export function MeetingCardView({ c }: { c: MeetingCard }) {
           )}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

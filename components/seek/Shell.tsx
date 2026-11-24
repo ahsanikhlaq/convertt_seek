@@ -16,6 +16,8 @@ import { HelpDialog } from './HelpDialog';
 import { useResync } from '@/lib/seek/resync';
 import { unreadCounts } from '@/lib/seek/liveSync';
 import { usePhone } from './a11y';
+import { Modal } from './Dialogs';
+import { createPortal } from 'react-dom';
 
 export function useWorkspaceSwitch() {
   const { s, update, setUI, toast } = useSeek();
@@ -54,6 +56,8 @@ const NAV: [RouteKey, IconName | 'people', string][] = [
   ['people', 'people', 'People'],
   ['agents', 'ap', 'Apps'],
 ];
+/** On phones the tab bar keeps five: these move into More (the desktop rail shows them all). */
+const IN_MORE: RouteKey[] = ['decisions', 'people', 'agents'];
 
 type WsItem = { key: string; name: string; mark: React.ReactNode; on: boolean; open: () => void; unread?: number };
 
@@ -121,12 +125,14 @@ function useWorkspaceList(): { items: WsItem[] } {
 
 function Rail({ active }: { active: RouteKey }) {
   const { s, ui, setUI, toast } = useSeek();
-  const router = useRouter();
   const { items } = useWorkspaceList();
+  const [more, setMore] = useState(false);
   const dot: Partial<Record<RouteKey, boolean>> = {
     dms: Object.values(s.dms).some((d) => d && d.unread > 0),
-    clients: !backendOn && !s.replied,
+    // unread Client chat or Team notes in any client space (cleared as you read them)
+    clients: backendOn ? Object.values(s.spUnread ?? {}).some((n) => n > 0) : !s.replied,
   };
+  const inMore = IN_MORE.includes(active) || active === 'apps' || active === 'account';
   return (
     <nav className="rail" aria-label="Main">
       {items.map((w) => (
@@ -152,7 +158,7 @@ function Rail({ active }: { active: RouteKey }) {
       {NAV.map(([r, i, l]) => {
         const on = r === 'channels' ? active === 'channels' || (active === 'dms' && ui.home) : r === 'dms' ? active === 'dms' && !ui.home : active === r || (r === 'agents' && active === 'apps');
         return (
-          <Link key={r} href={ROUTES[r]} className={'ri' + (on ? ' on' : '')} aria-current={on ? 'page' : undefined} onClick={() => setUI({ sideOpen: false, home: false })}>
+          <Link key={r} href={ROUTES[r]} className={'ri' + (on ? ' on' : '') + (IN_MORE.includes(r) ? ' hm' : '')} aria-current={on ? 'page' : undefined} onClick={() => setUI({ sideOpen: false, home: false })}>
             {i === 'people' ? <PeopleIcon /> : <Icon name={i} />}
             {l}
             {dot[r] && (
@@ -163,11 +169,50 @@ function Rail({ active }: { active: RouteKey }) {
           </Link>
         );
       })}
+      <button type="button" className={'ri pm' + (inMore ? ' on' : '')} aria-haspopup="dialog" aria-expanded={more} onClick={() => setMore(true)}>
+        <Ic n="more" size={20} />
+        More
+      </button>
       <button type="button" className="me" onClick={() => setUI((u) => ({ profile: !u.profile }))} aria-label="Your profile">
         <Avatar k="AH" size={34} />
         <StatusDot />
       </button>
+      {more && createPortal(<MoreSheet active={active} onClose={() => setMore(false)} />, document.body)}
     </nav>
+  );
+}
+
+/** Phones: the tabs that don't fit in the bottom bar, and Settings. */
+function MoreSheet({ active, onClose }: { active: RouteKey; onClose: () => void }) {
+  const { setUI } = useSeek();
+  const go = () => {
+    setUI({ sideOpen: false, home: false });
+    onClose();
+  };
+  const rows: [RouteKey, React.ReactNode, string, string][] = [
+    ['decisions', <Icon key="i" name="dc" />, 'Decisions', 'What was agreed, and where'],
+    ['people', <PeopleIcon key="i" />, 'People', 'Your team and their local time'],
+    ['agents', <Icon key="i" name="ap" />, 'Apps', 'AI agents and connected apps'],
+    ['account', <Ic key="i" n="settings" size={20} />, 'Settings', 'Notifications, sounds, time zone, sign-in'],
+  ];
+  return (
+    <Modal title="More" onClose={onClose} width={420}>
+      <div className="mb morel" style={{ gap: 4, padding: 8 }}>
+        {rows.map(([r, icon, label, sub]) => {
+          const on = active === r || (r === 'agents' && active === 'apps');
+          return (
+            <Link key={r} href={ROUTES[r]} className={'si' + (on ? ' on' : '')} aria-current={on ? 'page' : undefined} onClick={go}>
+              <span className="h">{icon}</span>
+              <span className="x">
+                <b>{label}</b>
+                <small>{sub}</small>
+              </span>
+              <Ic n="chevron" size={14} />
+            </Link>
+          );
+        })}
+      </div>
+    </Modal>
   );
 }
 
@@ -226,7 +271,26 @@ function TopBar() {
 }
 
 /** Left list column (becomes a full-screen drawer on phones). */
-export function Sidebar({ title, sub, action, children, mark }: { title: string; sub: string; action?: React.ReactNode; children: React.ReactNode; /** a letter shown before the title (the workspace's initial) */ mark?: string }) {
+export function Sidebar({
+  title,
+  sub,
+  action,
+  children,
+  mark,
+  onTitle,
+  titleHint,
+}: {
+  title: string;
+  sub: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  /** a letter shown before the title (the workspace's initial) */
+  mark?: string;
+  /** makes the title a button (the workspace name opens workspace settings) */
+  onTitle?: () => void;
+  /** what the title button does, for its tooltip and screen readers */
+  titleHint?: string;
+}) {
   const { s, ui, setUI } = useSeek();
   const { items } = useWorkspaceList();
   const pop = usePopovers();
@@ -274,12 +338,26 @@ export function Sidebar({ title, sub, action, children, mark }: { title: string;
         </div>
         <div className="t">
           <b role="heading" aria-level={1}>
-            {mark ? (
-              <i className="wmk" aria-hidden="true">
-                {mark}
-              </i>
-            ) : null}
-            {title}
+            {onTitle ? (
+              <button type="button" className="wstitle" onClick={onTitle} title={titleHint} aria-label={title + (titleHint ? ': ' + titleHint : '')}>
+                {mark ? (
+                  <i className="wmk" aria-hidden="true">
+                    {mark}
+                  </i>
+                ) : null}
+                <span className="wsn">{title}</span>
+                <Ic n="down" size={14} />
+              </button>
+            ) : (
+              <>
+                {mark ? (
+                  <i className="wmk" aria-hidden="true">
+                    {mark}
+                  </i>
+                ) : null}
+                {title}
+              </>
+            )}
           </b>
           {action}
           <button ref={closeBtn} type="button" className="btn sm ghost close" style={{ display: 'none' }} onClick={() => setUI({ sideOpen: false })} aria-label="Close menu">

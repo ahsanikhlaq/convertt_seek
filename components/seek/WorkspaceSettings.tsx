@@ -18,14 +18,14 @@ import {
   type PendingInvite,
 } from '@/lib/seek/backend';
 import { useSeek } from '@/lib/seek/store';
-import { Modal } from './Dialogs';
+import { Modal, useConfirm } from './Dialogs';
 import { InviteLink } from './InviteDialog';
 import { OrgMark, Switch } from './ui';
 import { StatusMark } from './icons';
 
 type Tab = 'General' | 'People' | 'Invites';
 
-/** Workspace settings: the organisation's profile, its people and their roles, and pending invites. */
+/** Workspace settings: the workspace's profile, its people and their roles, and pending invites. */
 export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
   const { s, update, toast } = useSeek();
   const [tab, setTab] = useState<Tab>('General');
@@ -36,6 +36,7 @@ export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
   const [invites, setInvites] = useState<PendingInvite[] | null>(null);
   const [code, setCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [ask, confirmDialog] = useConfirm();
   const logoIn = useRef<HTMLInputElement>(null);
   const admin = org ? ['owner', 'admin'].includes(org.role) : false;
 
@@ -152,7 +153,7 @@ export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
               )}
             </div>
             <div className="fld">
-              <label htmlFor="wsname">Organisation name</label>
+              <label htmlFor="wsname">Workspace name</label>
               <input id="wsname" className="inp" value={name} disabled={!admin} maxLength={50} onChange={(e) => setName(e.target.value)} />
             </div>
             {admin && (
@@ -225,7 +226,7 @@ export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
                           type="button"
                           className="btn sm ghost"
                           onClick={async () => {
-                            if (!confirm(`Remove ${label(p)} from ${s.ws.name}? They lose access at once. Their messages stay.`)) return;
+                            if (!(await ask({ title: `Remove ${label(p)}?`, body: `They lose access to ${s.ws.name} at once. Their messages stay.`, confirm: 'Remove', danger: true }))) return;
                             const err = await removeFromOrg(org.id, p.userId);
                             toast(err ?? label(p) + ' removed');
                             await loadPeople(org.id, admin);
@@ -277,6 +278,7 @@ export function WorkspaceSettings({ onClose }: { onClose: () => void }) {
           </>
         )}
       </div>
+      {confirmDialog}
     </Modal>
   );
 }

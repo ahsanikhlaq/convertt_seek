@@ -7,7 +7,7 @@ import type { LiveClients, Space } from '@/lib/seek/liveClients';
 import { deleteTime, draftStatus, logTime, saveRetainer, saveScope, timeEntries, type TimeEntry } from '@/lib/seek/liveScope';
 import { fmtHours, fmtMinutes, monthRange, parseDuration, parseRetainer, retainerUse, today } from '@/lib/seek/hours';
 import { useSeek } from '@/lib/seek/store';
-import { Modal } from './Dialogs';
+import { Modal, useConfirm } from './Dialogs';
 import { Ic } from './icons';
 import { Avatar } from './ui';
 
@@ -98,6 +98,7 @@ function ScopeCard({ live, sp }: { live: LiveClients; sp: Space }) {
 
 function RetainerCard({ live, sp }: { live: LiveClients; sp: Space }) {
   const { toast } = useSeek();
+  const [ask, confirmDialog] = useConfirm();
   const month = monthRange();
   const hours = sp.retainerHours ?? null;
   const [ret, setRet] = useState(hours == null ? '' : String(hours));
@@ -235,7 +236,7 @@ function RetainerCard({ live, sp }: { live: LiveClients; sp: Space }) {
                     aria-label="Delete this entry"
                     title="Delete"
                     onClick={async () => {
-                      if (!confirm(`Delete ${fmtMinutes(e.minutes)} logged on ${e.workedOn}?`)) return;
+                      if (!(await ask({ title: 'Delete this time entry?', body: `${fmtMinutes(e.minutes)} logged on ${new Date(e.workedOn + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}.`, confirm: 'Delete', danger: true }))) return;
                       const err = await deleteTime(e.id);
                       if (err) return toast(err);
                       setTick((t) => t + 1);
@@ -251,6 +252,7 @@ function RetainerCard({ live, sp }: { live: LiveClients; sp: Space }) {
         </div>
       )}
       {entries && !entries.length && <small className="ag-help">No time logged in {month.label} yet.</small>}
+      {confirmDialog}
     </div>
   );
 }

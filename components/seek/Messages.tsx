@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PEOPLE, type ChatMessage, type DecisionCard, type FeedItem, type PersonKey, type State } from '@/lib/seek/data';
-import { now } from '@/lib/seek/format';
+import { localMeetingText, now } from '@/lib/seek/format';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { backendOn } from '@/lib/seek/backend';
@@ -13,7 +13,7 @@ import { toDbId } from '@/lib/seek/live';
 import { canRetry, deleteMessage, discardUnsent, removeEverywhere, retryUnsent, setReaction } from '@/lib/seek/liveSync';
 import { decisionFrom, decisionsFor, loadDecisions, logDecision as saveDecision, undoDecision } from '@/lib/seek/liveDecisions';
 import type { LiveDecision } from '@/lib/seek/data';
-import { PromptDialog } from './Dialogs';
+import { PromptDialog, usePrompt } from './Dialogs';
 import { FileCards } from './Files';
 import { canRecord, clockOf } from './recording';
 import { HuddleCardView, MeetingCardView } from './Meetings';
@@ -260,13 +260,46 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
       x.edited = true;
     });
   };
-  const remove = async () => {
+  /** Hides the message at once with Undo; it is deleted for everyone when the Undo goes (or when you leave Seek). */
+  const remove = () => {
     setUI({ menu: null });
-    if (!confirm('Delete this message for everyone? This can’t be undone.')) return;
-    if (await deleteMessage(m.id)) {
-      update((d) => removeEverywhere(d, toDbId(m.id)!));
-      toast('Message deleted');
-    } else toast('Couldn’t delete it. Check your connection');
+    const dbId = toDbId(m.id);
+    if (dbId == null) return;
+    const copy = JSON.parse(JSON.stringify(m)) as ChatMessage;
+    const restore = () =>
+      update((d) => {
+        const list = feed.get(d);
+        if (list.some((y) => y.kind === 'msg' && y.id === copy.id)) return;
+        const i = list.findIndex((y) => y.kind === 'msg' && y.id > copy.id);
+        list.splice(i < 0 ? list.length : i, 0, copy);
+      });
+    update((d) => {
+      const list = feed.get(d);
+      const i = list.findIndex((y) => y.kind === 'msg' && y.id === m.id);
+      if (i >= 0) list.splice(i, 1);
+    });
+    let state: 'waiting' | 'undone' | 'done' = 'waiting';
+    const go = async () => {
+      if (state !== 'waiting') return;
+      state = 'done';
+      clearTimeout(timer);
+      removeEventListener('pagehide', go);
+      if (await deleteMessage(m.id)) update((d) => removeEverywhere(d, dbId));
+      else {
+        restore();
+        toast('Couldn’t delete it. Check your connection');
+      }
+    };
+    const timer = setTimeout(() => void go(), 10000);
+    addEventListener('pagehide', go);
+    toast('Message deleted', () => {
+      if (state !== 'waiting') return;
+      state = 'undone';
+      clearTimeout(timer);
+      removeEventListener('pagehide', go);
+      restore();
+      toast('Message restored');
+    });
   };
 
   const rowRef = useRef<HTMLDivElement>(null);
@@ -413,7 +446,7 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
           </div>
         )}
         <div className="tx" style={m.failed ? { opacity: 0.6 } : undefined}>
-          <RichText text={m.text} />
+          <RichText text={backendOn ? localMeetingText(m.text, m.at) : m.text} />
         </div>
         {m.failed && (
           <div className="unsent" role="status">
@@ -908,6 +941,7 @@ export function Composer({
   onSchedule?: (text: string, at: Date) => Promise<boolean>;
 }) {
   const { toast } = useSeek();
+  const [askLink, linkDialog] = usePrompt();
   const fileIn = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(0);
   const [later, setLater] = useState(false);
@@ -993,15 +1027,18 @@ export function Composer({
       t.setSelectionRange(a + nb.length, a + nb.length);
     });
   };
-  const addLink = () => {
-    const url = window.prompt('Link (https://…)');
-    if (!url) return;
-    const u = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+  const addLink = async () => {
     const t = ta.current!;
+    // the selection is kept while the link dialog is open, then put back
     const a = t.selectionStart ?? v.length;
     const b = t.selectionEnd ?? a;
-    const sel = v.slice(a, b);
-    wrap(sel ? '' : '', sel ? ' (' + u + ')' : u);
+    const url = (await askLink({ title: 'Add a link', label: 'Link (https://…)', confirm: 'Add link' }))?.trim();
+    if (!url) return;
+    const u = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+    t.focus();
+    t.setSelectionRange(a, b);
+    const sel = t.value.slice(a, b);
+    wrap('', sel ? ' (' + u + ')' : u);
   };
   const FORMATS: [IconKey, string, () => void, string?][] = [
     ['bold', 'Bold', () => wrap('*'), 'Ctrl+B'],
@@ -1242,6 +1279,7 @@ export function Composer({
             />,
             document.body,
           )}
+        {linkDialog}
         <button type="button" className={'btn sm send ' + (gold ? 'gold' : 'pri') + (v.trim() ? '' : ' idle')} onClick={send} aria-label={button} title={button + (enterSends() ? ' (Enter)' : ' (Ctrl+Enter)')}>
           <Ic n="send" size={16} />
           {button !== 'Send' && <span>{button}</span>}

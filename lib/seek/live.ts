@@ -6,7 +6,7 @@ import { notifyOut } from './push';
 import { accountFor, backendOn, DB_SCHEMA, sb, sendInvite } from './backend';
 import { PEOPLE, type ChatMessage, type FeedItem, type FileRef, type MessageCard, type PersonKey } from './data';
 import { initialsOf, channelId as toChannelName, isEmail } from './format';
-import { hydrateReactions, markNotSent, markRead, messageSinks, unreadCounts, workspaceMembers } from './liveSync';
+import { hydrateReactions, markNotSent, markRead, messageSinks, spaceUnreadCounts, unreadCounts, viewingSpace, workspaceMembers } from './liveSync';
 import { mentionIds } from './liveNotes';
 import { useSeek } from './store';
 import { onLiveStatus, useResync } from './resync';
@@ -223,6 +223,32 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
     [update], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
+  /** Unread messages in client spaces (for the Clients dot and the client list), from the server. */
+  const loadSpaceUnread = useCallback(async () => {
+    const ws = wsRef.current;
+    if (!ws) return;
+    const counts = await spaceUnreadCounts(ws).catch(() => ({}) as Record<string, number>);
+    update((d) => {
+      d.spUnread = counts;
+      if (viewingSpace.key) delete d.spUnread[viewingSpace.key];
+    });
+  }, [update]);
+
+  /** Everyone on the team (not client guests), for the header count and @mentions. Asked again if it comes back empty. */
+  const loadPeople = useCallback(async (ws: string, retry = true): Promise<void> => {
+    const members = await workspaceMembers(ws).catch(() => [] as { user_id: string; role: string }[]);
+    const ids = members.filter((m) => m.role !== 'guest').map((m) => m.user_id);
+    if (wsRef.current !== ws) return;
+    // you are always a member: an empty list means it was asked before sign-in finished; ask again shortly
+    if (!ids.length) {
+      if (retry) setTimeout(() => void loadPeople(ws, false), 3500);
+      return;
+    }
+    setPeople(ids.map((id) => keyFor(id, meRef.current)));
+    await learnPeople(ids);
+    if (wsRef.current === ws) setPeople(ids.map((id) => keyFor(id, meRef.current)));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** (Re)loads the channels you can see, with unread counts saved on the server. */
   const loadChannels = useCallback(async () => {
     const ws = wsRef.current;
@@ -277,7 +303,10 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
         d.ws.logo = acc.workspace!.logo ?? undefined;
       });
 
-      const [members] = await Promise.all([workspaceMembers(ws).catch(() => []), loadChannels()]);
+      // the team (names fill in as they load) and client-space unread counts don't hold up the channels
+      void loadPeople(ws);
+      void loadSpaceUnread();
+      await loadChannels();
       if (!alive) return;
       setReady(true);
 
@@ -288,6 +317,16 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
           // direct messages go to DMs (one subscription for both)
           if (r.dm_id) {
             messageSinks.dm?.(p.new as Record<string, unknown>);
+            return;
+          }
+          // a client space message: one more unread there, unless it is yours or on screen
+          const sp = p.new as { space_id?: string | null; lane?: string | null; parent_id?: number | null; user_id?: string | null };
+          if (sp.space_id && sp.lane) {
+            const k = sp.space_id + ':' + sp.lane;
+            if (sp.parent_id == null && sp.user_id !== meRef.current && viewingSpace.key !== k)
+              update((d) => {
+                (d.spUnread ||= {})[k] = (d.spUnread[k] ?? 0) + 1;
+              });
             return;
           }
           if (!r.channel_id) return;
@@ -308,11 +347,6 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
           setPeople((xs) => (xs.includes(keyOf(m.user_id)) ? xs : [...xs, keyOf(m.user_id)]));
         })
         .subscribe(onLiveStatus());
-
-      const ids = members.filter((m) => m.role !== 'guest').map((m) => m.user_id);
-      await learnPeople(ids);
-      if (!alive) return;
-      setPeople((xs) => [...new Set([...ids.map(keyOf), ...xs])]);
     })();
     return () => {
       alive = false;
@@ -380,6 +414,8 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
   useEffect(() => {
     if (!enabled || !sync) return;
     void loadChannels();
+    void loadSpaceUnread();
+    if (wsRef.current) void loadPeople(wsRef.current);
   }, [sync]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const insert = async (channel: string, body: string, parent: number | null) => {

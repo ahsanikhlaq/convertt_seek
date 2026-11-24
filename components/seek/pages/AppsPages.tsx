@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { backendOn, currentAccount } from '@/lib/seek/backend';
 import { AGENTS, agentLog, levelName, LEVELS, loadAgents, loadTraining, previewAssistant, RUNNING, saveTraining, setAgent, setAiPaused, type AgentKey, type AgentState, type Level, type LogEntry } from '@/lib/seek/liveAgents';
-import { Modal } from '../Dialogs';
+import { Modal, useConfirm } from '../Dialogs';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
@@ -696,6 +696,7 @@ const TEMPLATE = (org: string) => ({
 
 function TeachDialog({ ws, agent, onClose }: { ws: string; agent: AgentKey; onClose: () => void }) {
   const { s, toast } = useSeek();
+  const [ask, confirmDialog] = useConfirm();
   const [v, setV] = useState<{ instructions: string; knowledge: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState('');
@@ -708,10 +709,10 @@ function TeachDialog({ ws, agent, onClose }: { ws: string; agent: AgentKey; onCl
     setAsking(false);
     setAnswer({ q: q.trim(), ...r });
   };
-  const useTemplate = () => {
+  const useTemplate = async () => {
     if (!v) return;
     const t = TEMPLATE(s.ws.name);
-    if ((v.instructions.trim() || v.knowledge.trim()) && !confirm('Replace what is written now with the template?')) return;
+    if ((v.instructions.trim() || v.knowledge.trim()) && !(await ask({ title: 'Use the template?', body: 'It replaces what is written now.', confirm: 'Replace' }))) return;
     setV(t);
   };
   useEffect(() => {
@@ -822,6 +823,7 @@ function TeachDialog({ ws, agent, onClose }: { ws: string; agent: AgentKey; onCl
           </>
         )}
       </div>
+      {confirmDialog}
     </Modal>
   );
 }

@@ -98,7 +98,7 @@ export function InviteLink({ code, onCode }: { code: string | null; onCode?: (c:
         </button>
       </div>
       <em>
-        Anyone with this link can join {s.ws.name || 'your organization'} after confirming their email.
+        Anyone with this link can join {s.ws.name || 'your workspace'} after confirming their email.
         {admin && onCode && (
           <>
             {' '}
@@ -175,7 +175,7 @@ export function InviteDialog({
       title={
         <span className="joinorg">
           <OrgMark name={s.ws.name} logo={s.ws.logo} size={28} />
-          Invite people to {s.ws.name || 'your organization'}
+          Invite people to {s.ws.name || 'your workspace'}
         </span>
       }
       onClose={onClose}

@@ -88,6 +88,11 @@ export type HuddleCard = { type: 'huddle'; link: string; started_at: string };
 export type MessageCard = MeetingCard | HuddleCard;
 /** A file attached to a message: where it is stored, its name, size in bytes and type. */
 export type FileRef = { path: string; name: string; size: number; type: string };
+/** What an approval is about: a file or a message from Client chat, or a link (checked on the server). */
+export type ApprovalRef =
+  | { kind: 'file'; path: string; name: string; size: number; type: string; message_id?: number }
+  | { kind: 'message'; id: number; text: string; at?: string }
+  | { kind: 'link'; url: string; label?: string };
 /** A formal approval in a client space (backend mode). */
 export type Approval = {
   id: number;
@@ -102,6 +107,8 @@ export type Approval = {
   requestedAt: string;
   respondedAt: string | null;
   nudgedAt: string | null;
+  /** what is being approved (optional) */
+  ref?: ApprovalRef | null;
 };
 /** A saved decision (backend mode). Edits add a new one that replaces the old (`replaces`), so history is kept. */
 export type LiveDecision = {
@@ -141,6 +148,8 @@ export type State = {
   session: 'out' | 'profile' | 'setup' | 'in' | 'client';
   /** backend mode: live client-space messages, keyed "<space id>:<client|team>" */
   lc?: Record<string, FeedItem[]>;
+  /** backend mode (team): unread messages per client space conversation, keyed "<space id>:<client|team>" */
+  spUnread?: Record<string, number>;
   email: string;
   /** Demo mode: the Google account last used to sign in (null for email sign-in). */
   google: { sub: string; picture: string } | null;

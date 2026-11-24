@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { PEOPLE, STATUSES, WORKSPACES, type PersonKey } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
 import { googleSignOut } from '@/lib/seek/google';
@@ -26,6 +26,8 @@ import dynamic from 'next/dynamic';
 import { LiveProvider } from '@/lib/seek/liveProvider';
 import { PauseSelect } from './PauseSelect';
 import { usePopovers } from './Popovers';
+import { useFocusTrap } from './a11y';
+import { spacesOnDevice } from '@/lib/seek/liveClients';
 import { Avatar, OrgMark } from './ui';
 import { Ic, StatusMark } from './icons';
 
@@ -174,6 +176,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           {children}
           {ui.palette && <Palette />}
           {ui.profile && <ProfileDrawer />}
+          {backendOn && s.session === 'in' && <NamePrompt />}
         </>
       )}
     </LiveProvider>
@@ -269,14 +272,33 @@ function Palette() {
           }),
         ),
       })),
+      // your clients (as this device last loaded them): straight to their Client chat or Team notes
+      ...(backendOn && s.session === 'in' ? spacesOnDevice(s.meId, s.orgId) : []).flatMap((sp) =>
+        (['Client chat', 'Team notes'] as const).map((t) => ({
+          key: 'sp:' + sp.id + ':' + t,
+          label: sp.name + ' · ' + t,
+          kind: 'client',
+          go: to('clients', () =>
+            update((d) => {
+              d.cs = sp.id;
+              d.cTab = t;
+            }),
+          ),
+        })),
+      ),
       { label: 'Schedule a call', kind: 'schedule', go: to('meetings') },
       { label: 'People directory', kind: 'people', go: to('people') },
       { label: 'Decisions log', kind: 'decisions', go: to('decisions') },
       { label: 'AI agents', kind: 'agents', go: to('agents') },
       { label: 'All apps', kind: 'apps', go: to('apps') },
       { label: 'Invite a client', kind: 'invite', go: to('invite') },
-      { label: 'Workspace setup', kind: 'setup', go: to('setup') },
-      { label: 'Sign up screen', kind: 'signup', go: to('signup') },
+      // the prototype's own screens, in the demo only
+      ...(backendOn
+        ? []
+        : [
+            { label: 'Workspace setup', kind: 'setup', go: to('setup') },
+            { label: 'Sign up screen', kind: 'signup', go: to('signup') },
+          ]),
     ];
     const ql = q.trim().toLowerCase();
     // a client only ever gets their own space, so the team's screens aren't offered
@@ -296,6 +318,8 @@ function Palette() {
   }, [q, s, update, setUI, router, found, kind]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => setSel(0), [q]);
+  const listId = useId();
+  const optId = (i: number) => listId + '-o' + i;
   useEffect(() => {
     listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [sel]);
@@ -307,6 +331,11 @@ function Palette() {
           className="inp"
           placeholder={backendOn ? 'Search messages, files, decisions, people…' : 'Jump to a channel, person or screen…'}
           aria-label="Search"
+          role="combobox"
+          aria-expanded={hits.length > 0}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={hits[sel] ? optId(sel) : undefined}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
@@ -331,10 +360,10 @@ function Palette() {
           ))}
         </div>
       )}
-      <div className="mb" style={{ gap: 2, padding: 8 }} ref={listRef} role="listbox" aria-label="Results">
+      <div className="mb" style={{ gap: 2, padding: 8 }} ref={listRef} id={listId} role="listbox" aria-label="Results">
         {hits.length ? (
           hits.map((h, i) => (
-            <button key={h.key ?? h.label} type="button" role="option" aria-selected={i === sel} className={'si' + (i === sel ? ' on' : '')} onMouseEnter={() => setSel(i)} onClick={h.go}>
+            <button key={h.key ?? h.label} id={optId(i)} type="button" role="option" tabIndex={-1} aria-selected={i === sel} className={'si' + (i === sel ? ' on' : '')} onMouseEnter={() => setSel(i)} onClick={h.go}>
               <span className="x">
                 <b style={h.sub ? { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' } : undefined}>{h.label}</b>
                 {h.sub && <small>{h.sub}</small>}
@@ -365,6 +394,16 @@ function ProfileDrawer() {
   const [org, setOrg] = useState<{ id: string; admin: boolean } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [wsOpen, setWsOpen] = useState(false);
+  // a modal dialog: Tab stays inside, focus moves in when it opens and back to where it was when it closes
+  const drawer = useRef<HTMLElement>(null);
+  useFocusTrap(drawer, !wsOpen && !confirmReset);
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null;
+    drawer.current?.querySelector<HTMLElement>('.ph .x')?.focus();
+    return () => {
+      if (prev?.isConnected) prev.focus();
+    };
+  }, []);
   useEffect(() => {
     if (!backendOn) return;
     void currentAccount().then((a) => a?.workspace && setOrg({ id: a.workspace.id, admin: ['owner', 'admin'].includes(a.workspace.role) }));
@@ -391,7 +430,7 @@ function ProfileDrawer() {
   return (
     <>
       <div className="scrim" style={{ background: 'rgba(20,10,20,.35)' }} onClick={close}></div>
-      <aside className="drawer prof" role="dialog" aria-label="Profile">
+      <aside ref={drawer} className="drawer prof" role="dialog" aria-modal="true" aria-label="Profile" tabIndex={-1}>
         <div className="ph">
           <b>Profile</b>
           <button type="button" className="x" onClick={close} aria-label="Close profile">
@@ -612,4 +651,69 @@ function useSaveLook() {
     }, 1200);
     return () => clearTimeout(id);
   }, [on, look, s.savedLook]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/**
+ * After setup: while your name is still the start of your email ("ahsan.raza"), a small card asks for your real
+ * name, so teammates and clients see who is writing. "Not now" hides it on this device.
+ */
+function NamePrompt() {
+  const { s, update, toast } = useSeek();
+  const key = 'seek:name-asked:' + (s.meId ?? '');
+  const [hidden, setHidden] = useState(true);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const prefix = (s.email || s.me.email || '').split('@')[0] ?? '';
+  const needs = !!s.meId && !!prefix && s.me.name.trim().toLowerCase() === prefix.toLowerCase();
+  useEffect(() => {
+    try {
+      setHidden(!!localStorage.getItem(key));
+    } catch {
+      setHidden(false);
+    }
+  }, [key]);
+  if (!needs || hidden) return null;
+  const dismiss = () => {
+    setHidden(true);
+    try {
+      localStorage.setItem(key, '1');
+    } catch {}
+  };
+  const save = async () => {
+    const n = name.trim();
+    if (!n || busy) return;
+    setBusy(true);
+    const err = await saveProfile({ name: n, title: s.me.title, onboarded: true });
+    setBusy(false);
+    if (err) return toast(err);
+    setMe(n);
+    update((d) => {
+      d.me.name = n;
+    });
+    dismiss();
+    toast('Thanks, ' + n.split(' ')[0] + '. Your name is saved');
+  };
+  return (
+    <form
+      className="nameprompt"
+      role="region"
+      aria-label="Add your name"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <b>What should people call you?</b>
+      <small>Your team and clients see “{s.me.name}” for now. Add your name so they know who is writing.</small>
+      <div className="copyrow">
+        <input className="inp" aria-label="Your name" autoComplete="name" placeholder="e.g. Ahsan Raza" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
+        <button type="submit" className="btn pri" disabled={!name.trim() || busy}>
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+      <button type="button" className="linkbtn" onClick={dismiss}>
+        Not now
+      </button>
+    </form>
+  );
 }

@@ -33,7 +33,7 @@ import { toUiId } from '@/lib/seek/live';
 import { flashMessage } from '@/lib/seek/liveDecisions';
 import { workingDaysFromNow } from '@/lib/seek/liveApprovals';
 import { useSeek } from '@/lib/seek/store';
-import { Modal } from './Dialogs';
+import { Modal, useConfirm } from './Dialogs';
 import { FileCards } from './Files';
 import { Avatar, RichText } from './ui';
 import { Ic } from './icons';
@@ -245,6 +245,7 @@ export function TasksDialog({ me, onClose }: { me: string | null; onClose: () =>
   const [view, setView] = useState<'mine' | 'open' | 'done'>('mine');
   const [making, setMaking] = useState(false);
   const [reminding, setReminding] = useState<number | null>(null);
+  const [ask, confirmDialog] = useConfirm();
   const jump = useJump(me);
   const all = s.ltasks ?? [];
   const list = all
@@ -325,8 +326,8 @@ export function TasksDialog({ me, onClose }: { me: string | null; onClose: () =>
                     type="button"
                     className="btn sm ghost"
                     aria-label="Delete task"
-                    onClick={() => {
-                      if (confirm(`Delete the task “${t.title}”?`)) void act(deleteTask(t.id), 'Task deleted');
+                    onClick={async () => {
+                      if (await ask({ title: 'Delete this task?', body: `“${t.title}” is removed for everyone.`, confirm: 'Delete', danger: true })) void act(deleteTask(t.id), 'Task deleted');
                     }}
                   >
                     <Ic n="close" size={14} />
@@ -339,6 +340,7 @@ export function TasksDialog({ me, onClose }: { me: string | null; onClose: () =>
       </div>
       {making && <TaskDialog initial="" sourceUiId={null} me={me} onClose={() => setMaking(false)} />}
       {reminding != null && <RemindDialog target={{ task: reminding }} onClose={() => setReminding(null)} />}
+      {confirmDialog}
     </Modal>
   );
 }

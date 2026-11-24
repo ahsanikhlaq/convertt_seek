@@ -84,6 +84,7 @@ export function applyAccount(d: State, acc: Account | null) {
     d.dms = {};
     d.dm = '';
     d.lc = {};
+    d.spUnread = {};
     d.cs = '';
     d.ldecs = [];
     d.lsaved = [];

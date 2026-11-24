@@ -8,6 +8,7 @@ import { markNotesRead, openNote } from '@/lib/seek/liveNotes';
 import { useSeek } from '@/lib/seek/store';
 import { Avatar } from './ui';
 import { Ic, type IconKey } from './icons';
+import { localMeetingText } from '@/lib/seek/format';
 
 const ICON: Record<Note['kind'], IconKey> = { dm: 'mail', mention: 'at', reply: 'reply', client: 'users', team: 'users', approval: 'check', task: 'task', reminder: 'alarm', channel: 'hash', keyword: 'star', huddle: 'huddle' };
 
@@ -120,7 +121,7 @@ export function NotesBell({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
                   <span className="x">
                     <b>{n.title}</b>
                     {n.ws && s.orgId && n.ws !== s.orgId && <small className="notews">in {(s.orgs ?? []).find((o) => o.id === n.ws)?.name ?? 'another workspace'}</small>}
-                    <small>{n.body}</small>
+                    <small>{localMeetingText(n.body, n.at)}</small>
                   </span>
                   <span className="t">{ago(n.at)}</span>
                 </button>

@@ -109,11 +109,26 @@ export async function deleteMessage(uiId: number): Promise<boolean> {
 
 // ---- read positions: 'ch:<channel>', 'dm:<thread>', 'sp:<space>:<lane>'
 const lastMark = new Map<string, number>();
-/** Saves that you've read this conversation up to now (at most every 3 seconds per conversation). */
+const trailing = new Map<string, ReturnType<typeof setTimeout>>();
+/**
+ * Saves that you've read this conversation up to now (at most every 3 seconds per conversation; a call inside that
+ * window is saved once it ends, so the last message you saw always counts as read).
+ */
 export function markRead(conv: string) {
   if (!backendOn) return;
   const t = Date.now();
-  if (t - (lastMark.get(conv) ?? 0) < 3000) return;
+  const wait = 3000 - (t - (lastMark.get(conv) ?? 0));
+  if (wait > 0) {
+    if (!trailing.has(conv))
+      trailing.set(
+        conv,
+        setTimeout(() => {
+          trailing.delete(conv);
+          markRead(conv);
+        }, wait),
+      );
+    return;
+  }
   lastMark.set(conv, t);
   // supabase-js only sends a query once it is awaited (or then-ed)
   void sb()
@@ -145,7 +160,22 @@ export function unreadCounts(orgId: string): Promise<Map<string, number>> {
   }, 2000);
 }
 
-/** The organisation's members (user id and role), shared by team chat and DMs. */
+/**
+ * The client space conversation on screen ("<space>:<client|team>"), set by the Clients screen. New messages there
+ * don't count as unread (the screen marks them read).
+ */
+export const viewingSpace: { key: string | null } = { key: null };
+
+/** Unread messages per client space conversation for the team ("<space>:<lane>" → count); empty if unavailable. */
+export async function spaceUnreadCounts(orgId: string): Promise<Record<string, number>> {
+  const { data, error } = await sb().rpc('space_unread_counts', { p_ws: orgId });
+  if (error) return {};
+  const out: Record<string, number> = {};
+  for (const r of (data ?? []) as { space_id: string; lane: string; n: number }[]) if (r.n > 0) out[r.space_id + ':' + r.lane] = r.n;
+  return out;
+}
+
+/** The workspace's members (user id and role), shared by team chat and DMs. */
 export function workspaceMembers(orgId: string): Promise<{ user_id: string; role: string }[]> {
   return shared('members:' + orgId, async () => {
     const { data, error } = await sb().from('workspace_members').select('user_id, role').eq('workspace_id', orgId);

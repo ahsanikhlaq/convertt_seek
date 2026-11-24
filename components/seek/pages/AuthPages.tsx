@@ -36,6 +36,8 @@ import { Avatar, Logo, OrgMark } from '../ui';
 import { THEMES } from '@/lib/seek/data';
 import { usableAccent } from '@/lib/seek/theme';
 import { Ic } from '../icons';
+import { TimeZoneSelect } from '../TimeZoneSelect';
+import { guessZoneLabel } from '@/lib/seek/zones';
 
 function Brand({ children }: { children?: React.ReactNode }) {
   return (
@@ -550,7 +552,7 @@ export function SignInPage() {
   );
 }
 
-const ZONES = ['Lahore (GMT+5)', 'London (GMT+1)', 'Dubai (GMT+4)', 'New York (GMT-4)'];
+
 const SIZES = ['1–10', '11–50', '51–200', '200+'];
 
 /**
@@ -995,20 +997,15 @@ export function SetupPage() {
               <div className="grid2 wsrow2">
                 <div className="fld">
                   <label htmlFor="wtz">Time zone</label>
-                  <select
+                  <TimeZoneSelect
                     id="wtz"
-                    className="inp"
                     value={w.tz}
-                    onChange={(e) =>
+                    onChange={(v) =>
                       ws((x) => {
-                        x.tz = e.target.value;
+                        x.tz = v;
                       })
                     }
-                  >
-                    {[...new Set([w.tz, ...ZONES])].map((z) => (
-                      <option key={z}>{z}</option>
-                    ))}
-                  </select>
+                  />
                   <em>For working hours and Focus.</em>
                 </div>
               <div className="fld">
@@ -1091,19 +1088,8 @@ export function SetupPage() {
   );
 }
 
-/** The browser's time zone as one of our labels (falls back to the first). */
-function guessZone() {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-    const off = -new Date().getTimezoneOffset() / 60;
-    const city = tz.split('/').pop()?.replace(/_/g, ' ') ?? '';
-    const known = ZONES.find((z) => city && z.startsWith(city));
-    if (known) return known;
-    return city ? `${city} (GMT${off >= 0 ? '+' : ''}${off})` : ZONES[0];
-  } catch {
-    return ZONES[0];
-  }
-}
+/** This computer's time zone as a saved label, e.g. "Karachi (GMT+5)" (see lib/seek/zones.ts). */
+const guessZone = () => guessZoneLabel();
 
 /**
  * Welcome: where invite emails land (their Join button) and where everyone sets up their profile once, after
@@ -1123,7 +1109,9 @@ export function WelcomePage() {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
-  const [tz, setTz] = useState(ZONES[0]);
+  // this computer's time zone until your saved one loads
+  const [tz, setTz] = useState('');
+  useEffect(() => setTz((t) => t || guessZone()), []);
   const [busy, setBusy] = useState(false);
   const [wait, setWait] = useCountdown();
   const token = useRef<string | null>(null);
@@ -1207,7 +1195,8 @@ export function WelcomePage() {
     setEmail(acc.email);
     setName(acc.name);
     setTitle(acc.title);
-    setTz(ZONES.includes(acc.timeZone) ? acc.timeZone : ZONES[0]);
+    // your saved zone, else this computer's
+    setTz(acc.timeZone || guessZone());
     setPhase('profile');
   };
 
@@ -1669,11 +1658,7 @@ export function WelcomePage() {
                   </div>
                   <div className="fld">
                     <label htmlFor="ptz">Time zone</label>
-                    <select id="ptz" className="inp" value={tz} onChange={(e) => setTz(e.target.value)}>
-                      {ZONES.map((z) => (
-                        <option key={z}>{z}</option>
-                      ))}
-                    </select>
+                    <TimeZoneSelect id="ptz" value={tz} onChange={setTz} />
                   </div>
                 </div>
                 <button type="submit" className="btn lg pri" disabled={busy}>
