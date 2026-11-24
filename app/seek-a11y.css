@@ -120,3 +120,11 @@ html.dark [style*="background: var(--red)"]{background:#b03030!important;border-
 .task{max-width:100%;flex-wrap:wrap;row-gap:2px}
 .task i{flex:none}
 .task > span{min-width:0;flex:1 1 auto}
+
+/* narrow phones: the channel header fits its buttons, the name and your picture (the count sits on the bell) */
+@media (max-width:430px){
+  main .mh{gap:3px}
+  main .mh > .btn.sm, main .mh .nmenu-w .btn.sm{width:32px;min-width:32px;padding:0;justify-content:center}
+  main .mh .mbell .btn.sm{position:relative;width:34px;min-width:34px;padding:0;justify-content:center}
+  main .mh .mbell .badge{position:absolute;top:-4px;right:-5px;min-width:17px;height:17px;padding:0 4px;font-size:10.5px;line-height:17px;margin:0}
+}
