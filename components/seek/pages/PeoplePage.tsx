@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { backendOn, orgPeople, sb } from '@/lib/seek/backend';
 import { PEOPLE, WORKSPACES, type PersonKey } from '@/lib/seek/data';
 import { colorFor, displayName, initialsOf, keyFor, learnProfiles } from '@/lib/seek/live';
-import { usePresenceOf } from '@/lib/seek/presence';
+import { ACTIVE_MS as PRESENCE_ACTIVE_MS, usePresenceOf } from '@/lib/seek/presence';
 import { useResync } from '@/lib/seek/resync';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
@@ -39,7 +39,8 @@ type Person = {
 };
 type Filter = 'all' | 'admins' | 'active';
 
-const ACTIVE_MS = 3 * 60_000;
+// the same "active" window as everywhere else (lib/seek/presence.ts)
+const ACTIVE_MS = PRESENCE_ACTIVE_MS;
 const STATUS_LABEL: Record<string, string> = { on: 'Available', mt: 'In a meeting', fc: 'Focus time', aw: 'Away' };
 const ROLE_LABEL: Record<Role, string> = { owner: 'Owner', admin: 'Admin', member: 'Member' };
 const FILTERS: [Filter, string][] = [
@@ -430,6 +431,7 @@ export function PeoplePage() {
       }
     };
     void load();
+    // a hidden tab skips the refresh; coming back after a while catches up at once (sync, from lib/seek/resync.ts)
     const t = setInterval(() => document.visibilityState === 'visible' && void load(), 60_000);
     return () => {
       alive = false;

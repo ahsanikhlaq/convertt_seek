@@ -3,12 +3,10 @@
 import { useEffect, useState } from 'react';
 import { backendOn } from '@/lib/seek/backend';
 import { WORKSPACES, type PersonKey } from '@/lib/seek/data';
-import { useLiveChat } from '@/lib/seek/live';
+import { useLiveChat } from '@/lib/seek/liveProvider';
 import { channelId } from '@/lib/seek/format';
 import { useSeek } from '@/lib/seek/store';
 import { PromptDialog } from '../Dialogs';
-import { InviteDialog } from '../InviteDialog';
-import { BrowseChannelsDialog, ChannelMembersDialog, NewChannelDialog } from '../ChannelDialogs';
 import { Composer, Feed, ThreadPane, useSendTo, type FeedRef } from '../Messages';
 import { MainHeader, Shell, Sidebar } from '../Shell';
 import { Avatar } from '../ui';
@@ -18,10 +16,16 @@ import { CanvasEditor, PinsList, SavedDialog, ScheduledDialog, TasksDialog, useS
 import { channelFiles, type SharedFile } from '@/lib/seek/liveFiles';
 import { Ic } from '../icons';
 import { ChannelList, DmList } from '../HomeSide';
-import { useLiveDms } from '@/lib/seek/liveDms';
 import { useRouter } from 'next/navigation';
 import { ROUTES } from '@/lib/seek/routes';
-import { CatchUpDialog } from '../AiDialogs';
+import dynamic from 'next/dynamic';
+
+// dialogs open on a click, so they load then (not with the page)
+const InviteDialog = dynamic(() => import('../InviteDialog').then((m) => m.InviteDialog), { ssr: false });
+const NewChannelDialog = dynamic(() => import('../ChannelDialogs').then((m) => m.NewChannelDialog), { ssr: false });
+const ChannelMembersDialog = dynamic(() => import('../ChannelDialogs').then((m) => m.ChannelMembersDialog), { ssr: false });
+const BrowseChannelsDialog = dynamic(() => import('../ChannelDialogs').then((m) => m.BrowseChannelsDialog), { ssr: false });
+const CatchUpDialog = dynamic(() => import('../AiDialogs').then((m) => m.CatchUpDialog), { ssr: false });
 
 const TEAM: PersonKey[] = ['AH', 'SY', 'MO', 'ZA'];
 const TABS = ['Messages', 'Files', 'Canvas', 'Pins'];
@@ -37,8 +41,7 @@ export function ChannelsPage() {
   const myOpenTasks = (s.ltasks ?? []).filter((t) => t.status === 'open' && t.owner === s.meId).length;
   // with a backend: real channels and messages, live (lib/seek/live.ts); in demo mode this is null
   const live = useLiveChat();
-  // Home also lists your direct messages (kept live here too)
-  useLiveDms();
+  // Home also lists your direct messages (kept live for the whole app by lib/seek/liveProvider.tsx)
   const router = useRouter();
   const openDm = (k: PersonKey) => {
     update((d) => {

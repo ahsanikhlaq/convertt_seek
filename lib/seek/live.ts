@@ -6,7 +6,7 @@ import { notifyOut } from './push';
 import { accountFor, backendOn, DB_SCHEMA, sb, sendInvite } from './backend';
 import { PEOPLE, type ChatMessage, type FeedItem, type FileRef, type MessageCard, type PersonKey } from './data';
 import { initialsOf, channelId as toChannelName, isEmail } from './format';
-import { hydrateReactions, markNotSent, markRead, unreadCounts } from './liveSync';
+import { hydrateReactions, markNotSent, markRead, messageSinks, unreadCounts, workspaceMembers } from './liveSync';
 import { mentionIds } from './liveNotes';
 import { useSeek } from './store';
 import { onLiveStatus, useResync } from './resync';
@@ -132,9 +132,16 @@ export type LiveChat = {
   setLevel: (channel: string, level: 'normal' | 'all' | 'digest' | 'mute') => Promise<string | null>;
 };
 
-export function useLiveChat(): LiveChat | null {
+/**
+ * The team-chat engine. Mounted once for the whole app (lib/seek/liveProvider.tsx), so channels, people and the open
+ * channel load once per session and stay live; screens read it with useLiveChat(). `viewing` is true while Home
+ * shows the channel (only then is it marked read and are its unread counts cleared).
+ */
+export function useLiveChatEngine(viewing: boolean): LiveChat | null {
   const { s, update, toast } = useSeek();
   const enabled = backendOn && s.session === 'in';
+  const viewingRef = useRef(viewing);
+  viewingRef.current = viewing;
   const [ready, setReady] = useState(false);
   const sync = useResync();
   const [people, setPeople] = useState<PersonKey[]>([]);
@@ -183,19 +190,25 @@ export function useLiveChat(): LiveChat | null {
     (r: Row) => {
       const name = [...chans.current].find(([, id]) => id === r.channel_id)?.[0];
       if (!name) return;
-      if (name === currentRef.current) markRead('ch:' + r.channel_id);
+      const onScreen = viewingRef.current;
+      if (onScreen && name === currentRef.current) markRead('ch:' + r.channel_id);
       update((d) => {
         const w = d.workspaces.C;
-        if (name !== w.ch) {
+        const unread = () => {
           if (r.user_id !== meRef.current && r.parent_id == null) {
             const c = w.channels.find((x) => x.id === name);
             if (c) c.unread = (c.unread || 0) + 1;
           }
+        };
+        if (name !== w.ch) {
+          unread();
           return;
         }
         const list = (w.msgs[name] ||= []);
         if (r.parent_id == null) {
           if (list.some((m) => m.id === toUiId(r.id))) return;
+          // the open channel stays up to date while you're on another screen, and counts as unread until you're back
+          if (!onScreen) unread();
           list.push({ kind: 'msg', id: toUiId(r.id), who: whoOf(r), ai: !!r.agent || undefined, time: timeLabel(r.created_at), at: r.created_at, text: r.body, files: r.files?.length ? r.files : undefined, flash: r.user_id === meRef.current });
         } else {
           const root = list.find((m): m is ChatMessage => m.kind === 'msg' && m.id === toUiId(r.parent_id!));
@@ -237,7 +250,7 @@ export function useLiveChat(): LiveChat | null {
     setInfo(new Map(all.map((c) => [c.name, { id: c.id, name: c.name, private: !!c.private, createdBy: c.created_by ?? null, description: c.description, joined: joined.has(c.id), assistant: agentChans.current.has(c.id) }])));
     update((d) => {
       const w = d.workspaces.C;
-      w.channels = list.map((c) => ({ id: c.name, cid: c.id, unread: c.name === w.ch ? 0 : counts.get('ch:' + c.id) ?? 0, desc: c.description, private: !!c.private, tier: tierOf.get(c.id) }));
+      w.channels = list.map((c) => ({ id: c.name, cid: c.id, unread: c.name === w.ch && viewingRef.current ? 0 : counts.get('ch:' + c.id) ?? 0, desc: c.description, private: !!c.private, tier: tierOf.get(c.id) }));
       for (const k of Object.keys(w.msgs)) if (!chans.current.has(k)) delete w.msgs[k];
       if (!chans.current.has(w.ch)) w.ch = chans.current.has('general') ? 'general' : list[0]?.name ?? 'general';
     });
@@ -264,14 +277,19 @@ export function useLiveChat(): LiveChat | null {
         d.ws.logo = acc.workspace!.logo ?? undefined;
       });
 
-      const [{ data: members }] = await Promise.all([sb().from('workspace_members').select('user_id, role').eq('workspace_id', ws), loadChannels()]);
+      const [members] = await Promise.all([workspaceMembers(ws).catch(() => []), loadChannels()]);
       if (!alive) return;
       setReady(true);
 
       live = sb()
         .channel('seek:' + ws)
         .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'messages', filter: `workspace_id=eq.${ws}` }, async (p) => {
-          const r = p.new as Row;
+          const r = p.new as Row & { dm_id?: string | null };
+          // direct messages go to DMs (one subscription for both)
+          if (r.dm_id) {
+            messageSinks.dm?.(p.new as Record<string, unknown>);
+            return;
+          }
           if (!r.channel_id) return;
           if (r.user_id) await learnPeople([r.user_id]);
           addRow(r);
@@ -291,7 +309,7 @@ export function useLiveChat(): LiveChat | null {
         })
         .subscribe(onLiveStatus());
 
-      const ids = ((members ?? []) as { user_id: string; role: string }[]).filter((m) => m.role !== 'guest').map((m) => m.user_id);
+      const ids = members.filter((m) => m.role !== 'guest').map((m) => m.user_id);
       await learnPeople(ids);
       if (!alive) return;
       setPeople((xs) => [...new Set([...ids.map(keyOf), ...xs])]);
@@ -302,9 +320,9 @@ export function useLiveChat(): LiveChat | null {
     };
   }, [enabled, orgKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- the open channel's messages (latest 300, oldest first), its reactions, and mark it read
+  // ---- the open channel's messages (latest 300, oldest first), its reactions, and mark it read (while on Home)
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !viewing) return;
     const id = chans.current.get(current);
     if (!id) return;
     // catching up reloads the open channel even if it was loaded already
@@ -312,8 +330,16 @@ export function useLiveChat(): LiveChat | null {
       syncSeen.current = sync;
       loadedFor.current = '';
     }
-    // loaded as soon as we know the channel (from this device's saved list); not again when the list refreshes
-    if (loadedFor.current === id) return;
+    // loaded as soon as we know the channel (from this device's saved list); not again when the list refreshes,
+    // nor when you come back to Home (it stayed live meanwhile): then it is only marked read
+    if (loadedFor.current === id) {
+      markRead('ch:' + id);
+      update((d) => {
+        const c = d.workspaces.C.channels.find((x) => x.id === current);
+        if (c?.unread) c.unread = 0;
+      });
+      return;
+    }
     loadedFor.current = id;
     markRead('ch:' + id);
     let alive = true;
@@ -348,7 +374,7 @@ export function useLiveChat(): LiveChat | null {
       // a finished load stays loaded; an unfinished one is tried again
       if (!done && loadedFor.current === id) loadedFor.current = '';
     };
-  }, [enabled, ready, current, sync]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, ready, current, sync, viewing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // catching up (back to the tab, back online, reconnected): reload the open channel and the unread counts
   useEffect(() => {

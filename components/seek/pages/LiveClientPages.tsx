@@ -14,7 +14,6 @@ import { ClientRail, MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar, SeenText } from '../ui';
 import { ApprovalsTab, type Approver } from '../Approvals';
 import { ScheduleDialog } from '../Meetings';
-import { ClientInviteDialog } from '../ClientInviteDialog';
 import { SoundSettings } from '../SoundSettings';
 import { clock, dayLabel, downloadIcs, toolName, upcomingMeetings, type Upcoming } from '@/lib/seek/liveMeetings';
 import { saveProfile, signOut } from '@/lib/seek/backend';
@@ -25,6 +24,10 @@ import { useApprovals } from '@/lib/seek/liveApprovals';
 import { spaceFiles, type SharedFile } from '@/lib/seek/liveFiles';
 import { Ic } from '../icons';
 import { DraftUpdateDialog, ScopeHoursTab } from '../ScopeHours';
+import dynamic from 'next/dynamic';
+
+// the new-client dialog opens on a click, so it loads then (not with the page)
+const ClientInviteDialog = dynamic(() => import('../ClientInviteDialog').then((m) => m.ClientInviteDialog), { ssr: false });
 
 /**
  * Client spaces with a real backend. The agency's team sees every client with Client chat, Team notes, Status,
@@ -1083,7 +1086,7 @@ function ClientSettings({ agency }: { agency: string }) {
           disabled={busy || !name.trim()}
           onClick={async () => {
             setBusy(true);
-            const err = await saveProfile({ name: name.trim(), title: title.trim(), notifyEmail: notify });
+            const err = await saveProfile({ name: name.trim(), title: title.trim(), notifyEmail: notify, onboarded: true });
             setBusy(false);
             if (err) return toast(err);
             update((d) => {

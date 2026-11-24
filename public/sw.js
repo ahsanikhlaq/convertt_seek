@@ -1,8 +1,44 @@
 /* Seek's service worker: shows notifications sent while Seek isn't open (Web Push), and opens the right
-   conversation when one is clicked. Nothing is cached here; the app always loads fresh. */
+   conversation when one is clicked. It also keeps the app's build files (/_next/static/*, named by their content
+   so they never change) and fonts on this device, so Seek starts without downloading them again. Pages, data and
+   anything from Supabase are never cached: they always come fresh from the network. */
+
+// bump to drop what older versions kept
+const CACHE = 'seek-static-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (e) =>
+  e.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+      await self.clients.claim();
+    })(),
+  ),
+);
+
+/** Build files and fonts from Seek's own address (content-hashed, so a cached copy is always right). */
+function cacheable(req) {
+  if (req.method !== 'GET') return false;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return false;
+  return url.pathname.startsWith('/_next/static/') || /\.(woff2?|ttf|otf)$/i.test(url.pathname);
+}
+
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (!cacheable(req)) return; // everything else goes to the network as usual
+  event.respondWith(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      const hit = await cache.match(req);
+      if (hit) return hit;
+      const res = await fetch(req);
+      if (res.ok && res.type === 'basic') cache.put(req, res.clone()).catch(() => {});
+      return res;
+    })(),
+  );
+});
 
 self.addEventListener('push', (event) => {
   let d = {};

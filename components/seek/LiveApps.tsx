@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { connectGoogle, disconnectGoogle, finishGoogle, googleStatus, type GoogleStatus } from '@/lib/seek/gcal';
-import { connectZoom, disconnectZoom, finishZoom, zoomStatus, type ZoomStatus } from '@/lib/seek/zoom';
+import { connectGoogle, disconnectGoogle, finishGoogle, googleStatus, knownGoogleStatus, type GoogleStatus } from '@/lib/seek/gcal';
+import { connectZoom, disconnectZoom, finishZoom, knownZoomStatus, zoomStatus, type ZoomStatus } from '@/lib/seek/zoom';
 import { useSeek } from '@/lib/seek/store';
 import { Ic } from './icons';
 
@@ -72,8 +72,9 @@ function AppCard(p: {
 /** Apps you can connect (backend mode): Google Calendar & Meet, and Zoom, per person. */
 export function LiveApps() {
   const { toast } = useSeek();
-  const [g, setG] = useState<GoogleStatus | null>(null);
-  const [z, setZ] = useState<ZoomStatus | null>(null);
+  // shown at once from what this device last saw, then refreshed from the server
+  const [g, setG] = useState<GoogleStatus | null>(() => knownGoogleStatus());
+  const [z, setZ] = useState<ZoomStatus | null>(() => knownZoomStatus());
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -108,9 +109,8 @@ export function LiveApps() {
           return;
         }
       }
-      const [gs, zs] = await Promise.all([googleStatus(true), zoomStatus(true)]);
-      setG(gs);
-      setZ(zs);
+      // each shows as soon as it arrives; a failed check keeps what is shown
+      await Promise.all([googleStatus(true).then((gs) => gs && setG(gs)), zoomStatus(true).then((zs) => zs && setZ(zs))]);
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { backendOn, currentAccount, dropAccountSnapshot, forgetAccount, quickAccount, sb, type Account } from './backend';
+import { backendOn, currentAccount, dropAccountSnapshot, forgetAccount, sb, snapshotAccount, type Account } from './backend';
 import { DEFAULT_THEME, initialState, PEOPLE, STATE_VERSION, STATUSES, type State } from './data';
 import { initialsOf } from './format';
 import { applyTheme } from './theme';
@@ -153,8 +153,10 @@ export function SeekProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const st = load();
       if (backendOn) {
-        // open at once with the last-known account and your saved chats, then refresh from the server
-        const quick = await quickAccount();
+        // open at once with the last-known account and your saved chats (no waiting for the auth server), then
+        // check the session and refresh from the server in the background: signed out there, or someone else
+        // signed in, replaces what is shown
+        const quick = snapshotAccount();
         if (quick) {
           applyAccount(st, quick);
           if (!alive) return;

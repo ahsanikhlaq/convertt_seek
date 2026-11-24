@@ -56,19 +56,24 @@ const NAV: [RouteKey, IconName | 'people', string][] = [
 
 type WsItem = { key: string; name: string; mark: React.ReactNode; on: boolean; open: () => void; unread?: number };
 
+// the last counts, kept across screens (the rail is on every screen), so moving around doesn't ask again each time
+let lastOther: { key: string; sync: number; at: number; counts: Map<string, number> } | null = null;
 /** Unread messages in your other organisations (checked every minute, and when you come back to Seek). */
 function useOtherOrgUnread(ids: string[]) {
-  const [counts, setCounts] = useState<Map<string, number>>(new Map());
-  const sync = useResync();
   const key = ids.join(',');
+  const [counts, setCounts] = useState<Map<string, number>>(() => (lastOther?.key === key ? lastOther.counts : new Map()));
+  const sync = useResync();
   useEffect(() => {
     if (!backendOn || !ids.length) return;
     let alive = true;
     const check = async () => {
       const res = await Promise.all(ids.map((id) => unreadCounts(id).then((m) => [id, [...m.values()].reduce((a, b) => a + b, 0)] as const).catch(() => [id, 0] as const)));
-      if (alive) setCounts(new Map(res));
+      lastOther = { key, sync, at: Date.now(), counts: new Map(res) };
+      if (alive) setCounts(lastOther.counts);
     };
-    void check();
+    // checked less than a minute ago (and no catching up since): use that
+    if (!(lastOther && lastOther.key === key && lastOther.sync === sync && Date.now() - lastOther.at < 60_000)) void check();
+    // only while Seek is on screen; coming back after a while catches up at once (sync)
     const t = setInterval(() => document.visibilityState === 'visible' && void check(), 60_000);
     return () => {
       alive = false;

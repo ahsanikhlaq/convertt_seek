@@ -168,14 +168,39 @@ export function dropAccountSnapshot() {
     localStorage.removeItem('seek:dmThreads');
   } catch {}
 }
-/** The last-known account for whoever is signed in on this device (no network), or null. */
-export async function quickAccount(): Promise<Account | null> {
+/**
+ * Who the saved sign-in on this device belongs to, read straight from storage (no network, no waiting for the auth
+ * client, which may be refreshing an expired token). undefined when no saved sign-in is found.
+ */
+function storedUserId(): string | undefined {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !/^sb-.+-auth-token$/.test(k)) continue;
+      const v = JSON.parse(localStorage.getItem(k) || 'null') as { user?: { id?: string }; currentSession?: { user?: { id?: string } } } | null;
+      const id = v?.user?.id ?? v?.currentSession?.user?.id;
+      if (id) return id;
+    }
+  } catch {}
+  return undefined;
+}
+
+/** Your user id as last known on this device (no network), or null. Used for per-person caches. */
+export function knownUserId(): string | null {
+  return storedUserId() ?? null;
+}
+
+/**
+ * The last-known account for whoever is signed in on this device, at once (no network), or null. The session is
+ * checked in the background afterwards (currentAccount), which signs out or switches if it doesn't match.
+ */
+export function snapshotAccount(): Account | null {
   try {
     const raw = localStorage.getItem(SNAP);
     if (!raw) return null;
     const acc = JSON.parse(raw) as Account;
-    const { data } = await sb().auth.getSession();
-    if (data.session?.user?.id !== acc.id) return null;
+    // no saved sign-in, or someone else's: don't show this snapshot
+    if (storedUserId() !== acc.id) return null;
     // you just switched workspace: open that one, not the one saved last time
     const pref = localStorage.getItem(PREF);
     if (pref && acc.workspace && acc.workspace.id !== pref) {
@@ -189,12 +214,17 @@ export async function quickAccount(): Promise<Account | null> {
   }
 }
 
+/** The last-known account for whoever is signed in on this device (no network), or null. */
+export async function quickAccount(): Promise<Account | null> {
+  return snapshotAccount();
+}
+
 /**
  * The account for the workspace that is open: the saved one when it is for that workspace (fast), otherwise the
  * fresh one. Live chat uses this so it never loads one workspace's channels under another's name.
  */
 export async function accountFor(orgId: string | null | undefined): Promise<Account | null> {
-  const q = await quickAccount();
+  const q = snapshotAccount();
   if (q?.workspace && (!orgId || q.workspace.id === orgId)) return q;
   return currentAccount();
 }
@@ -208,7 +238,13 @@ export async function currentAccount(fresh = false): Promise<Account | null> {
     return null;
   }
   if (!fresh && cached?.uid === user.id) return cached.p;
-  const p = loadAccount(user.id, user.email ?? '');
+  // pending invites are accepted right after signing in (or the first time this device sees you); otherwise
+  // only when a quick check finds a new one (see loadAccount)
+  let seenHere = false;
+  try {
+    seenHere = (JSON.parse(localStorage.getItem(SNAP) || 'null') as Account | null)?.id === user.id;
+  } catch {}
+  const p = loadAccount(user.id, user.email ?? '', fresh || !seenHere);
   cached = { uid: user.id, p };
   void p.then(keepSnapshot, () => {});
   p.catch(() => {
@@ -219,9 +255,45 @@ export async function currentAccount(fresh = false): Promise<Account | null> {
 
 type OrgRow = { id: string; name: string; slug: string; logo_url: string | null; join_code: string; brand_accent: string | null; time_zone?: string };
 
-async function loadAccount(id: string, email: string): Promise<Account> {
-  // anyone invited by email joins those workspaces the first time we see them signed in. That runs alongside the
-  // account queries (not before them); only when it actually joined something are they asked again.
+// The newest invite for your email as last checked on this device, and when invites were last accepted here.
+const INVITES = 'seek:invites:';
+type InviteMark = { sig: string; at: number };
+function inviteMark(id: string): InviteMark | null {
+  try {
+    return JSON.parse(localStorage.getItem(INVITES + id) || 'null') as InviteMark | null;
+  } catch {
+    return null;
+  }
+}
+function keepInviteMark(id: string, m: InviteMark) {
+  try {
+    localStorage.setItem(INVITES + id, JSON.stringify(m));
+  } catch {}
+}
+
+/**
+ * Joins the workspaces and client spaces you were invited to (accept_my_invites, a write) only when that can matter:
+ * right after signing in, when the newest invite for your email (my_invite, a cheap read) changed since this device
+ * last looked, or at most once a day otherwise. Returns how many were joined.
+ */
+async function acceptInvitesIfAny(id: string, signedInNow: boolean): Promise<number> {
+  const mark = inviteMark(id);
+  const sigOf = (data: unknown) => JSON.stringify((data as unknown[] | null)?.[0] ?? null);
+  if (signedInNow || !mark || Date.now() - mark.at > 86_400_000) {
+    const [{ data: joined, error }, { data: inv }] = await Promise.all([sb().rpc('accept_my_invites'), sb().rpc('my_invite')]);
+    if (!error) keepInviteMark(id, { sig: sigOf(inv), at: Date.now() });
+    return Number(joined) || 0;
+  }
+  const { data: inv, error } = await sb().rpc('my_invite');
+  if (error || sigOf(inv) === mark.sig) return 0;
+  const { data: joined, error: e2 } = await sb().rpc('accept_my_invites');
+  if (!e2) keepInviteMark(id, { sig: sigOf(inv), at: Date.now() });
+  return Number(joined) || 0;
+}
+
+async function loadAccount(id: string, email: string, signedInNow = false): Promise<Account> {
+  // anyone invited by email joins those workspaces when we see them signed in. That runs alongside the account
+  // queries (not before them); only when it actually joined something are they asked again.
   const parts = () =>
     Promise.all([
     sb().from('profiles').select('name, title, time_zone, onboarded_at, status, dnd_until, avatar_url, theme, pronouns, work_hours, notify_email, notify_sound, notify_volume, notify_play, notify_alert_secs').eq('id', id).maybeSingle(),
@@ -234,8 +306,8 @@ async function loadAccount(id: string, email: string): Promise<Account> {
     sb().rpc('my_client_spaces'),
     sb().from('notify_prefs').select('level, threads, huddles, desktop, preview, keywords, schedule').eq('user_id', id).maybeSingle(),
   ]);
-  const [{ data: joined }, first] = await Promise.all([sb().rpc('accept_my_invites'), parts()]);
-  const [{ data: profile }, { data: memberships }, { data: spaces }, { data: np }] = (Number(joined) || 0) > 0 ? await parts() : first;
+  const [joined, first] = await Promise.all([acceptInvitesIfAny(id, signedInNow).catch(() => 0), parts()]);
+  const [{ data: profile }, { data: memberships }, { data: spaces }, { data: np }] = joined > 0 ? await parts() : first;
   type SpaceRow = { space_id: string; name: string; project: string; code: string; color: string; agency: string; agency_logo: string | null; role: string; invited_by: string };
   const clientSpaces = ((spaces ?? []) as SpaceRow[]).map((r) => ({
     id: r.space_id,
@@ -517,18 +589,20 @@ export async function createWorkspace(w:{ name: string; slug: string; tz: string
 }
 
 /** Saves your profile; the first save also marks it as set up, so the welcome screen doesn't come back. */
-export async function saveProfile(p: { name: string; title: string; timeZone?: string; pronouns?: string; workHours?: string; notifyEmail?: string }): Promise<string | null> {
-  const { data } = await sb().auth.getUser();
-  if (!data.user) return 'Not signed in';
+export async function saveProfile(p: { name: string; title: string; timeZone?: string; pronouns?: string; workHours?: string; notifyEmail?: string; onboarded?: boolean }): Promise<string | null> {
+  // the signed-in user from the saved session (no round trip to the auth server)
+  const uid = (await sb().auth.getSession()).data.session?.user.id;
+  if (!uid) return 'Not signed in';
   const now = new Date().toISOString();
   const row: Record<string, string> = { name: p.name, title: p.title, updated_at: now };
   if (p.timeZone) row.time_zone = p.timeZone;
   if (p.pronouns != null) row.pronouns = p.pronouns.slice(0, 30);
   if (p.workHours != null) row.work_hours = p.workHours.slice(0, 40);
   if (p.notifyEmail) row.notify_email = p.notifyEmail;
-  const { error } = await sb().from('profiles').update(row).eq('id', data.user.id);
+  const { error } = await sb().from('profiles').update(row).eq('id', uid);
   if (error) return friendly(error.message);
-  await sb().from('profiles').update({ onboarded_at: now }).eq('id', data.user.id).is('onboarded_at', null);
+  // already set up (the caller knows): the one update is enough
+  if (!p.onboarded) await sb().from('profiles').update({ onboarded_at: now }).eq('id', uid).is('onboarded_at', null);
   forgetAccount();
   return null;
 }
@@ -578,20 +652,20 @@ export async function completeStep(stepId: string, done = true): Promise<string 
 
 /** Saves your status, and pauses notifications until a time (or resumes them with null). */
 export async function saveStatus(s: { status?: string; dndUntil?: string | null }): Promise<string | null> {
-  const { data } = await sb().auth.getUser();
-  if (!data.user) return 'Not signed in';
+  const uid = (await sb().auth.getSession()).data.session?.user.id;
+  if (!uid) return 'Not signed in';
   const row: Record<string, string | null> = {};
   if (s.status) row.status = s.status;
   if (s.dndUntil !== undefined) row.dnd_until = s.dndUntil;
-  const { error } = await sb().from('profiles').update(row).eq('id', data.user.id);
+  const { error } = await sb().from('profiles').update(row).eq('id', uid);
   forgetAccount();
   return error ? friendly(error.message) : null;
 }
 
 /** How you sign in: 'Google', 'Email code', or both. */
 export async function signInMethods(): Promise<string[]> {
-  const { data } = await sb().auth.getUser();
-  const ps = ((data.user?.app_metadata?.providers as string[] | undefined) ?? [data.user?.app_metadata?.provider as string]).filter(Boolean);
+  const user = (await sb().auth.getSession()).data.session?.user;
+  const ps = ((user?.app_metadata?.providers as string[] | undefined) ?? [user?.app_metadata?.provider as string]).filter(Boolean);
   return ps.map((p) => (p === 'google' ? 'Google' : p === 'email' ? 'Email code' : p[0].toUpperCase() + p.slice(1)));
 }
 

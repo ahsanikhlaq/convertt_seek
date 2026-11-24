@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSeek } from '@/lib/seek/store';
 import { Modal } from './Dialogs';
 import { Ic } from './icons';
+import { canRecord, clockOf } from './recording';
 
 /**
  * Voice and video messages, recorded in the browser (MediaRecorder) and sent as a file in the conversation, where
@@ -17,9 +18,7 @@ const pick = (types: string[]) => (typeof MediaRecorder === 'undefined' ? '' : t
 const audioType = () => pick(['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']);
 const videoType = () => pick(['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']);
 const extOf = (mime: string) => (mime.includes('mp4') ? 'mp4' : mime.includes('ogg') ? 'ogg' : 'webm');
-export const clockOf = (secs: number) => `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`;
-
-export const canRecord = () => typeof window !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
+export { canRecord, clockOf };
 
 /** Why the microphone or camera couldn't start, in plain words. */
 function denied(e: unknown, what: string) {

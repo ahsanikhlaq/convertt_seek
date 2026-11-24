@@ -72,19 +72,45 @@ export type LiveClients = {
   remove: (person: string) => Promise<string | null>;
 };
 
+// The client spaces last loaded, per person and organisation, in memory and on this device, so the Clients screen
+// shows them at once on every visit (and after a reload) while a fresh list loads in the background.
+const SPACES = 'seek:spaces';
+const spaceMemo = new Map<string, Space[]>();
+function cachedSpaces(key: string): Space[] | null {
+  const hit = spaceMemo.get(key);
+  if (hit) return hit;
+  try {
+    const v = JSON.parse(localStorage.getItem(SPACES) || 'null') as { key: string; list: Space[] } | null;
+    if (v && v.key === key && Array.isArray(v.list)) {
+      spaceMemo.set(key, v.list);
+      return v.list;
+    }
+  } catch {}
+  return null;
+}
+function keepSpaces(key: string, list: Space[]) {
+  spaceMemo.set(key, list);
+  try {
+    localStorage.setItem(SPACES, JSON.stringify({ key, list }));
+  } catch {}
+}
+const clientIdsOf = (list: Space[]) => new Set(list.flatMap((x) => x.people.map((p) => p.userId).filter((v): v is string => !!v)));
+
 export function useLiveClients(): LiveClients | null {
   const { s, update, toast } = useSeek();
   const enabled = backendOn && (s.session === 'in' || s.session === 'client');
   const side: 'team' | 'client' = s.session === 'client' ? 'client' : 'team';
-  const [ready, setReady] = useState(false);
-  const [spaces, setSpaces] = useState<Space[]>([]);
-  const me = useRef<string | null>(null);
-  const org = useRef<string | null>(null);
+  // who you are and which organisation is open, from the account saved on this device (no waiting)
+  const cacheKey = (s.meId ?? '') + ':' + (side === 'team' ? (s.orgId ?? '') : 'client');
+  const [spaces, setSpaces] = useState<Space[]>(() => (enabled && s.meId ? (cachedSpaces(cacheKey) ?? []) : []));
+  const [ready, setReady] = useState(() => enabled && !!s.meId && cachedSpaces(cacheKey) != null);
+  const me = useRef<string | null>(s.meId ?? null);
+  const org = useRef<string | null>(side === 'team' ? (s.orgId ?? null) : null);
   const open = s.cs;
   const lane: Lane = side === 'client' || s.cTab !== 'Team notes' ? 'client' : 'team';
 
   // people on the client side, so their messages are marked "client" in the team's view
-  const clientIds = useRef(new Set<string>());
+  const clientIds = useRef(clientIdsOf(spaces));
   const toMsg = (r: Row, flash = false): ChatMessage => ({
     kind: 'msg',
     id: toUiId(r.id),
@@ -103,14 +129,19 @@ export function useLiveClients(): LiveClients | null {
   setSenderSide(side);
 
   const load = useCallback(async () => {
-    const acc = await currentAccount();
-    if (!acc) return;
-    me.current = acc.id;
-    org.current = acc.workspace?.id ?? null;
+    // who you are and the open organisation are known from this device; the account is only loaded when they aren't
+    if (!me.current) {
+      const acc = await currentAccount();
+      if (!acc) return;
+      me.current = acc.id;
+      org.current = acc.workspace?.id ?? null;
+    }
+    const ws = side === 'team' ? org.current : null;
+    const key = me.current + ':' + (side === 'team' ? (ws ?? '') : 'client');
     const cols = 'id, name, project, code, color, status, reply_target, tone, never_mention, created_at, client_people ( id, email, name, role, user_id, joined_at, invited_at, removed_at ), client_team ( user_id, is_lead ), client_steps ( id, kind, title, detail, side, position, done_at )';
     const query = (select: string) => {
       let q = sb().from('client_spaces').select(select).neq('status', 'closed').order('created_at', { ascending: false });
-      if (side === 'team' && acc.workspace) q = q.eq('workspace_id', acc.workspace.id);
+      if (side === 'team' && ws) q = q.eq('workspace_id', ws);
       return q;
     };
     // the team also gets the agreed scope and retainer (Scope & hours); without them if the database is older
@@ -143,15 +174,20 @@ export function useLiveClients(): LiveClients | null {
       team: (r.client_team ?? []).map((t) => ({ userId: t.user_id, isLead: t.is_lead })).sort((a, b) => Number(b.isLead) - Number(a.isLead)),
       steps: (r.client_steps ?? []).map((x) => ({ id: x.id, kind: x.kind, title: x.title, detail: x.detail, side: x.side, position: x.position, doneAt: x.done_at })).sort((a, b) => a.position - b.position),
     }));
-    // names and faces for everyone in these spaces
-    const ids = list.flatMap((x) => [...x.people.map((p) => p.userId).filter((v): v is string => !!v), ...x.team.map((t) => t.userId)]);
-    await learnProfiles(ids, me.current);
-    clientIds.current = new Set(list.flatMap((x) => x.people.map((p) => p.userId).filter((v): v is string => !!v)));
+    clientIds.current = clientIdsOf(list);
+    keepSpaces(key, list);
     setSpaces(list);
     update((d) => {
       if (!list.some((x) => x.id === d.cs)) d.cs = list[0]?.id ?? '';
+      // messages loaded before the list: mark the ones from the client side (team view)
+      if (side === 'team')
+        for (const x of list)
+          for (const m of d.lc?.[laneKey(x.id, 'client')] ?? []) if (m.kind === 'msg' && !m.ai) m.client = clientIds.current.has(m.who);
     });
     setReady(true);
+    // names and faces for everyone in these spaces fill in when they arrive (most are remembered on this device)
+    const ids = list.flatMap((x) => [...x.people.map((p) => p.userId).filter((v): v is string => !!v), ...x.team.map((t) => t.userId)]);
+    void learnProfiles(ids, me.current).then(() => update(() => {}));
   }, [side]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- start, and listen for changes (new messages, ticked steps, people joining)
@@ -187,7 +223,8 @@ export function useLiveClients(): LiveClients | null {
         })
         .on('postgres_changes', { event: '*', schema: DB_SCHEMA, table: 'client_steps' }, reloadSoon)
         .on('postgres_changes', { event: '*', schema: DB_SCHEMA, table: 'client_people' }, reloadSoon)
-        .on('postgres_changes', { event: '*', schema: DB_SCHEMA, table: 'client_spaces' }, reloadSoon)
+        // (steps and people have only a space id, so those two stay unfiltered)
+        .on('postgres_changes', { event: '*', schema: DB_SCHEMA, table: 'client_spaces', ...(filter ? { filter } : {}) }, reloadSoon)
         .subscribe();
     })();
     return () => {
@@ -196,9 +233,11 @@ export function useLiveClients(): LiveClients | null {
     };
   }, [enabled, side]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- the open conversation's messages (latest 300, oldest first)
+  // ---- the open conversation's messages (latest 300, oldest first). The space you had open is remembered, so its
+  // messages load alongside the list of spaces, not after it.
+  const known = !!me.current;
   useEffect(() => {
-    if (!enabled || !ready || !open) return;
+    if (!enabled || !open || (!known && !ready)) return;
     let alive = true;
     (async () => {
       const { data, error } = await sb().from('messages').select(COLS).eq('space_id', open).eq('lane', lane).is('parent_id', null).order('created_at', { ascending: false }).limit(300);
@@ -208,18 +247,18 @@ export function useLiveClients(): LiveClients | null {
         return;
       }
       const rows = ((data ?? []) as Row[]).reverse();
-      await learnProfiles(people(rows.map((r) => r.user_id)), me.current);
-      if (!alive) return;
       const msgs = rows.map((r) => toMsg(r));
       update((d) => {
         (d.lc ||= {})[laneKey(open, lane)] = msgs;
       });
-      await hydrateReactions(update, msgs.map((m) => m.id), me.current);
+      // names and reactions fill in after the messages are on screen
+      await Promise.all([learnProfiles(people(rows.map((r) => r.user_id)), me.current), hydrateReactions(update, msgs.map((m) => m.id), me.current)]);
+      if (alive) update(() => {});
     })();
     return () => {
       alive = false;
     };
-  }, [enabled, ready, open, lane]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, known || ready, open, lane]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!enabled) return null;
   return {

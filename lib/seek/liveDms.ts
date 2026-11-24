@@ -6,7 +6,7 @@ import { notifyOut } from './push';
 import { accountFor, backendOn, DB_SCHEMA, sb } from './backend';
 import type { ChatMessage, FileRef, MessageCard, PersonKey } from './data';
 import { inviteByEmail, keyFor, learnProfiles, timeLabel, toUiId } from './live';
-import { hydrateReactions, markNotSent, markRead, unreadCounts } from './liveSync';
+import { hydrateReactions, markNotSent, markRead, messageSinks, unreadCounts, workspaceMembers } from './liveSync';
 import { useSeek } from './store';
 import { onLiveStatus, useResync } from './resync';
 
@@ -45,9 +45,16 @@ function keepThreads(me: string | null, pairs: [string, string][]) {
   } catch {}
 }
 
-export function useLiveDms(): LiveDms | null {
+/**
+ * The DMs engine. Mounted once for the whole app (lib/seek/liveProvider.tsx), so your conversations load once per
+ * session and stay live; screens read it with useLiveDms(). `viewing` is true while the DMs screen is open (only then
+ * is the open conversation marked read and its unread count cleared).
+ */
+export function useLiveDmsEngine(viewing: boolean): LiveDms | null {
   const { s, update, toast } = useSeek();
   const enabled = backendOn && s.session === 'in';
+  const viewingRef = useRef(viewing);
+  viewingRef.current = viewing;
   const [ready, setReady] = useState(false);
   const sync = useResync();
   const [people, setPeople] = useState<PersonKey[]>([]);
@@ -95,13 +102,17 @@ export function useLiveDms(): LiveDms | null {
     const other = await learnThread(r.dm_id);
     if (!other) return;
     await learnProfiles([r.user_id], me.current);
-    if (key(other) === currentRef.current) markRead('dm:' + r.dm_id);
+    const onScreen = viewingRef.current;
+    if (onScreen && key(other) === currentRef.current) markRead('dm:' + r.dm_id);
     update((d) => {
       const k = key(other);
       const t = (d.dms[k] ||= { last: '', unread: 0, msgs: [] });
       t.last = r.body;
       if (d.dm === k) {
-        if (!t.msgs.some((m) => m.id === toUiId(r.id))) t.msgs.push(toMsg(r, r.user_id === me.current));
+        if (t.msgs.some((m) => m.id === toUiId(r.id))) return;
+        t.msgs.push(toMsg(r, r.user_id === me.current));
+        // the open conversation stays up to date on other screens, and counts as unread until you're back
+        if (!onScreen && r.user_id !== me.current) t.unread = (t.unread || 0) + 1;
       } else if (r.user_id !== me.current) {
         t.unread = (t.unread || 0) + 1;
       }
@@ -113,6 +124,7 @@ export function useLiveDms(): LiveDms | null {
     if (!enabled) return;
     let live: RealtimeChannel | null = null;
     let alive = true;
+    const cleanups: (() => void)[] = [];
     setReady(false);
     (async () => {
       // the workspace that is open (when you switch, everything here starts again for the new one)
@@ -124,13 +136,14 @@ export function useLiveDms(): LiveDms | null {
 
       // everything in one round trip: teammates, who your conversations are with, their latest messages, unread counts
       // (the database only returns conversations you're in)
-      const [{ data: members }, { data: all }, { data: recent }, counts] = await Promise.all([
-        sb().from('workspace_members').select('user_id, role').eq('workspace_id', ws.current),
+      // (the member list and unread counts are shared with team chat, which asks for them at the same time)
+      const [members, { data: all }, { data: recent }, counts] = await Promise.all([
+        workspaceMembers(ws.current).catch(() => []),
         sb().from('dm_members').select('thread_id, user_id'),
         sb().from('messages').select('id, dm_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at, card').eq('workspace_id', ws.current).not('dm_id', 'is', null).order('created_at', { ascending: false }).limit(400),
         unreadCounts(ws.current).catch(() => new Map<string, number>()),
       ]);
-      const team = ((members ?? []) as { user_id: string; role: string }[]).filter((m) => m.role !== 'guest').map((m) => m.user_id);
+      const team = members.filter((m) => m.role !== 'guest').map((m) => m.user_id);
       const pairs = ((all ?? []) as { thread_id: string; user_id: string }[]).filter((p) => p.user_id !== me.current);
       const lasts = (recent ?? []) as Row[];
       if (!alive) return;
@@ -156,11 +169,14 @@ export function useLiveDms(): LiveDms | null {
       // names and photos fill in afterwards (most are already remembered on this device)
       void learnProfiles([...team, ...pairs.map((p) => p.user_id)], me.current).then(() => alive && update(() => {}));
 
+      // new DMs arrive through team chat's messages subscription (see messageSinks), not a second identical one
+      const sink = (r: Record<string, unknown>) => void addRow(r as unknown as Row);
+      messageSinks.dm = sink;
+      cleanups.push(() => {
+        if (messageSinks.dm === sink) messageSinks.dm = null;
+      });
       live = sb()
         .channel('seek-dms:' + ws.current)
-        .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'messages', filter: `workspace_id=eq.${ws.current}` }, (p) => {
-          void addRow(p.new as Row);
-        })
         .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'dm_members', filter: `user_id=eq.${me.current}` }, (p) => {
           void learnThread((p.new as { thread_id: string }).thread_id);
         })
@@ -175,13 +191,14 @@ export function useLiveDms(): LiveDms | null {
     })();
     return () => {
       alive = false;
+      cleanups.forEach((f) => f());
       if (live) sb().removeChannel(live);
     };
   }, [enabled, orgKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- the open conversation's messages (latest 300, oldest first)
+  // ---- the open conversation's messages (latest 300, oldest first), while the DMs screen is open
   useEffect(() => {
-    if (!enabled || !current) return;
+    if (!enabled || !viewing || !current) return;
     const other = current === 'AH' ? null : current;
     const thread = other ? threadOf.current.get(other) : undefined;
     if (!thread) return;
@@ -190,8 +207,16 @@ export function useLiveDms(): LiveDms | null {
       syncSeen.current = sync;
       loadedFor.current = '';
     }
-    // loaded as soon as we know the conversation (from this device); not again when the list refreshes
-    if (loadedFor.current === thread) return;
+    // loaded as soon as we know the conversation (from this device); not again when the list refreshes, nor when
+    // you come back to DMs (it stayed live meanwhile): then it is only marked read
+    if (loadedFor.current === thread) {
+      markRead('dm:' + thread);
+      update((d) => {
+        const t = d.dms[current];
+        if (t?.unread) t.unread = 0;
+      });
+      return;
+    }
     loadedFor.current = thread;
     markRead('dm:' + thread);
     let alive = true;
@@ -225,7 +250,7 @@ export function useLiveDms(): LiveDms | null {
       // a finished load stays loaded; an unfinished one is tried again
       if (!done && loadedFor.current === thread) loadedFor.current = '';
     };
-  }, [enabled, ready, current, sync]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, ready, current, sync, viewing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // catching up (back to the tab, back online, reconnected): reload the open conversation and unread counts
   useEffect(() => {
@@ -234,7 +259,7 @@ export function useLiveDms(): LiveDms | null {
       update((d) => {
         for (const [other, thread] of threadOf.current) {
           const t = d.dms[key(other)];
-          if (t && key(other) !== d.dm) t.unread = counts.get('dm:' + thread) ?? 0;
+          if (t && !(viewingRef.current && key(other) === d.dm)) t.unread = counts.get('dm:' + thread) ?? 0;
         }
       }),
     );

@@ -110,7 +110,7 @@ function ProfileTab() {
     const ti = title.trim();
     if (backendOn) {
       setBusy(true);
-      const err = await saveProfile({ name: n, title: ti, pronouns: pronouns.trim(), workHours: hours.trim() || '09:00–18:00' });
+      const err = await saveProfile({ name: n, title: ti, pronouns: pronouns.trim(), workHours: hours.trim() || '09:00–18:00', onboarded: true });
       setBusy(false);
       if (err) return toast(err);
     }
@@ -198,7 +198,7 @@ function NotificationsTab() {
   const saveEmail = async (v: typeof email) => {
     setEmail(v);
     if (backendOn) {
-      const err = await saveProfile({ name: s.me.name, title: s.me.title, notifyEmail: v });
+      const err = await saveProfile({ name: s.me.name, title: s.me.title, notifyEmail: v, onboarded: true });
       if (err) return toast(err);
     }
     update((d) => {
@@ -391,7 +391,7 @@ function RegionTab() {
   const save = async (v: string) => {
     setTz(v);
     if (backendOn) {
-      const err = await saveProfile({ name: s.me.name, title: s.me.title, timeZone: v });
+      const err = await saveProfile({ name: s.me.name, title: s.me.title, timeZone: v, onboarded: true });
       if (err) return toast(err);
     }
     update((d) => {

@@ -5,22 +5,25 @@ import { backendOn, sb } from '@/lib/seek/backend';
 import { clock, offsetOf, placeOf } from '@/lib/seek/liveMeetings';
 import { PEOPLE, STATUSES, type DmThread, type PersonKey } from '@/lib/seek/data';
 import { now } from '@/lib/seek/format';
-import { useLiveDms } from '@/lib/seek/liveDms';
+import { useLiveDms } from '@/lib/seek/liveProvider';
 import { useSeek } from '@/lib/seek/store';
 import { Modal } from '../Dialogs';
-import { InviteDialog } from '../InviteDialog';
 import { Composer, Feed, type FeedRef } from '../Messages';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar, SeenText } from '../ui';
 import { FileList, useAttach } from '../Files';
 import { PinsList, useSchedule } from '../Extras';
 import { dmThreadWith, startHuddle } from '@/lib/seek/liveExtras';
-import { CatchUpDialog } from '../AiDialogs';
+import dynamic from 'next/dynamic';
 import { ChannelList, DmList } from '../HomeSide';
 import { useRouter } from 'next/navigation';
 import { ROUTES } from '@/lib/seek/routes';
 import { dmFiles, type SharedFile } from '@/lib/seek/liveFiles';
 import { Ic, StatusMark } from '../icons';
+
+// dialogs open on a click, so they load then (not with the page)
+const InviteDialog = dynamic(() => import('../InviteDialog').then((m) => m.InviteDialog), { ssr: false });
+const CatchUpDialog = dynamic(() => import('../AiDialogs').then((m) => m.CatchUpDialog), { ssr: false });
 
 export function DmsPage() {
   // with a backend, DMs are real (lib/seek/liveDms.ts); the demo below stays exactly like the prototype

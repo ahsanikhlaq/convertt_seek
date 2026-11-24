@@ -22,11 +22,15 @@ import { installCommands } from '@/lib/seek/commands';
 import { notifyOut, registerWorker } from '@/lib/seek/push';
 import { useOpenFile } from './Files';
 import { ConfirmDialog, Modal } from './Dialogs';
-import { WorkspaceSettings } from './WorkspaceSettings';
+import dynamic from 'next/dynamic';
+import { LiveProvider } from '@/lib/seek/liveProvider';
 import { PauseSelect } from './PauseSelect';
 import { usePopovers } from './Popovers';
 import { Avatar, OrgMark } from './ui';
 import { Ic, StatusMark } from './icons';
+
+// opened from the profile drawer only, so loaded when first opened
+const WorkspaceSettings = dynamic(() => import('./WorkspaceSettings').then((m) => m.WorkspaceSettings), { ssr: false });
 
 /**
  * Wraps every screen and hosts the palette, profile and shortcuts. In demo mode, as in the product prototype,
@@ -38,11 +42,9 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const route = routeOf(pathname);
 
-  // live reactions and deletions, wherever they happen
-  const [meId, setMeId] = useState<string | null>(null);
-  useEffect(() => {
-    if (backendOn && (s.session === 'in' || s.session === 'client')) void currentAccount().then((a) => setMeId(a?.id ?? null));
-  }, [s.session]);
+  // live reactions and deletions, wherever they happen. Who you are comes from the account saved on this device
+  // (s.meId), so these start at once instead of waiting for the account to load from the server.
+  const meId = backendOn && (s.session === 'in' || s.session === 'client') ? (s.meId ?? null) : null;
   useLiveSync(meId);
   useLiveNotes(meId);
   usePresence(meId);
@@ -159,19 +161,22 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('seek:navigate', onNav);
   }, [router]);
 
-  if (target) return null;
-
+  // team chat and DMs load once per app session here (and stay live), not again on every visit to Home or DMs
   return (
-    <>
-      {backendOn && !online && (
-        <div className="offline" role="status">
-          You&apos;re offline. Messages that don&apos;t send are kept and go when you&apos;re back.
-        </div>
+    <LiveProvider>
+      {target ? null : (
+        <>
+          {backendOn && !online && (
+            <div className="offline" role="status">
+              You&apos;re offline. Messages that don&apos;t send are kept and go when you&apos;re back.
+            </div>
+          )}
+          {children}
+          {ui.palette && <Palette />}
+          {ui.profile && <ProfileDrawer />}
+        </>
       )}
-      {children}
-      {ui.palette && <Palette />}
-      {ui.profile && <ProfileDrawer />}
-    </>
+    </LiveProvider>
   );
 }
 
@@ -529,16 +534,11 @@ function ProfileDrawer() {
           <button
             type="button"
             className="btn pri"
-            onClick={async () => {
+            onClick={() => {
               const n = name.trim() || s.me.name;
               const ti = title.trim() || s.me.title;
-              if (backendOn) {
-                const err = await saveProfile({ name: n, title: ti });
-                if (err) {
-                  toast(err);
-                  return;
-                }
-              }
+              const was = { name: s.me.name, title: s.me.title };
+              // shown and closed at once; saved in the background (put back if the save fails)
               setMe(n);
               update((d) => {
                 d.me.name = n;
@@ -546,6 +546,16 @@ function ProfileDrawer() {
               });
               close();
               toast('Profile saved');
+              if (backendOn)
+                void saveProfile({ name: n, title: ti, onboarded: s.session === 'in' || s.session === 'client' }).then((err) => {
+                  if (!err) return;
+                  setMe(was.name);
+                  update((d) => {
+                    d.me.name = was.name;
+                    d.me.title = was.title;
+                  });
+                  toast(err);
+                });
             }}
           >
             Save profile

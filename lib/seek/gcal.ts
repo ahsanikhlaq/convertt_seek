@@ -7,7 +7,7 @@
  *    puts the Meet link on the meeting. Cancelling it in Seek cancels the event.
  *  · Huddles and calls use a Google Meet link when you're connected (otherwise a Seek video room).
  */
-import { backendOn, sb } from './backend';
+import { backendOn, knownUserId, sb } from './backend';
 
 export type GoogleStatus = { configured: boolean; connected: boolean; email: string };
 
@@ -24,12 +24,35 @@ async function call<T>(body: Record<string, unknown>): Promise<{ data?: T; error
   return { data: data as T };
 }
 
+// the last status seen on this device, per person, so Apps and huddles don't wait for the server function
+const SAVED = 'seek:googleStatus:';
+/** Your last-known Google status on this device (no network), or null when not checked here yet. */
+export function knownGoogleStatus(): GoogleStatus | null {
+  const uid = knownUserId();
+  if (!uid) return null;
+  try {
+    return JSON.parse(localStorage.getItem(SAVED + uid) || 'null') as GoogleStatus | null;
+  } catch {
+    return null;
+  }
+}
+function keepStatus(st: GoogleStatus | null) {
+  const uid = knownUserId();
+  try {
+    if (uid && st) localStorage.setItem(SAVED + uid, JSON.stringify(st));
+    else if (uid) localStorage.removeItem(SAVED + uid);
+  } catch {}
+}
+
 let cached: { at: number; p: Promise<GoogleStatus | null> } | null = null;
-/** Whether Google is set up for Seek and connected for you (remembered for a minute). */
+/** Whether Google is set up for Seek and connected for you (remembered for a minute, and on this device). */
 export function googleStatus(fresh = false): Promise<GoogleStatus | null> {
   if (!backendOn) return Promise.resolve(null);
   if (!fresh && cached && Date.now() - cached.at < 60_000) return cached.p;
-  const p = call<GoogleStatus>({ action: 'status' }).then((r) => r.data ?? null);
+  const p = call<GoogleStatus>({ action: 'status' }).then((r) => {
+    if (r.data) keepStatus(r.data);
+    return r.data ?? null;
+  });
   cached = { at: Date.now(), p };
   return p;
 }
@@ -50,12 +73,14 @@ export async function connectGoogle(): Promise<string | null> {
 export async function finishGoogle(code: string, state: string): Promise<string | null> {
   const r = await call<{ email: string }>({ action: 'finish', code, state });
   cached = null;
+  keepStatus(null);
   return r.error ?? null;
 }
 
 export async function disconnectGoogle(): Promise<string | null> {
   const r = await call({ action: 'disconnect' });
   cached = null;
+  keepStatus(null);
   return r.error ?? null;
 }
 
@@ -72,10 +97,17 @@ export function cancelGoogleEvent(meeting: number) {
   return call({ action: 'cancel', meeting });
 }
 
-/** A Meet link for right now, or null when you haven't connected Google. */
-export async function instantMeet(title: string): Promise<string | null> {
-  const st = await googleStatus();
-  if (!st?.connected) return null;
+/**
+ * A Meet link for right now, or null when you haven't connected Google. `connected`: already known to be connected
+ * (saved on this device), so the status check is skipped.
+ */
+export async function instantMeet(title: string, connected = false): Promise<string | null> {
+  if (!connected) {
+    const st = await googleStatus();
+    if (!st?.connected) return null;
+  }
   const r = await call<{ link: string }>({ action: 'instant', title });
+  // check again next time (it may have been disconnected elsewhere)
+  if (!r.data?.link && connected) keepStatus(null);
   return r.data?.link ?? null;
 }

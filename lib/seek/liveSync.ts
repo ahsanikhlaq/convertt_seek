@@ -124,16 +124,48 @@ export function markRead(conv: string) {
     });
 }
 
-/** Unread counts per conversation in this organisation (channels and DMs). */
-export async function unreadCounts(orgId: string): Promise<Map<string, number>> {
-  const { data } = await sb().rpc('unread_counts', { p_ws: orgId });
-  return new Map(((data ?? []) as { conv: string; n: number }[]).map((r) => [r.conv, r.n]));
+// ---- one request for the same data asked for at (nearly) the same time, e.g. team chat and DMs starting together
+const sharedCalls = new Map<string, { at: number; p: Promise<unknown> }>();
+export function shared<T>(key: string, fn: () => Promise<T>, ms = 3000): Promise<T> {
+  const hit = sharedCalls.get(key);
+  if (hit && Date.now() - hit.at < ms) return hit.p as Promise<T>;
+  const p = fn();
+  sharedCalls.set(key, { at: Date.now(), p });
+  p.catch(() => {
+    if (sharedCalls.get(key)?.p === p) sharedCalls.delete(key);
+  });
+  return p;
 }
+
+/** Unread counts per conversation in this organisation (channels and DMs). */
+export function unreadCounts(orgId: string): Promise<Map<string, number>> {
+  return shared('unread:' + orgId, async () => {
+    const { data } = await sb().rpc('unread_counts', { p_ws: orgId });
+    return new Map(((data ?? []) as { conv: string; n: number }[]).map((r) => [r.conv, r.n]));
+  }, 2000);
+}
+
+/** The organisation's members (user id and role), shared by team chat and DMs. */
+export function workspaceMembers(orgId: string): Promise<{ user_id: string; role: string }[]> {
+  return shared('members:' + orgId, async () => {
+    const { data, error } = await sb().from('workspace_members').select('user_id, role').eq('workspace_id', orgId);
+    if (error) throw error;
+    return (data ?? []) as { user_id: string; role: string }[];
+  });
+}
+
+/**
+ * New messages arrive on one live subscription (team chat's, filtered to the open organisation); the DM rows in it
+ * are handed to DMs through here, so the two don't each subscribe to the same messages.
+ */
+export const messageSinks: { dm: ((row: Record<string, unknown>) => void) | null } = { dm: null };
 
 /** Live reactions and deletions from everyone, applied to whatever is on screen. Mounted once, in the app frame. */
 export function useLiveSync(me: string | null) {
   const { s, update } = useSeek();
   const on = backendOn && !!me && (s.session === 'in' || s.session === 'client');
+  // the team only needs edits in the open organisation (a client's spaces can be in any agency's, so theirs stay unfiltered)
+  const ws = s.session === 'in' ? (s.orgId ?? null) : null;
   useEffect(() => {
     if (!on) return;
     // back online: send whatever didn't go through
@@ -165,7 +197,7 @@ export function useLiveSync(me: string | null) {
           }),
         );
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: DB_SCHEMA, table: 'messages' }, (p) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: DB_SCHEMA, table: 'messages', ...(ws ? { filter: `workspace_id=eq.${ws}` } : {}) }, (p) => {
         const r = p.new as { id: number; body: string; edited_at: string | null; pinned_at: string | null; card: MessageCard | null };
         if (!r.id) return;
         update((d) =>
@@ -187,7 +219,7 @@ export function useLiveSync(me: string | null) {
       removeEventListener('online', onOnline);
       sb().removeChannel(ch);
     };
-  }, [on, me]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [on, me, ws]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /** Removes a deleted message (or thread reply) from every feed. */

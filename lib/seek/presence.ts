@@ -5,12 +5,18 @@ import { backendOn, sb } from './backend';
 import { PEOPLE } from './data';
 
 /**
- * Who's active. While you have Seek open, the app tells the server "I'm here" about once a minute (seen_now());
- * teammates count as active if that was in the last 3 minutes. Everyone else shows when they were last seen.
- * People you can see are re-checked every 30 seconds.
+ * Who's active. While you have Seek open and on screen, the app tells the server "I'm here" about every 3 minutes
+ * (seen_now()), and sooner when you click or type after a quiet spell; teammates count as active if that was in the
+ * last 6 minutes. Everyone else shows when they were last seen. People you can see are re-checked every minute
+ * while Seek is on screen (a hidden tab does nothing, and catches up as soon as it is shown again).
  */
 
-const ACTIVE_MS = 3 * 60_000;
+/** Active means seen in the last 6 minutes (the heartbeat is every 3, so one missed beat doesn't flicker). */
+export const ACTIVE_MS = 6 * 60_000;
+const BEAT_MS = 3 * 60_000;
+// clicking or typing re-announces you sooner, so push notifications (sent when you've been away a couple of
+// minutes) don't reach someone who is actively using Seek
+const ACTIVITY_BEAT_MS = 100_000;
 type Seen = { at: number | null; status: string };
 const seen = new Map<string, Seen>();
 let version = 0;
@@ -41,28 +47,39 @@ export function usePresence(me: string | null) {
   useEffect(() => {
     if (!backendOn || !me) return;
     let last = 0;
-    const beat = () => {
-      if (document.visibilityState !== 'visible' || Date.now() - last < 20_000) return;
+    let refreshed = 0;
+    const visible = () => document.visibilityState === 'visible';
+    const beat = (gap = 20_000) => {
+      if (!visible() || Date.now() - last < gap) return;
       last = Date.now();
       void sb().rpc('seen_now').then(() => {});
     };
+    const look = (gap = 0) => {
+      if (!visible() || Date.now() - refreshed < gap) return;
+      refreshed = Date.now();
+      void refresh(me);
+    };
     beat();
-    void refresh(me);
-    const b = setInterval(beat, 60_000);
-    const r = setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh(me);
-    }, 30_000);
+    look();
+    const b = setInterval(() => beat(BEAT_MS - 5_000), BEAT_MS);
+    const r = setInterval(() => look(55_000), 60_000);
+    // back on screen: say you're here and catch up at once
     const onShow = () => {
       beat();
-      if (document.visibilityState === 'visible') void refresh(me);
+      look(10_000);
     };
+    const onActivity = () => beat(ACTIVITY_BEAT_MS);
     document.addEventListener('visibilitychange', onShow);
     window.addEventListener('focus', onShow);
+    window.addEventListener('pointerdown', onActivity, { passive: true });
+    window.addEventListener('keydown', onActivity);
     return () => {
       clearInterval(b);
       clearInterval(r);
       document.removeEventListener('visibilitychange', onShow);
       window.removeEventListener('focus', onShow);
+      window.removeEventListener('pointerdown', onActivity);
+      window.removeEventListener('keydown', onActivity);
     };
   }, [me]);
 }

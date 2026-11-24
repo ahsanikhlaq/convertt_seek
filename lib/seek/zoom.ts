@@ -7,7 +7,7 @@
  *    Cancelling it in Seek deletes it in Zoom.
  *  · Huddles use a Zoom link when Google isn't connected but Zoom is.
  */
-import { backendOn, sb } from './backend';
+import { backendOn, knownUserId, sb } from './backend';
 
 export type ZoomStatus = { configured: boolean; connected: boolean; email: string };
 
@@ -24,12 +24,35 @@ async function call<T>(body: Record<string, unknown>): Promise<{ data?: T; error
   return { data: data as T };
 }
 
+// the last status seen on this device, per person, so Apps and huddles don't wait for the server function
+const SAVED = 'seek:zoomStatus:';
+/** Your last-known Zoom status on this device (no network), or null when not checked here yet. */
+export function knownZoomStatus(): ZoomStatus | null {
+  const uid = knownUserId();
+  if (!uid) return null;
+  try {
+    return JSON.parse(localStorage.getItem(SAVED + uid) || 'null') as ZoomStatus | null;
+  } catch {
+    return null;
+  }
+}
+function keepStatus(st: ZoomStatus | null) {
+  const uid = knownUserId();
+  try {
+    if (uid && st) localStorage.setItem(SAVED + uid, JSON.stringify(st));
+    else if (uid) localStorage.removeItem(SAVED + uid);
+  } catch {}
+}
+
 let cached: { at: number; p: Promise<ZoomStatus | null> } | null = null;
-/** Whether Zoom is set up for Seek and connected for you (remembered for a minute). */
+/** Whether Zoom is set up for Seek and connected for you (remembered for a minute, and on this device). */
 export function zoomStatus(fresh = false): Promise<ZoomStatus | null> {
   if (!backendOn) return Promise.resolve(null);
   if (!fresh && cached && Date.now() - cached.at < 60_000) return cached.p;
-  const p = call<ZoomStatus>({ action: 'status' }).then((r) => r.data ?? null);
+  const p = call<ZoomStatus>({ action: 'status' }).then((r) => {
+    if (r.data) keepStatus(r.data);
+    return r.data ?? null;
+  });
   cached = { at: Date.now(), p };
   return p;
 }
@@ -50,12 +73,14 @@ export async function connectZoom(): Promise<string | null> {
 export async function finishZoom(code: string, state: string): Promise<string | null> {
   const r = await call<{ email: string }>({ action: 'finish', code, state });
   cached = null;
+  keepStatus(null);
   return r.error ?? null;
 }
 
 export async function disconnectZoom(): Promise<string | null> {
   const r = await call({ action: 'disconnect' });
   cached = null;
+  keepStatus(null);
   return r.error ?? null;
 }
 
@@ -72,10 +97,17 @@ export function cancelZoomMeeting(meeting: number) {
   return call({ action: 'cancel', meeting });
 }
 
-/** A Zoom link for right now, or null when you haven't connected Zoom. */
-export async function instantZoom(title: string): Promise<string | null> {
-  const st = await zoomStatus();
-  if (!st?.connected) return null;
+/**
+ * A Zoom link for right now, or null when you haven't connected Zoom. `connected`: already known to be connected
+ * (saved on this device), so the status check is skipped.
+ */
+export async function instantZoom(title: string, connected = false): Promise<string | null> {
+  if (!connected) {
+    const st = await zoomStatus();
+    if (!st?.connected) return null;
+  }
   const r = await call<{ link: string }>({ action: 'instant', title });
+  // check again next time (it may have been disconnected elsewhere)
+  if (!r.data?.link && connected) keepStatus(null);
   return r.data?.link ?? null;
 }

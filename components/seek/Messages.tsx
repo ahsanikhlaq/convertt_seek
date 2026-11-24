@@ -15,7 +15,7 @@ import { decisionFrom, decisionsFor, loadDecisions, logDecision as saveDecision,
 import type { LiveDecision } from '@/lib/seek/data';
 import { PromptDialog } from './Dialogs';
 import { FileCards } from './Files';
-import { canRecord, clockOf, VideoRecorder, VoiceRecorder } from './Recorder';
+import { canRecord, clockOf } from './recording';
 import { HuddleCardView, MeetingCardView } from './Meetings';
 import { dueText, RemindDialog, SendLaterDialog, TaskDialog } from './Extras';
 import { editMessage, messageLink, pinMessage, saveMessage } from '@/lib/seek/liveExtras';
@@ -23,7 +23,12 @@ import { approvalDraft } from '@/lib/seek/liveApprovals';
 import { usePopovers } from './Popovers';
 import { Avatar, Emoji, RichText } from './ui';
 import { Ic, type IconKey } from './icons';
-import { SuggestTasksDialog } from './AiDialogs';
+import dynamic from 'next/dynamic';
+
+// opened on a click (record, suggest tasks), so loaded then rather than with every screen
+const VoiceRecorder = dynamic(() => import('./Recorder').then((m) => m.VoiceRecorder), { ssr: false });
+const VideoRecorder = dynamic(() => import('./Recorder').then((m) => m.VideoRecorder), { ssr: false });
+const SuggestTasksDialog = dynamic(() => import('./AiDialogs').then((m) => m.SuggestTasksDialog), { ssr: false });
 
 /** Where a feed lives in the state, so actions can write back to it. */
 export type FeedRef = {

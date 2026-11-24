@@ -1,8 +1,8 @@
 'use client';
 
 import { notifyOut } from './push';
-import { instantMeet } from './gcal';
-import { instantZoom } from './zoom';
+import { instantMeet, knownGoogleStatus } from './gcal';
+import { instantZoom, knownZoomStatus, zoomStatus } from './zoom';
 import { useEffect, useRef } from 'react';
 import { backendOn, DB_SCHEMA, sb } from './backend';
 import type { FileRef, LiveTask, PersonKey, State } from './data';
@@ -230,21 +230,34 @@ export async function remindMe(target: { uiId?: number; task?: number }, at: Dat
   return error ? 'Couldn’t set the reminder' : null;
 }
 
-/** Turns due reminders into notifications: on start and every minute while Seek is open. */
+/**
+ * Turns due reminders into notifications: on start and every minute while Seek is open and on screen (a hidden tab
+ * skips the rounds, and catches up as soon as it is shown again).
+ */
 export function useReminders(me: string | null) {
   const { s } = useSeek();
   const on = backendOn && !!me && (s.session === 'in' || s.session === 'client');
   useEffect(() => {
     if (!on) return;
     // due reminders become notifications; due Send-later messages are sent
+    let last = 0;
     const fire = () => {
+      if (document.visibilityState === 'hidden') return;
+      last = Date.now();
       // supabase-js only sends a query once it is awaited (or then-ed)
       void sb().rpc('fire_my_reminders').then(() => {});
       void sb().rpc('send_my_scheduled').then(() => {});
     };
+    const onShow = () => {
+      if (document.visibilityState === 'visible' && Date.now() - last > 55e3) fire();
+    };
     fire();
     const id = setInterval(fire, 60e3);
-    return () => clearInterval(id);
+    document.addEventListener('visibilitychange', onShow);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onShow);
+    };
   }, [on, me]);
 }
 
@@ -410,8 +423,17 @@ export async function startHuddle(target: ConvTarget): Promise<string | null> {
   if (w) w.opener = null;
   // Google Meet if you've connected Google, else Zoom if you've connected Zoom, else a Seek (Jitsi) room
   const name = 'dmWith' in target ? 'Seek call' : 'Seek huddle';
-  const quick = (p: Promise<string | null>) => Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), 8000))]).catch(() => null);
-  const meet = (await quick(instantMeet(name))) ?? (await quick(instantZoom(name)));
+  const quick = <T,>(p: Promise<T>, none: T) => Promise.race([p, new Promise<T>((r) => setTimeout(() => r(none), 8000))]).catch(() => none);
+  // what this device last saw: a provider known not to be connected is skipped (no waiting on its server function)
+  const g = knownGoogleStatus();
+  const z = knownZoomStatus();
+  const tryGoogle = g?.connected !== false;
+  const tryZoom = z?.connected !== false;
+  // Google and Zoom are checked at the same time; a Zoom meeting is only created when Google gives no link (so
+  // nobody gets an unused Zoom meeting)
+  const google = tryGoogle ? quick(instantMeet(name, g?.connected === true), null) : Promise.resolve(null);
+  const zoomOk = !tryZoom ? Promise.resolve(false) : z?.connected ? Promise.resolve(true) : quick(zoomStatus().then((st) => !!st?.connected), false);
+  const meet = (await google) ?? ((await zoomOk) ? await quick(instantZoom(name, true), null) : null);
   const link = meet ?? 'https://meet.jit.si/Seek-' + crypto.randomUUID().replace(/-/g, '').slice(0, 24);
   if (w) w.location.href = link;
   let where: Record<string, string>;
