@@ -194,3 +194,18 @@ export function decisionsCsv(list: LiveDecision[]) {
   const cell = (c: string) => '"' + String(c).replace(/^([=+\-@])/, "'$1").replace(/"/g, '""') + '"';
   return rows.map((r) => r.map(cell).join(',')).join('\n');
 }
+
+/** A decision or approval in a client space's Client chat (what the client can see), for their Project status. */
+export type SpaceDecision = { id: number; text: string; kind: LiveDecision['kind']; at: string };
+export async function clientDecisions(space: string, limit = 8): Promise<SpaceDecision[] | null> {
+  const { data, error } = await sb()
+    .from('decisions')
+    .select('id, text, kind, created_at')
+    .eq('space_id', space)
+    .eq('lane', 'client')
+    .is('replaced_at', null)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) return null;
+  return ((data ?? []) as { id: number; text: string; kind: LiveDecision['kind']; created_at: string }[]).map((r) => ({ id: r.id, text: r.text, kind: r.kind, at: r.created_at }));
+}

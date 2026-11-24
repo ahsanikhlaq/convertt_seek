@@ -2,9 +2,11 @@
 // Called from the app by a signed-in person: { workspace_id | space_id, email, redirect_to }. A client invite
 // (space_id) needs the person to be listed in that space already; the email then reads "X invited you to
 // <client>'s project space". A teammate invite (workspace_id) saves the invite as the caller (so row-level
-// security decides whether they may invite to the workspace). Both are emailed with Supabase's "Invite user" template. Its Join link opens the app's welcome screen, where the new teammate
-// signs in, sets up their profile and lands in #general. People who already have a Seek account get a sign-in
-// email instead and join the workspace the next time they sign in.
+// security decides whether they may invite to the workspace). Both are emailed with Supabase's "Invite user" template
+// (supabase/templates/invite-user.html). Its Join link signs them in with one click on the app's welcome screen:
+// a teammate sets up their profile and lands in #general; a client sees their agency's name and logo, adds their
+// name and lands in their space. Client emails carry the agency's logo, name and (when readable) brand colour.
+// People who already have a Seek account get a sign-in email instead and join the next time they sign in.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const cors = {
@@ -13,6 +15,21 @@ const cors = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
+
+/** WCAG contrast of white text on a hex colour. */
+function whiteContrast(hex: string) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const l = 0.2126 * ch(n >> 16) + 0.7152 * ch((n >> 8) & 255) + 0.0722 * ch(n & 255);
+  return 1.05 / (l + 0.05);
+}
+/** The agency's brand colour for the email's button, only when white text on it is readable (4.5:1); else empty. */
+const buttonColour = (hex: string | null | undefined) => (hex && /^#[0-9a-fA-F]{6}$/.test(hex) && whiteContrast(hex) >= 4.5 ? hex : '');
+/** A logo the email may show: an https image URL, else empty. */
+const safeLogo = (url: string | null | undefined) => (url && /^https:\/\/[^\s"'<>]+$/.test(url) ? url : '');
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -52,8 +69,9 @@ Deno.serve(async (req) => {
     // a client: the person must already be listed in the space (the New client wizard or the People tab adds them)
     const { data: person } = await asCaller.from('client_people').select('id, name').eq('space_id', spaceId).eq('email', email).maybeSingle();
     if (!person) return json({ error: 'Add this person to the client space first' }, 403);
-    const { data: sp } = await admin.from('client_spaces').select('name, project, reply_target, workspaces ( name )').eq('id', spaceId).single();
-    const agency = (sp?.workspaces as { name?: string } | null)?.name ?? 'your agency';
+    const { data: sp } = await admin.from('client_spaces').select('name, project, reply_target, workspaces ( name, logo_url, brand_accent )').eq('id', spaceId).single();
+    const ws = sp?.workspaces as { name?: string; logo_url?: string | null; brand_accent?: string | null } | null;
+    const agency = ws?.name ?? 'your agency';
     data = {
       invited_by: inviter,
       workspace: sp?.name ?? 'your project space',
@@ -62,6 +80,11 @@ Deno.serve(async (req) => {
       agency,
       reply_target: sp?.reply_target ?? '',
       name: person.name ?? '',
+      // the Join link opens this space's welcome screen (agency, inviter, the client's name), signed in in one click
+      space_id: spaceId,
+      // the agency's brand in the email: logo (https only) and button colour (only when readable)
+      agency_logo: safeLogo(ws?.logo_url),
+      button: buttonColour(ws?.brand_accent),
       // the welcome message from the invite form (plain text; the email shows it instead of the default line)
       message: String(body.message ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 500),
     };
@@ -85,12 +108,15 @@ Deno.serve(async (req) => {
   if ((error as { code?: string }).code === 'email_exists' || /already (been )?registered|already exists/i.test(error.message)) {
     // They already have an account: send the sign-in email dressed as an invite. The account carries the invite
     // details only while that one email is written (the "Magic link" template checks .Data.invite_org), and the
-    // Join link opens the organisation they were invited to.
+    // Join link opens the workspace they were invited to.
     const { data: uid } = await admin.rpc('user_id_by_email', { p_email: email });
     const link = redirectTo && workspaceId ? `${redirectTo}${redirectTo.includes('?') ? '&' : '?'}org=${workspaceId}` : redirectTo;
-    if (uid) await admin.auth.admin.updateUserById(uid as string, { user_metadata: { invite_by: data.invited_by, invite_org: data.workspace } });
+    // a client invite also carries the agency's name, logo and button colour for that one email
+    const brand = spaceId ? { invite_agency: data.agency ?? '', invite_logo: data.agency_logo ?? '', invite_button: data.button ?? '' } : {};
+    const cleared = spaceId ? { invite_agency: null, invite_logo: null, invite_button: null } : {};
+    if (uid) await admin.auth.admin.updateUserById(uid as string, { user_metadata: { invite_by: data.invited_by, invite_org: data.workspace, ...brand } });
     const { error: otpErr } = await createClient(url, anon, opts).auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: link } });
-    if (uid) await admin.auth.admin.updateUserById(uid as string, { user_metadata: { invite_by: null, invite_org: null } });
+    if (uid) await admin.auth.admin.updateUserById(uid as string, { user_metadata: { invite_by: null, invite_org: null, ...cleared } });
     return json(otpErr ? { status: 'saved', error: otpErr.message } : { status: 'existing' });
   }
   return json({ status: 'saved', error: error.message });

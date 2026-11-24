@@ -174,3 +174,39 @@ export function downloadIcs(c: Pick<MeetingCard, 'id' | 'title' | 'starts_at' | 
 
 /** A Seek video room: a free Jitsi Meet room (meet.jit.si) with a random, unguessable name. */
 export const seekRoom = () => 'https://meet.jit.si/Seek-' + crypto.randomUUID().replace(/-/g, '').slice(0, 20);
+
+export type SpaceMeeting = { id: number; title: string; startsAt: string; minutes: number; tool: Tool; link: string };
+
+/**
+ * One client space's meetings that you can see (a client: only the ones sent to them): the upcoming ones, soonest
+ * first (including one in progress), and the latest past ones.
+ */
+export async function spaceMeetings(space: string, pastCount = 5): Promise<{ upcoming: SpaceMeeting[]; past: SpaceMeeting[] } | null> {
+  const { data, error } = await sb()
+    .from('meetings')
+    .select('id, title, starts_at, duration_min, tool, link')
+    .eq('space_id', space)
+    .is('cancelled_at', null)
+    .order('starts_at', { ascending: false })
+    .limit(60);
+  if (error) return null;
+  type R = { id: number; title: string; starts_at: string; duration_min: number; tool: Tool; link: string };
+  const all = ((data ?? []) as R[]).map((r) => ({ id: r.id, title: r.title, startsAt: r.starts_at, minutes: r.duration_min, tool: r.tool, link: r.link }));
+  const now = Date.now();
+  const ends = (m: SpaceMeeting) => new Date(m.startsAt).getTime() + m.minutes * 60e3;
+  return {
+    upcoming: all.filter((m) => ends(m) > now).reverse(),
+    past: all.filter((m) => ends(m) <= now).slice(0, pastCount),
+  };
+}
+
+/** "Tue 26 Nov, 15:00–15:30 GMT+5": a meeting's time in this computer's time zone, with the zone's short name. */
+export function localWhen(startsAt: string, minutes: number) {
+  const d = new Date(startsAt);
+  const end = new Date(d.getTime() + minutes * 60e3);
+  let zone = '';
+  try {
+    zone = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(d).find((p) => p.type === 'timeZoneName')?.value ?? '';
+  } catch {}
+  return `${dayLabel(d)}, ${clock(d, null)}–${clock(end, null)}${zone ? ' ' + zone : ''}`;
+}

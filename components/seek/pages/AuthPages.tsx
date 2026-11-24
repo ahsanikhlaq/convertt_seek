@@ -1,10 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
   acceptInviteLink,
   backendOn,
+  clientInviteInfo,
   companyDomain,
   createOrganisation,
   currentAccount,
@@ -23,6 +25,7 @@ import {
   verifyCode,
   waitSeconds,
   type Account,
+  type ClientInvite,
 } from '@/lib/seek/backend';
 import { initialsOf, isEmail, slugify } from '@/lib/seek/format';
 import { GOOGLE_CLIENT_ID, GOOGLE_UNAVAILABLE, profileFromCredential, renderGoogleButton, type GoogleProfile } from '@/lib/seek/google';
@@ -31,6 +34,7 @@ import { applyAccount, setMakingAnother, setMe, useSeek } from '@/lib/seek/store
 import { CodeInput, codeComplete } from '../CodeInput';
 import { Avatar, Logo, OrgMark } from '../ui';
 import { THEMES } from '@/lib/seek/data';
+import { usableAccent } from '@/lib/seek/theme';
 import { Ic } from '../icons';
 
 function Brand({ children }: { children?: React.ReactNode }) {
@@ -47,7 +51,7 @@ function Brand({ children }: { children?: React.ReactNode }) {
 /** Supabase: Authentication → Rate Limits → "Minimum interval per user" (seconds between emails to one person). */
 const RESEND_AFTER = 15;
 
-/** Where a signed-in person with a profile belongs: their team, their client space, or organization setup. */
+/** Where a signed-in person with a profile belongs: their team, their client space, or workspace setup. */
 const homeOf = (a: Account) => (a.workspace ? ROUTES.channels : a.clientSpaces.length ? ROUTES.clients : ROUTES.setup);
 
 /** Seconds until another code may be sent; counts down by itself. */
@@ -282,9 +286,9 @@ export function SignupPage() {
         </div>
         <div className="top">
           Already have an account?{' '}
-          <button type="button" className="linkbtn" onClick={() => toast('Sign in with your email code')}>
+          <Link className="linkbtn" href={ROUTES.signin}>
             Sign in
-          </button>
+          </Link>
         </div>
         <div className="in">
           {step === 'email' ? (
@@ -339,6 +343,205 @@ export function SignupPage() {
                 {busy ? 'Checking…' : 'Verify and continue'}
               </button>
               <Resend email={s.email} wait={wait} setWait={setWait} />
+            </>
+          )}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+/**
+ * Sign in (/signin): for everyone who already has an account, agency people and clients alike. An emailed 6-digit
+ * code or Google, then each person lands where they belong: their team's channels, their client space, their
+ * profile (first time) or workspace setup. New agencies use /signup instead.
+ */
+export function SignInPage() {
+  const { s, update, toast } = useSeek();
+  const router = useRouter();
+  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [noAccount, setNoAccount] = useState('');
+  const [wait, setWait] = useCountdown();
+  const formRef = useRef<HTMLDivElement>(null);
+  const typedCode = () => [...(formRef.current?.querySelectorAll<HTMLInputElement>('.codes input') ?? [])].map((x) => x.value).join('');
+
+  // a link may carry the email (?email=…); demo mode starts with the sample one
+  useEffect(() => {
+    const q = (new URLSearchParams(location.search).get('email') ?? '').trim();
+    if (isEmail(q)) setEmail(q);
+    else if (!backendOn && s.email) setEmail(s.email);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Demo mode: straight into the sample workspace (or its setup). */
+  const demoIn = () => {
+    const done = s.setupDone;
+    update((d) => {
+      d.session = done ? 'in' : 'setup';
+    });
+    router.push(done ? ROUTES.channels : ROUTES.setup);
+  };
+
+  const cont = async () => {
+    const v = email.trim();
+    if (!isEmail(v)) {
+      toast('Enter a valid email');
+      return;
+    }
+    setNoAccount('');
+    if (backendOn) {
+      setBusy(true);
+      // only existing accounts: a typo is told so, instead of quietly starting a new account
+      const err = await sendCode(v, false);
+      setBusy(false);
+      if (err) {
+        const n = waitSeconds(err);
+        if (!n) {
+          if (/no Seek account/i.test(err)) setNoAccount(v);
+          else toast(err);
+          return;
+        }
+        setWait(n);
+        toast('We already sent you a code. Enter it below');
+      } else setWait(RESEND_AFTER);
+    }
+    setEmail(v);
+    setStep('code');
+  };
+
+  const verify = async (typed?: string) => {
+    const code = typed ?? typedCode();
+    if (code.length < 6) {
+      toast('Enter all 6 digits');
+      return;
+    }
+    if (!backendOn) {
+      toast('Signed in');
+      demoIn();
+      return;
+    }
+    if (busy) return;
+    setBusy(true);
+    const { error, account } = await verifyCode(email.trim(), code);
+    setBusy(false);
+    if (error || !account) {
+      toast(error || 'Couldn’t sign you in. Try again');
+      return;
+    }
+    update((d) => applyAccount(d, account));
+    toast('Signed in');
+    // agency people open their team, clients their project space; a first sign-in sets up a profile first
+    router.push(!account.workspace && !account.clientSpaces.length ? ROUTES.setup : !account.onboarded ? ROUTES.welcome : homeOf(account));
+  };
+
+  const google = async () => {
+    const err = await googleSignIn();
+    if (err) toast(err);
+  };
+
+  return (
+    <main className="auth">
+      <div className="art ctr">
+        <Brand />
+        <h2>
+          Welcome <em>back.</em>
+        </h2>
+        <p>Your conversations, decisions and client work are right where you left them.</p>
+        <ul className="wsfacts">
+          <li>
+            <Ic n="check" size={12} />
+            No password: we email you a code
+          </li>
+          <li>
+            <Ic n="check" size={12} />
+            For agency teams and their clients
+          </li>
+        </ul>
+      </div>
+      <div className="fm" ref={formRef}>
+        <div className="mbrand">
+          <Logo />
+        </div>
+        <div className="top">
+          New to Seek?{' '}
+          <Link className="linkbtn" href={ROUTES.signup}>
+            Set up your agency
+          </Link>
+        </div>
+        <div className="in">
+          {step === 'email' ? (
+            <>
+              <div>
+                <h1>Sign in to Seek</h1>
+              </div>
+              <p className="sub">Use the email your team or agency invited.</p>
+              {backendOn ? (
+                <button type="button" className="btn lg" onClick={() => void google()}>
+                  <b style={{ color: '#4285f4' }}>G</b> Continue with Google
+                </button>
+              ) : (
+                <GoogleButton onProfile={() => demoIn()} />
+              )}
+              <div className="or">OR</div>
+              <form
+                style={{ display: 'contents' }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void cont();
+                }}
+              >
+                <div className="fld">
+                  <label htmlFor="siem">Email</label>
+                  <input
+                    id="siem"
+                    className="inp"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@company.com"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setNoAccount('');
+                    }}
+                    autoFocus
+                  />
+                </div>
+                {noAccount && (
+                  <div className="note" role="alert">
+                    <Ic n="info" />{' '}
+                    <span>
+                      There’s no Seek account for <b>{noAccount}</b>. Check the spelling, or use the email your invite was sent to. New agency?{' '}
+                      <Link className="linkbtn" href={ROUTES.signup}>
+                        Set up a workspace
+                      </Link>
+                    </span>
+                  </div>
+                )}
+                <button type="submit" className="btn lg pri" disabled={busy}>
+                  {busy ? 'Sending code…' : 'Continue'}
+                </button>
+              </form>
+              <div className="note">
+                <Ic n="mail" /> <span>We’ll email you a 6-digit code. There’s no password to remember.</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <button type="button" className="btn sm ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setStep('email')}>
+                <Ic n="back" size={14} /> Change email
+              </button>
+              <div>
+                <h1>Check your email</h1>
+              </div>
+              <p className="sub">
+                Enter the 6-digit code we sent to <b>{email}</b>.
+              </p>
+              <CodeInput onComplete={(c) => void verify(c)} />
+              <button type="button" className="btn lg pri" onClick={() => void verify()} disabled={busy}>
+                {busy ? 'Checking…' : 'Sign in'}
+              </button>
+              <Resend email={email} wait={wait} setWait={setWait} />
             </>
           )}
         </div>
@@ -905,13 +1108,17 @@ function guessZone() {
 /**
  * Welcome: where invite emails land (their Join button) and where everyone sets up their profile once, after
  * their first sign-in. Invited people then go straight into their team's #general; people who signed up on
- * their own go on to set up an organization.
+ * their own go on to set up a workspace.
+ *
+ * Clients get their own version: the agency's name and logo, "<inviter> invited you to <space>", and their name on
+ * the same screen. The invite's Join button signs them in with one click (token_hash, like team invites); older
+ * client invites and copied invite links carry no one-time code, so those email a 6-digit code instead.
  */
 export function WelcomePage() {
   const { s, update, toast } = useSeek();
   const router = useRouter();
   const [phase, setPhase] = useState<'loading' | 'join' | 'code' | 'profile'>('loading');
-  const [invite, setInvite] = useState<{ workspace: string; invitedBy: string; logo: string | null; client?: boolean } | null>(null);
+  const [invite, setInvite] = useState<{ workspace: string; invitedBy: string; logo: string | null } | null>(null);
   const [hasWorkspace, setHasWorkspace] = useState(false);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -921,9 +1128,46 @@ export function WelcomePage() {
   const [wait, setWait] = useCountdown();
   const token = useRef<string | null>(null);
   const formRef = useRef<HTMLDivElement>(null);
-  // a client's invite email: Join now opens this code screen (as in the prototype)
+  // a client's invite: their agency, their space and who invited them (before sign-in when the link names the space)
   const [clientJoin, setClientJoin] = useState(false);
+  const [cinv, setCinv] = useState<ClientInvite | null>(null);
   const [codeSent, setCodeSent] = useState(false);
+  // the client chose to type the code from their invite email (no new email is sent)
+  const [codeFromInvite, setCodeFromInvite] = useState(false);
+  // the name typed on the client screen, read after sign-in finishes
+  const nameRef = useRef('');
+  nameRef.current = name;
+
+  /** Emails a client a fresh 6-digit sign-in code (their link had none, or it expired). */
+  const emailCode = async (to: string) => {
+    if (!isEmail(to)) return;
+    setBusy(true);
+    const err = await sendCode(to);
+    setBusy(false);
+    const n = waitSeconds(err);
+    if (n) setWait(n);
+    else if (!err) setWait(RESEND_AFTER);
+    if (err && !n) toast(err);
+    setCodeSent(!err || !!n);
+  };
+
+  /** A client's name is saved to their profile, then their portal opens. */
+  const finishClient = async (n: string, acc: Account) => {
+    setBusy(true);
+    const err = await saveProfile({ name: n, title: title.trim() || acc.title, timeZone: acc.timeZone || guessZone() });
+    const fresh = err ? null : await currentAccount(true);
+    setBusy(false);
+    if (err || !fresh) {
+      toast(err || 'Couldn’t save your name. Try again');
+      setName(n);
+      setPhase('profile');
+      return;
+    }
+    update((d) => applyAccount(d, fresh));
+    const sp = fresh.clientSpaces[0];
+    toast(sp ? 'Welcome to ' + sp.name : 'Welcome');
+    router.replace(ROUTES.clients);
+  };
 
   /** Signed in: set up the profile, or carry on if that's already done. */
   const toProfile = async (acc: Account) => {
@@ -937,18 +1181,27 @@ export function WelcomePage() {
     }
     const client = !acc.workspace ? acc.clientSpaces[0] : undefined;
     if (client) {
-      // clients go straight into their space (no profile step); they can add their name in Settings
-      await saveProfile({ name: acc.name.trim() || acc.email.split('@')[0], title: acc.title, timeZone: acc.timeZone || undefined });
-      const fresh = await currentAccount(true);
-      if (fresh) update((d) => applyAccount(d, fresh));
-      toast('Welcome to ' + client.name);
-      router.replace(ROUTES.clients);
+      // the agency and the space from the account, when the link didn't name them
+      setCinv((c) => c ?? { space: client.name, project: client.project, agency: client.agency, agencyLogo: client.agencyLogo, agencyAccent: client.agencyAccent ?? null, invitedBy: client.invitedBy, name: '' });
+      setClientJoin(true);
+      setEmail(acc.email);
+      // they typed their name on the invite screen: save it and open their space
+      const typed = nameRef.current.trim();
+      if (typed) {
+        await finishClient(typed, acc);
+        return;
+      }
+      setName(acc.name);
+      setTitle(acc.title);
+      setPhase('profile');
       return;
     }
+    // someone on a team (even if also a client somewhere) sets up their profile for the team
+    setClientJoin(false);
     setHasWorkspace(!!acc.workspace);
     if (acc.workspace) {
       const inv = await myInvite().catch(() => null);
-      // joined with an invite link (no email invite): just the organization
+      // joined with an invite link (no email invite): just the workspace
       setInvite({ workspace: inv?.workspace ?? acc.workspace.name, invitedBy: inv?.invitedBy ?? '', logo: acc.workspace.logo });
     } else setInvite(null);
     setEmail(acc.email);
@@ -971,29 +1224,31 @@ export function WelcomePage() {
         return;
       }
       const q = new URLSearchParams(location.search);
-      // an invite to someone who already has an account: open the organisation they were invited to
+      // an invite to someone who already has an account: open the workspace they were invited to
       const org = q.get('org');
       if (org) preferOrg(org);
-      setEmail(q.get('email') ?? '');
+      const em = (q.get('email') ?? '').trim();
+      setEmail(em);
       const th = q.get('token_hash');
-      if (q.get('client') && !th) {
+      const client = !!q.get('client');
+      if (client) {
+        setClientJoin(true);
+        // the agency, the space and who invited them, before they sign in (only for an email invited to that space)
+        void clientInviteInfo(q.get('space') ?? '', em)
+          .then((info) => {
+            if (!info) return;
+            setCinv(info);
+            setName((n) => n || info.name);
+          })
+          .catch(() => {});
+      }
+      if (client && !th) {
         const signedInAlready = await currentAccount().catch(() => null);
         if (!signedInAlready) {
           history.replaceState(null, '', location.pathname);
-          setClientJoin(true);
           setPhase('code');
-          // Join now: email the client a fresh sign-in code (the invite itself has none)
-          const to = (q.get('email') ?? '').trim();
-          if (isEmail(to)) {
-            setBusy(true);
-            const err = await sendCode(to);
-            setBusy(false);
-            const n = waitSeconds(err);
-            if (n) setWait(n);
-            else if (!err) setWait(RESEND_AFTER);
-            if (err && !n) toast(err);
-            setCodeSent(!err);
-          }
+          // an older client invite or a copied invite link has no one-time code: email a sign-in code now
+          await emailCode(em);
           return;
         }
       }
@@ -1005,7 +1260,7 @@ export function WelcomePage() {
         return;
       }
       const acc = await currentAccount(!!org).catch(() => null);
-      if (!acc) router.replace(ROUTES.signup);
+      if (!acc) router.replace(ROUTES.signin);
       else {
         update((d) => applyAccount(d, acc));
         await toProfile(acc);
@@ -1018,8 +1273,17 @@ export function WelcomePage() {
     await toProfile(acc);
   };
 
+  const needName = () => {
+    if (clientJoin && !name.trim()) {
+      toast('Enter your name');
+      document.getElementById('cjn')?.focus();
+      return true;
+    }
+    return false;
+  };
+
   const join = async () => {
-    if (busy) return;
+    if (busy || needName()) return;
     if (!token.current) {
       setPhase('code');
       return;
@@ -1031,9 +1295,15 @@ export function WelcomePage() {
       await signedIn(account);
       return;
     }
-    // the link was already used or has expired: the same email also has a 6-digit code, so no new email is needed
     token.current = null;
     setPhase('code');
+    if (clientJoin) {
+      // the link was already used or has expired: a fresh code by email
+      toast('That link has expired. We’re emailing you a new code');
+      await emailCode(email.trim());
+      return;
+    }
+    // the same email also has a 6-digit code, so no new email is needed
     toast('Enter the 6-digit code from your invite email');
   };
 
@@ -1047,7 +1317,7 @@ export function WelcomePage() {
       toast('Enter all 6 digits');
       return;
     }
-    if (busy) return;
+    if (busy || needName()) return;
     setBusy(true);
     const { error, account } = await verifyCode(email.trim(), code, 'invite');
     setBusy(false);
@@ -1074,6 +1344,12 @@ export function WelcomePage() {
       router.push(ROUTES.channels);
       return;
     }
+    if (clientJoin) {
+      const acc = await currentAccount().catch(() => null);
+      if (acc) await finishClient(n, acc);
+      else router.replace(ROUTES.signin);
+      return;
+    }
     setBusy(true);
     const err = await saveProfile({ name: n, title: title.trim(), timeZone: tz });
     const acc = err ? null : await currentAccount(true);
@@ -1092,6 +1368,130 @@ export function WelcomePage() {
 
   const shown = name.trim() || 'Your name';
   const ws = invite?.workspace;
+
+  // ---- the client's screen: their agency, who invited them, their name, then one button
+  if (clientJoin) {
+    const agency = cinv?.agency ?? '';
+    const accent = usableAccent(cinv?.agencyAccent);
+    const space = cinv?.space ?? '';
+    const headline = cinv ? (cinv.invitedBy ? `${cinv.invitedBy} invited you to ${space}` : `You’re invited to ${space}`) : 'Welcome to your project space';
+    const btnStyle = accent ? { width: '100%', background: accent, borderColor: accent } : { width: '100%' };
+    return (
+      <main className="auth">
+        <div className="art ctr">
+          <Brand />
+          {agency && (
+            <div className="joinorg">
+              <OrgMark name={agency} logo={cinv?.agencyLogo} size={44} color={accent ?? undefined} />
+              <b style={{ fontSize: 18 }}>{agency}</b>
+            </div>
+          )}
+          <h2>
+            {space ? (
+              <>
+                Welcome to <em>{space}.</em>
+              </>
+            ) : (
+              <>
+                Welcome to <em>your project space.</em>
+              </>
+            )}
+          </h2>
+          <p>{agency ? `A private space with the ${agency} team: chat, follow progress and approve work in one place.` : 'A private space with your agency: chat, follow progress and approve work in one place.'}</p>
+          <ul className="wsfacts">
+            <li>
+              <Ic n="check" size={12} />
+              No password to remember
+            </li>
+            <li>
+              <Ic n="check" size={12} />
+              Only you and {agency ? 'the ' + agency + ' team' : 'your agency'} see it
+            </li>
+          </ul>
+        </div>
+        <div className="fm" ref={formRef}>
+          <div className="mbrand">
+            <Logo />
+          </div>
+          {email && phase === 'profile' && <div className="top">Signed in as {email}</div>}
+          <div className="in">
+            {phase === 'loading' ? (
+              <p className="sub">Loading…</p>
+            ) : (
+              <form
+                className="cjoin"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (phase === 'join') void join();
+                  else if (phase === 'code') void verify();
+                  else void finish();
+                }}
+              >
+                <OrgMark name={agency || space || 'S'} logo={cinv?.agencyLogo} size={56} color={accent ?? 'var(--gold)'} />
+                <div>
+                  {agency && <b style={{ fontSize: 14.5, color: 'var(--sb)' }}>{agency}</b>}
+                  <h1 style={{ margin: '4px 0 0' }}>{headline}</h1>
+                </div>
+                <p className="sub" style={{ margin: 0 }}>
+                  {phase === 'join'
+                    ? 'Tell the team your name, then join. No password needed.'
+                    : phase === 'profile'
+                      ? 'Last step: how should the team address you?'
+                      : codeFromInvite && !codeSent
+                        ? 'Enter the 6-digit code from your invite email.'
+                        : busy && !codeSent
+                        ? 'Sending your sign-in code…'
+                        : codeSent
+                          ? 'Enter the 6-digit code we just emailed you' + (isEmail(email) ? ' at ' + email : '') + '.'
+                          : 'Enter your email and we’ll send you a 6-digit sign-in code.'}
+                </p>
+                <div className="fld" style={{ width: '100%', textAlign: 'left' }}>
+                  <label htmlFor="cjn">Your name</label>
+                  <input id="cjn" className="inp" autoComplete="name" placeholder="e.g. Jane Doe" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} autoFocus={!name} />
+                  <em>This is how {agency ? 'the ' + agency + ' team' : 'the team'} will see you.</em>
+                </div>
+                {phase === 'code' && (
+                  <>
+                    {!isEmail(email) && (
+                      <div className="fld" style={{ width: '100%', textAlign: 'left' }}>
+                        <label htmlFor="wem2">Your email</label>
+                        <input id="wem2" className="inp" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                      </div>
+                    )}
+                    <CodeInput onComplete={(c) => void verify(c)} label="Sign-in code" />
+                  </>
+                )}
+                <button type="submit" className="btn lg gold" style={btnStyle} disabled={busy}>
+                  {busy ? 'Opening…' : phase === 'join' && space ? `Join ${space}` : 'Open my space'}
+                </button>
+                {phase === 'join' && (
+                  <p className="fine">
+                    <button
+                      type="button"
+                      className="linkbtn"
+                      onClick={() => {
+                        setCodeFromInvite(true);
+                        setPhase('code');
+                      }}
+                    >
+                      Use the code from the email instead
+                    </button>
+                  </p>
+                )}
+                {phase === 'code' && isEmail(email) && <Resend email={email} wait={wait} setWait={setWait} />}
+                {phase === 'code' && !codeSent && !codeFromInvite && !busy && (
+                  <button type="button" className="btn" style={{ width: '100%' }} disabled={busy || !isEmail(email) || wait > 0} onClick={() => void emailCode(email.trim())}>
+                    Email me a code
+                  </button>
+                )}
+                {phase === 'code' && <p className="fine">No password. The code arrives by email; check spam if it isn’t there in a minute.</p>}
+              </form>
+            )}
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="auth">
@@ -1119,9 +1519,7 @@ export function WelcomePage() {
             ? invite.invitedBy
               ? `${invite.invitedBy} invited you. Tell the team who you are, then you're in.`
               : `Tell the ${invite.workspace} team who you are, then you're in.`
-            : clientJoin
-              ? 'Your agency set up a private space for you: chat with the team, follow progress and approve work in one place.'
-              : phase === 'join' || phase === 'code'
+            : phase === 'join' || phase === 'code'
               ? 'Your team invited you to Seek: messages, decisions and client work in one tidy workspace.'
               : 'Tell your team who you are. You can change this any time from your profile.'}
         </p>
@@ -1207,58 +1605,7 @@ export function WelcomePage() {
             </>
           )}
 
-          {phase === 'code' && clientJoin && (
-            <div className="cjoin">
-              <span className="av" style={{ width: 52, height: 52, background: 'var(--gold)', borderRadius: 14, fontSize: 21 }}>
-                <Ic n="ai" size={22} />
-              </span>
-              <div>
-                <b style={{ fontSize: 14.5, color: 'var(--sb)' }}>Your project space</b>
-                <h1 style={{ margin: '4px 0 0' }}>Welcome</h1>
-              </div>
-              <p className="sub" style={{ margin: 0 }}>
-                {busy && !codeSent
-                  ? 'Sending your sign-in code…'
-                  : codeSent
-                    ? 'Enter the 6-digit code we just emailed you' + (isEmail(email) ? ' at ' + email : '') + '.'
-                    : 'Enter your email and we’ll send you a 6-digit sign-in code.'}
-              </p>
-              {!isEmail(email) && (
-                <div className="fld" style={{ width: '100%', textAlign: 'left' }}>
-                  <label htmlFor="wem2">Your email</label>
-                  <input id="wem2" className="inp" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-                </div>
-              )}
-              <CodeInput onComplete={(c) => void verify(c)} label="Sign-in code" />
-              <button type="button" className="btn lg gold" style={{ width: '100%' }} onClick={() => void verify()} disabled={busy}>
-                {busy ? 'Opening…' : 'Open my space'}
-              </button>
-              {isEmail(email) && <Resend email={email} wait={wait} setWait={setWait} />}
-              {!codeSent && !busy && (
-                <button
-                  type="button"
-                  className="btn"
-                  style={{ width: '100%' }}
-                  disabled={busy || !isEmail(email) || wait > 0}
-                  onClick={async () => {
-                    setBusy(true);
-                    const err = await sendCode(email.trim());
-                    setBusy(false);
-                    const n = waitSeconds(err);
-                    if (n) setWait(n);
-                    else if (!err) setWait(RESEND_AFTER);
-                    toast(err || 'Code sent to ' + email.trim());
-                    if (!err) setCodeSent(true);
-                  }}
-                >
-                  Email me a code
-                </button>
-              )}
-              <p className="fine">No password. The code arrives in a separate email; check spam if it isn’t there in a minute.</p>
-            </div>
-          )}
-
-          {phase === 'code' && !clientJoin && (
+          {phase === 'code' && (
             <>
               <div>
                 <h1>Enter your code</h1>
@@ -1301,7 +1648,7 @@ export function WelcomePage() {
               <div>
                 <h1>Set up your profile</h1>
               </div>
-              <p className="sub">{invite?.client ? `This is how you'll appear to the team in ${invite.workspace}.` : invite ? `This is how you'll appear to ${invite.invitedBy || 'your teammates'} and the rest of ${invite.workspace}.` : 'This is how you’ll appear to your team.'}</p>
+              <p className="sub">{invite ? `This is how you'll appear to ${invite.invitedBy || 'your teammates'} and the rest of ${invite.workspace}.` : 'This is how you’ll appear to your team.'}</p>
               <form
                 style={{ display: 'contents' }}
                 onSubmit={(e) => {
@@ -1333,7 +1680,7 @@ export function WelcomePage() {
                   {busy ? 'Saving…' : hasWorkspace ? `Continue to ${ws ?? 'your workspace'}` : 'Continue'}
                 </button>
               </form>
-              <p className="fine"><Ic n="lock" size={13} /> Only people in your organization can see your profile.</p>
+              <p className="fine"><Ic n="lock" size={13} /> Only people in your workspace can see your profile.</p>
             </>
           )}
         </div>
@@ -1343,7 +1690,7 @@ export function WelcomePage() {
 }
 
 /**
- * Join with an invite link (/join?c=…): shows the organization, then email → 6-digit code → join.
+ * Join with an invite link (/join?c=…): shows the workspace, then email → 6-digit code → join.
  * People who are already signed in join with one click. New people set up their profile next.
  */
 export function JoinPage() {
@@ -1542,8 +1889,8 @@ export function JoinPage() {
                 <h1>This link doesn't work</h1>
               </div>
               <p className="sub">The invite link is wrong or has been reset. Ask your team for a new one.</p>
-              <button type="button" className="btn lg" onClick={() => router.push(ROUTES.signup)}>
-                Sign in or create an account
+              <button type="button" className="btn lg" onClick={() => router.push(ROUTES.signin)}>
+                Sign in
               </button>
             </>
           )}

@@ -34,7 +34,7 @@ const WorkspaceSettings = dynamic(() => import('./WorkspaceSettings').then((m) =
 
 /**
  * Wraps every screen and hosts the palette, profile and shortcuts. In demo mode, as in the product prototype,
- * every screen opens directly; with a real backend (lib/seek/backend.ts) signed-out people go to sign-up.
+ * every screen opens directly; with a real backend (lib/seek/backend.ts) signed-out people go to sign-in.
  */
 export function AppFrame({ children }: { children: React.ReactNode }) {
   const { s, ui, setUI } = useSeek();
@@ -58,16 +58,16 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   // with a real backend, screens need a signed-in account with a profile; demo mode keeps every screen open like
   // the prototype. The welcome and join screens are always open: invite emails and invite links land there,
-  // signed in or not.
+  // signed in or not. Signed-out visits to any other screen go to Sign in (sign-up is for new agencies).
   const allowed: Record<typeof s.session, RouteKey[] | null> = {
     in: null,
     profile: ['welcome'],
-    setup: ['setup', 'signup', 'welcome'],
-    out: ['signup', 'welcome'],
+    setup: ['setup', 'signup', 'signin', 'welcome'],
+    out: ['signin', 'signup', 'welcome'],
     // a client only ever sees their own client space
     client: ['clients', 'open', 'account'],
   };
-  const home = { in: ROUTES.channels, profile: ROUTES.welcome, setup: ROUTES.setup, out: ROUTES.signup, client: ROUTES.clients }[s.session];
+  const home = { in: ROUTES.channels, profile: ROUTES.welcome, setup: ROUTES.setup, out: ROUTES.signin, client: ROUTES.clients }[s.session];
   const ok = allowed[s.session];
   const target: string | null =
     !backendOn || route === 'welcome' || route === 'join' || route === 'privacy' || route === 'terms'
@@ -76,7 +76,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         ? route && ok.includes(route)
           ? null
           : home
-        : route === 'signup' || (route === 'setup' && !(typeof location !== 'undefined' && /[?&]new=1/.test(location.search)))
+        : route === 'signup' || route === 'signin' || (route === 'setup' && !(typeof location !== 'undefined' && /[?&]new=1/.test(location.search)))
           ? home
           : null;
   useEffect(() => {
@@ -473,7 +473,7 @@ function ProfileDrawer() {
               </b>
             </div>
             <div>
-              <span>Organization</span>
+              <span>Workspace</span>
               <b style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 {backendOn && <OrgMark name={s.ws.name} logo={s.ws.logo} size={22} />}
                 {backendOn ? s.ws.name : WORKSPACES[s.wsId].name}
@@ -524,7 +524,7 @@ function ProfileDrawer() {
               });
               googleSignOut();
               close();
-              router.push(ROUTES.signup);
+              router.push(ROUTES.signin);
               toast('Signed out');
             }}
           >
@@ -573,7 +573,7 @@ function ProfileDrawer() {
           onConfirm={async () => {
             if (backendOn) await signOut();
             resetAll();
-            router.push(ROUTES.signup);
+            router.push(ROUTES.signin);
           }}
         />
       )}

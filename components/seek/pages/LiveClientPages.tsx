@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ClientRole } from '@/lib/seek/backend';
 import { PEOPLE, type ClientTab, type PersonKey } from '@/lib/seek/data';
 import { isEmail } from '@/lib/seek/format';
@@ -11,7 +11,8 @@ import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { Composer, Feed, type FeedRef } from '../Messages';
 import { ClientRail, MainHeader, Pane, Shell, Sidebar } from '../Shell';
-import { Avatar, SeenText } from '../ui';
+import { Avatar, OrgMark, SeenText } from '../ui';
+import { ClientStatus, useSpaceCalls, WaitingBanner, WaitingForYou } from '../ClientHome';
 import { ApprovalsTab, type Approver } from '../Approvals';
 import { ScheduleDialog } from '../Meetings';
 import { SoundSettings } from '../SoundSettings';
@@ -761,6 +762,10 @@ function ClientPortal({ live }: { live: LiveClients }) {
   const appr = useApprovals(sp?.id ?? null);
   const attach = useAttach(sp && canWrite ? { space: sp.id, lane: 'client' } : null);
   const mineWaiting = (appr.list ?? []).filter((a) => a.status === 'requested' && a.approver === live.me).length;
+  // the space's calls (upcoming and past); undefined while loading
+  const calls = useSpaceCalls(sp?.id ?? null);
+  const nextCall = calls ? (calls.upcoming[0] ?? null) : undefined;
+  const [focusAppr, setFocusAppr] = useState<number | null>(null);
   // a notification about an approval opens the Approvals tab
   useEffect(() => {
     if (s.cTab === 'Approvals') {
@@ -779,17 +784,37 @@ function ClientPortal({ live }: { live: LiveClients }) {
 
   const open = (t: PortalTab) => {
     setTab(t);
+    if (t !== 'approvals') setFocusAppr(null);
+    setUI({ sideOpen: false });
+  };
+  /** Opens one approval (from "Waiting for you" or Project status). */
+  const openApproval = (id: number) => {
+    setTab('approvals');
+    setFocusAppr(id);
     setUI({ sideOpen: false });
   };
   const prog = sp ? progress(sp, 'client') : { done: 0, total: 0 };
-  // a simple invite has no getting-started checklist: open straight on the conversation
+  // a simple invite has no getting-started checklist: open straight on the conversation (once; Home stays in the
+  // sidebar for "Waiting for you")
   const noSteps = !!sp && live.ready && prog.total === 0;
+  const landed = useRef(false);
   useEffect(() => {
+    if (!sp || !live.ready || landed.current) return;
+    landed.current = true;
     if (noSteps && tab === 'start') setTab('chat');
-  }, [noSteps, tab]);
+  }, [sp, live.ready, noSteps, tab]);
+  const startLabel = prog.total > prog.done ? 'Getting started' : 'Home';
+  const agencyMark = <OrgMark name={agency} logo={s.ws.logo} size={30} />;
 
   const side = (
     <Sidebar title={sp?.name ?? 'Your project'} sub={sp ? `with ${agency}${sp.project ? ' · ' + sp.project : ''}` : ''}>
+      <div className="cagency">
+        <OrgMark name={agency} logo={s.ws.logo} size={36} />
+        <span>
+          <b>{agency}</b>
+          <small>Your agency on Seek</small>
+        </span>
+      </div>
       {live.spaces.length > 1 && (
         <>
           <div className="sg lbl">Your projects</div>
@@ -816,7 +841,7 @@ function ClientPortal({ live }: { live: LiveClients }) {
       <div className="sg lbl">Your space</div>
       {(
         [
-          ...(noSteps ? [] : ([['start', 'Getting started', prog.total ? `${prog.done}/${prog.total}` : '']] as [PortalTab, string, string][])),
+          ['start', startLabel, prog.total > prog.done ? `${prog.done}/${prog.total}` : ''],
           ['chat', 'Conversation', ''],
           ['status', 'Project status', ''],
           ['approvals', 'Approvals', mineWaiting ? String(mineWaiting) : ''],
@@ -830,7 +855,11 @@ function ClientPortal({ live }: { live: LiveClients }) {
           <span className="x">
             <b>{l}</b>
           </span>
-          {b && <span className="tag">{b}</span>}
+          {b && (
+            <span className={'tag' + (k === 'approvals' ? ' hot' : '')} title={k === 'approvals' ? b + ' waiting for your approval' : undefined}>
+              {b}
+            </span>
+          )}
         </button>
       ))}
     </Sidebar>
@@ -839,7 +868,7 @@ function ClientPortal({ live }: { live: LiveClients }) {
   if (!sp) {
     return (
       <Shell active="clients" side={side} rail={<ClientRail />}>
-        <MainHeader title="Your project" sub={agency} />
+        <MainHeader title="Your project" sub={agency} mark={agencyMark} />
         <div className="pg">
           <div className="empty">{live.ready ? 'You don’t have a project space yet. Use the link in your invite email.' : 'Loading…'}</div>
         </div>
@@ -861,9 +890,12 @@ function ClientPortal({ live }: { live: LiveClients }) {
           key={key}
           feed={feed}
           banner={
-            <div className="banner gold">
-              <Ic n="clock" /> <span>{replyLine}</span>
-            </div>
+            <>
+              <WaitingBanner approvals={appr.list} me={live.me} next={nextCall} onOpenApprovals={() => open('approvals')} />
+              <div className="banner gold">
+                <Ic n="clock" /> <span>{replyLine}</span>
+              </div>
+            </>
           }
         />
         {canWrite ? (
@@ -874,7 +906,7 @@ function ClientPortal({ live }: { live: LiveClients }) {
       </>
     );
   } else if (tab === 'approvals') {
-    body = <ApprovalsTab space={sp.id} list={appr.list} reload={appr.reload} me={live.me} team={false} approvers={[]} />;
+    body = <ApprovalsTab space={sp.id} list={appr.list} reload={appr.reload} me={live.me} team={false} approvers={[]} focus={focusAppr} />;
   } else if (tab === 'calls') {
     body = (
       <div className="pg">
@@ -903,34 +935,20 @@ function ClientPortal({ live }: { live: LiveClients }) {
       </div>
     );
   } else if (tab === 'status') {
-    const all = progress(sp, 'client');
-    body = (
-      <div className="pg">
-        <div className="stats">
-          {[
-            [sp.status === 'onboarding' ? 'Getting started' : 'Ongoing', 'stage'],
-            [`${all.done}/${all.total}`, 'your steps done'],
-            [sp.replyTarget, 'reply target'],
-          ].map(([a, b]) => (
-            <div key={b} className="stat">
-              <b>{a}</b>
-              <span>{b}</span>
-            </div>
-          ))}
-        </div>
-        <div className="empty">Milestones and dates your team shares will show here.</div>
-      </div>
-    );
+    body = <ClientStatus sp={sp} approvals={appr.list} calls={calls} onOpenSteps={() => open('start')} onOpenApproval={openApproval} />;
   } else {
     body = (
       <>
         <div className="pg" style={{ paddingBottom: 0 }}>
           <div>
             <h2 style={{ margin: '0 0 4px' }}>Welcome{me?.name ? ', ' + firstName(me) : ''}</h2>
-            <p style={{ margin: 0, color: 'var(--mu)' }}>A few quick steps so the {agency} team can get started. Your progress saves as you go.</p>
+            <p style={{ margin: 0, color: 'var(--mu)' }}>
+              {prog.total > prog.done ? `A few quick steps so the ${agency} team can get started. Your progress saves as you go.` : `Your project with ${agency}, all in one place.`}
+            </p>
           </div>
+          <WaitingForYou approvals={appr.list} me={live.me} next={nextCall} onOpenApproval={openApproval} onOpenCalls={() => open('calls')} />
         </div>
-        <Checklist live={live} sp={sp} client />
+        {prog.total > 0 && <Checklist live={live} sp={sp} client />}
         <div className="pg" style={{ paddingTop: 0 }}>
           <div className="card">
             <div className="ct">
@@ -963,7 +981,8 @@ function ClientPortal({ live }: { live: LiveClients }) {
   return (
     <Shell active="clients" side={side} rail={<ClientRail />}>
       <MainHeader
-        title={tab === 'chat' ? 'Conversation' : tab === 'status' ? 'Project status' : tab === 'approvals' ? 'Approvals' : tab === 'files' ? 'Files' : tab === 'pins' ? 'Pinned' : tab === 'calls' ? 'Upcoming calls' : tab === 'settings' ? 'Settings' : sp.name}
+        mark={agencyMark}
+        title={tab === 'chat' ? 'Conversation' : tab === 'status' ? 'Project status' : tab === 'approvals' ? 'Approvals' : tab === 'files' ? 'Files' : tab === 'pins' ? 'Pinned' : tab === 'calls' ? 'Upcoming calls' : tab === 'settings' ? 'Settings' : tab === 'start' && startLabel === 'Home' ? 'Home' : sp.name}
         sub={tab === 'chat' ? `You${others.length ? ', ' + others.map((k) => nameOf(k).split(' ')[0]).join(', ') : ''} and the ${agency} team` : `${sp.project || 'Project space'} · with ${agency}`}
         right={
           <span className="stack hide-m">
@@ -1100,7 +1119,7 @@ function ClientSettings({ agency }: { agency: string }) {
           {busy ? 'Saving…' : 'Save'}
         </button>
         <span style={{ flex: 1 }}></span>
-        <button type="button" className="btn ghost" onClick={() => void signOut().then(() => location.assign('/signup'))}>
+        <button type="button" className="btn ghost" onClick={() => void signOut().then(() => location.assign('/signin'))}>
           Sign out
         </button>
       </div>

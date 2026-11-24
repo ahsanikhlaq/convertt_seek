@@ -13,7 +13,7 @@ import { Ic } from './icons';
 /**
  * Invite a client (backend mode): the pop-up from Clients → ＋ New. The client's email, the name of their space, an
  * optional welcome message and who on your team works on this client. Send invite creates the client's private
- * space and emails them "X invited you to <space>" with a Join button and a 6-digit code.
+ * space and emails them "X invited you to <space>" with a one-click Join button (and a 6-digit code as a fallback).
  */
 
 const DEFAULT_MSG = 'Chat with the team, follow progress and approve work in one place.';
@@ -42,7 +42,7 @@ export function ClientInviteDialog({ onClose, onCreated }: { onClose: () => void
   const [made, setMade] = useState<{ id: string; email: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // your organisation and its team, to pick who works on this client
+  // your workspace and its team, to pick who works on this client
   useEffect(() => {
     void (async () => {
       const acc = await currentAccount();
@@ -112,8 +112,9 @@ export function ClientInviteDialog({ onClose, onCreated }: { onClose: () => void
     const id = await ensureSpace();
     setBusy(false);
     if (!id) return;
-    const ok = await copyText(`${location.origin}/signup`);
-    toast(ok ? `Invite link copied. ${e} signs in with that email and lands in ${spaceName}` : 'Couldn’t copy the link');
+    // the client's own welcome screen for this space (your workspace's name and logo, then a sign-in code by email)
+    const ok = await copyText(`${location.origin}/welcome?client=1&space=${encodeURIComponent(id)}&email=${encodeURIComponent(e)}`);
+    toast(ok ? `Invite link copied. Only ${e} can use it: they confirm their email and land in ${spaceName}` : 'Couldn’t copy the link');
   };
 
   return (

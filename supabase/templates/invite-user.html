@@ -13,12 +13,19 @@
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f2f4;">
 <tr><td align="center" style="padding:48px 16px;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">
-    <!-- brand -->
+    <!-- brand: the agency's logo and name for a client invite, Seek for a teammate -->
     <tr><td style="padding:0 4px 20px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+      {{ if .Data.space }}
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        {{ if .Data.agency_logo }}<td valign="middle" style="padding-right:10px;"><img src="{{ .Data.agency_logo }}" width="36" height="36" alt="" style="display:block;width:36px;height:36px;border:0;border-radius:8px;"></td>{{ end }}
+        <td valign="middle" style="font-size:17px;font-weight:700;letter-spacing:-0.2px;color:#1d1c1d;line-height:1.25;">{{ .Data.agency }}<br><span style="font-size:12.5px;font-weight:400;color:#6b6a6b;">on Seek</span></td>
+      </tr></table>
+      {{ else }}
       <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
         <td valign="middle"><div style="width:30px;height:30px;background:#4b154a;border-radius:8px;color:#ffffff;font-size:15px;font-weight:700;line-height:30px;text-align:center;">S</div></td>
         <td valign="middle" style="padding-left:9px;font-size:17px;font-weight:700;letter-spacing:-0.2px;color:#1d1c1d;">Seek</td>
       </tr></table>
+      {{ end }}
     </td></tr>
     <!-- card -->
     <tr><td style="background:#ffffff;border:1px solid #e6e1e6;border-radius:14px;padding:36px 36px 32px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1d1c1d;">
@@ -30,11 +37,12 @@
       </tr></table>
       {{ end }}
       <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-        <td align="center" bgcolor="#4b154a" style="border-radius:8px;background:#4b154a;">
-          <a href="{{ if .Data.space }}{{ .RedirectTo }}?client=1&email={{ .Email }}{{ else }}{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=invite&email={{ .Email }}{{ end }}" style="display:inline-block;padding:13px 30px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">Join now</a>
+        <td align="center" bgcolor="{{ if .Data.button }}{{ .Data.button }}{{ else }}#4b154a{{ end }}" style="border-radius:8px;background:{{ if .Data.button }}{{ .Data.button }}{{ else }}#4b154a{{ end }};">
+          <a href="{{ if .Data.space }}{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=invite&client=1{{ if .Data.space_id }}&space={{ .Data.space_id }}{{ end }}&email={{ .Email }}{{ else }}{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=invite&email={{ .Email }}{{ end }}" style="display:inline-block;padding:13px 30px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">Join now</a>
         </td>
       </tr></table>
-      <p style="margin:22px 0 0;font-size:13.5px;line-height:1.6;color:#6b6a6b;">{{ if .Data.space }}No password needed. After you click Join now, we'll email you a one-time sign-in code.{{ else }}No password needed. Join now signs you in and takes you straight to the team.{{ end }}</p>
+      <p style="margin:22px 0 0;font-size:13.5px;line-height:1.6;color:#6b6a6b;">{{ if .Data.space }}No password needed. Join now signs you in and opens your space.{{ else }}No password needed. Join now signs you in and takes you straight to the team.{{ end }}</p>
+      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:#6b6a6b;">If Seek asks for a code, enter <strong style="color:#1d1c1d;font-family:'Geist Mono',SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:2px;">{{ .Token }}</strong></p>
     </td></tr>
     <!-- footer -->
     <tr><td style="padding:22px 6px 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12.5px;line-height:1.6;color:#8a868a;">

@@ -12,16 +12,24 @@
 <tr><td align="center" style="padding:40px 16px;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
     <tr><td style="padding:0 4px 20px;">
+      {{ if .Data.invite_agency }}
+      <!-- a client invite: the agency's logo and name -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        {{ if .Data.invite_logo }}<td valign="middle" style="padding-right:10px;"><img src="{{ .Data.invite_logo }}" width="36" height="36" alt="" style="display:block;width:36px;height:36px;border:0;border-radius:10px;"></td>{{ end }}
+        <td valign="middle" style="font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:19px;font-weight:700;color:#261325;line-height:1.25;">{{ .Data.invite_agency }} <span style="font-size:13px;font-weight:400;color:#7a6179;">on Seek</span></td>
+      </tr></table>
+      {{ else }}
       <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
         <td width="36" height="36" align="center" valign="middle" style="width:36px;height:36px;background:#4b154a;border-radius:10px;color:#ffffff;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:20px;font-weight:700;line-height:36px;">S</td>
         <td style="padding-left:10px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:19px;font-weight:700;color:#261325;">Seek <span style="font-size:13px;font-weight:400;color:#7a6179;">by Convertt</span></td>
       </tr></table>
+      {{ end }}
     </td></tr>
     <tr><td style="background:#ffffff;border:1px solid #e9e1e9;border-radius:16px;padding:32px 28px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#261325;">
       <h1 style="margin:0 0 8px;font-size:22px;line-height:1.3;font-weight:700;color:#261325;">{{ if .Data.invite_org }}{{ .Data.invite_by }} invited you to {{ .Data.invite_org }}{{ else }}Your sign-in code{{ end }}</h1>
       <p style="margin:0 0 24px;font-size:15px;line-height:1.55;color:#5f4a5e;">{{ if .Data.invite_org }}You already have a Seek account, so joining takes one click.</p>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;"><tr>
-        <td align="center" bgcolor="#4b154a" style="border-radius:10px;background:#4b154a;">
+        <td align="center" bgcolor="{{ if .Data.invite_button }}{{ .Data.invite_button }}{{ else }}#4b154a{{ end }}" style="border-radius:10px;background:{{ if .Data.invite_button }}{{ .Data.invite_button }}{{ else }}#4b154a{{ end }};">
           <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:13px 26px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">Join {{ .Data.invite_org }}</a>
         </td>
       </tr></table>

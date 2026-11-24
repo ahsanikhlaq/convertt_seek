@@ -452,7 +452,7 @@ function SecurityTab() {
     update((d) => {
       d.session = 'out';
     });
-    router.push(ROUTES.signup);
+    router.push(ROUTES.signin);
     toast('Signed out');
   };
   return (

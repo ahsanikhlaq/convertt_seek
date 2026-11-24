@@ -1,5 +1,6 @@
 /** Every screen in the app has its own URL. */
 export const ROUTES = {
+  signin: '/signin',
   signup: '/signup',
   setup: '/setup',
   welcome: '/welcome',
@@ -33,6 +34,7 @@ export function routeOf(pathname: string | null): RouteKey | null {
  * so prototype links and its review page (which sends `seekGo` and listens for `seekRoute`) still work.
  */
 const PROTOTYPE: Record<string, RouteKey> = {
+  signin: 'signin',
   signup: 'signup',
   setup: 'setup',
   channels: 'channels',

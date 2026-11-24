@@ -272,7 +272,8 @@ export function Sidebar({ title, sub, action, children, mark }: { title: string;
 }
 
 /** Header row of the main column. */
-export function MainHeader({ title, sub, right, below }: { title: React.ReactNode; sub: React.ReactNode; right?: React.ReactNode; below?: React.ReactNode }) {
+/** `mark`: shown instead of Seek's "S" on phones (a client sees their agency's logo). */
+export function MainHeader({ title, sub, right, below, mark }: { title: React.ReactNode; sub: React.ReactNode; right?: React.ReactNode; below?: React.ReactNode; mark?: React.ReactNode }) {
   const { setUI } = useSeek();
   return (
     <>
@@ -280,9 +281,15 @@ export function MainHeader({ title, sub, right, below }: { title: React.ReactNod
         <button type="button" className="menu" onClick={() => setUI((u) => ({ sideOpen: !u.sideOpen }))} aria-label="Menu">
           <Ic n="menu" size={20} />
         </button>
-        <span className="mlogo" aria-hidden="true">
-          S
-        </span>
+        {mark ? (
+          <span className="mlogo brand" aria-hidden="true">
+            {mark}
+          </span>
+        ) : (
+          <span className="mlogo" aria-hidden="true">
+            S
+          </span>
+        )}
         <div className="tt">
           <b>{title}</b>
           <small>{sub}</small>

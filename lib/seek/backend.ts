@@ -87,7 +87,7 @@ export async function saveNotify(p: Partial<NotifyPrefs>): Promise<string | null
 }
 
 /** A client space you belong to as a client. */
-export type ClientSpaceRef = { id: string; name: string; project: string; code: string; color: string; agency: string; agencyLogo: string | null; role: string; invitedBy: string };
+export type ClientSpaceRef = { id: string; name: string; project: string; code: string; color: string; agency: string; agencyLogo: string | null; role: string; invitedBy: string; /** the agency's brand colour (null when it has none) */ agencyAccent?: string | null };
 
 /** A workspace (organization) you belong to. */
 export type Org = { id: string; name: string; slug: string; role: string; logo: string | null; joinCode: string; accent: string | null; tz?: string };
@@ -101,16 +101,20 @@ function friendly(message: string): string {
   if (m.includes('rate limit') || m.includes('security purposes')) return secs ? `You can ask for a new code in ${secs} seconds` : 'Please wait a minute before asking for another code';
   if (m.includes('invite link not valid')) return 'This invite link isn’t valid any more. Ask your team for a new one';
   if (m.includes('expired') || m.includes('invalid')) return 'That code is wrong or has expired. Check it, or resend a new one';
+  if (m.includes('signups not allowed') || m.includes('user not found')) return 'There’s no Seek account for this email yet';
   if (m.includes('provider is not enabled')) return 'Google sign-in isn’t set up yet. Use your email instead';
   if (m.includes('sending') || m.includes('unexpected_failure') || m.includes('credentials')) return 'We couldn’t send the email right now. Please try again shortly';
   if (m.includes('fetch')) return 'Can’t reach Seek. Check your connection and try again';
   return message;
 }
 
-/** Emails a 6-digit sign-in code. Creates the account on first use, so sign-up and sign-in are the same step. */
-export async function sendCode(email: string): Promise<string | null> {
+/**
+ * Emails a 6-digit sign-in code. Creates the account on first use, so sign-up and sign-in are the same step; the
+ * Sign in screen passes create=false, so a mistyped email is told there's no account instead of starting a new one.
+ */
+export async function sendCode(email: string, create = true): Promise<string | null> {
   // the email carries a 6-digit code (custom template) or, with Supabase's default email, a sign-in link back here
-  const { error } = await sb().auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: `${location.origin}/` } });
+  const { error } = await sb().auth.signInWithOtp({ email, options: { shouldCreateUser: create, emailRedirectTo: `${location.origin}/` } });
   return error ? friendly(error.message) : null;
 }
 
@@ -308,7 +312,7 @@ async function loadAccount(id: string, email: string, signedInNow = false): Prom
   ]);
   const [joined, first] = await Promise.all([acceptInvitesIfAny(id, signedInNow).catch(() => 0), parts()]);
   const [{ data: profile }, { data: memberships }, { data: spaces }, { data: np }] = joined > 0 ? await parts() : first;
-  type SpaceRow = { space_id: string; name: string; project: string; code: string; color: string; agency: string; agency_logo: string | null; role: string; invited_by: string };
+  type SpaceRow = { space_id: string; name: string; project: string; code: string; color: string; agency: string; agency_logo: string | null; role: string; invited_by: string; agency_accent?: string | null };
   const clientSpaces = ((spaces ?? []) as SpaceRow[]).map((r) => ({
     id: r.space_id,
     name: r.name,
@@ -319,6 +323,7 @@ async function loadAccount(id: string, email: string, signedInNow = false): Prom
     agencyLogo: r.agency_logo,
     role: r.role,
     invitedBy: r.invited_by,
+    agencyAccent: r.agency_accent ?? null,
   }));
   const rows = (memberships ?? []) as unknown as { role: string; workspaces: OrgRow | null }[];
   let pref: string | null = null;
@@ -478,6 +483,16 @@ export async function myInvite(): Promise<{ workspace: string; invitedBy: string
   const { data } = await sb().rpc('my_invite');
   const row = (data as { workspace: string; invited_by: string }[] | null)?.[0];
   return row ? { workspace: row.workspace, invitedBy: row.invited_by } : null;
+}
+
+/** What a client's invite shows before they sign in: the agency, its logo and colour, the space and who invited them. */
+export type ClientInvite = { space: string; project: string; agency: string; agencyLogo: string | null; agencyAccent: string | null; invitedBy: string; name: string };
+export async function clientInviteInfo(spaceId: string, email: string): Promise<ClientInvite | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(spaceId) || !email) return null;
+  const { data, error } = await sb().rpc('client_invite_info', { p_space: spaceId, p_email: email });
+  type R = { space: string; project: string; agency: string; agency_logo: string | null; agency_accent: string | null; invited_by: string; person_name: string };
+  const r = error ? null : (data as R[] | null)?.[0];
+  return r ? { space: r.space, project: r.project, agency: r.agency, agencyLogo: r.agency_logo, agencyAccent: r.agency_accent, invitedBy: r.invited_by, name: r.person_name } : null;
 }
 
 /** Signs in with the one-time link from an invite email (the Join button). */

@@ -13,6 +13,29 @@ export function lum(h: string): number {
   return (0.299 * (a >> 16) + 0.587 * ((a >> 8) & 255) + 0.114 * (a & 255)) / 255;
 }
 
+/** WCAG contrast ratio between two hex colours (1 to 21). */
+export function contrast(a: string, b: string): number {
+  const rl = (h: string) => {
+    const n = parseInt(h.slice(1), 16);
+    const ch = (v: number) => {
+      const c = v / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * ch(n >> 16) + 0.7152 * ch((n >> 8) & 255) + 0.0722 * ch(n & 255);
+  };
+  const [x, y] = [rl(a), rl(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+}
+
+/**
+ * An agency's brand colour when it works as an accent (white text on it and it as text on white both reach 4.5:1),
+ * otherwise null, so the default accent is used instead.
+ */
+export function usableAccent(hex: string | null | undefined): string | null {
+  if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return null;
+  return contrast(hex, '#ffffff') >= 4.5 ? hex : null;
+}
+
 /** Writes the theme's colour tokens onto <html> and toggles dark mode. */
 export function applyTheme(t: Theme, dark: boolean) {
   const root = document.documentElement;

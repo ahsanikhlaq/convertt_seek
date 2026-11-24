@@ -5,6 +5,7 @@
 //     otherwise once it has been unread for 10 minutes. Several unread notifications go out as one email, at most
 //     one email per person every 10 minutes. "Once a day" sends one summary after 9:00 in their time zone.
 //   · Paused notifications and notification schedules are respected; nothing is sent for what's already read.
+//   · Emails to clients carry their agency's logo and name (and its brand colour on the button, when readable).
 // The app calls this after it sends a message ({ action: 'flush' }) and every few minutes while open, so pending
 // emails go out even when nobody is sending. Other actions: 'vapid' (the public push key), 'test' (a push to
 // your own devices).
@@ -133,6 +134,47 @@ async function sendPush(sub: Sub, msg: Record<string, unknown>, v: Vapid): Promi
 // ---------------------------------------------------------------- email (Brevo)
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
+/** WCAG contrast of white text on a hex colour. */
+function whiteContrast(hex: string) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const l = 0.2126 * ch(n >> 16) + 0.7152 * ch((n >> 8) & 255) + 0.0722 * ch(n & 255);
+  return 1.05 / (l + 0.05);
+}
+const SEEK_PURPLE = '#4b154a';
+/** The agency's colour for buttons, only when white text on it is readable (4.5:1). */
+const buttonColour = (hex: string | null | undefined) => (hex && /^#[0-9a-fA-F]{6}$/.test(hex) && whiteContrast(hex) >= 4.5 ? hex : SEEK_PURPLE);
+const safeLogo = (url: string | null | undefined) => (url && /^https:\/\/[^\s"'<>]+$/.test(url) ? url : '');
+
+/** A client's agency, shown in their emails. Team members get Seek's own look (no brand). */
+type Brand = { name: string; logo: string; button: string };
+
+/** The agency of each person who is only a client (not on any team), from their first client space. */
+async function brands(admin: Client, ids: string[]): Promise<Map<string, Brand>> {
+  const out = new Map<string, Brand>();
+  if (!ids.length) return out;
+  const { data: team } = await admin.from('workspace_members').select('user_id').in('user_id', ids).neq('role', 'guest');
+  const onTeam = new Set(((team ?? []) as { user_id: string }[]).map((r) => r.user_id));
+  const clients = ids.filter((id) => !onTeam.has(id));
+  if (!clients.length) return out;
+  const { data } = await admin
+    .from('client_people')
+    .select('user_id, invited_at, client_spaces ( workspaces ( name, logo_url, brand_accent ) )')
+    .in('user_id', clients)
+    .is('removed_at', null)
+    .order('invited_at');
+  type Row = { user_id: string; client_spaces: { workspaces: { name: string; logo_url: string | null; brand_accent: string | null } | null } | null };
+  for (const r of (data ?? []) as Row[]) {
+    const w = r.client_spaces?.workspaces;
+    if (!w || out.has(r.user_id)) continue;
+    out.set(r.user_id, { name: w.name, logo: safeLogo(w.logo_url), button: buttonColour(w.brand_accent) });
+  }
+  return out;
+}
+
 async function sendEmail(to: { email: string; name: string }, subject: string, html: string, text: string): Promise<{ ok: boolean; why?: string }> {
   const key = Deno.env.get('BREVO_API_KEY');
   if (!key) return { ok: false, why: 'The BREVO_API_KEY secret isn’t set in Supabase' };
@@ -160,36 +202,44 @@ type Note = { id: number; user_id: string; workspace_id: string | null; kind: st
 const linkOf = (n: Note) => (n.message_id ? `${SITE}/open?m=${n.message_id}${n.workspace_id ? '&w=' + n.workspace_id : ''}` : SITE + '/channels');
 const headline = (n: Note) => (n.kind === 'dm' ? `${n.title} sent you a message` : n.title);
 
-function emailOf(notes: Note[], first: string, daily: boolean) {
+function emailOf(notes: Note[], first: string, daily: boolean, brand?: Brand) {
+  const where = brand ? brand.name : 'Seek';
+  const button = brand?.button ?? SEEK_PURPLE;
+  const home = SITE + (brand ? '/clients' : '/channels');
   const subject = daily
-    ? `Your Seek summary: ${notes.length} unread`
+    ? `Your ${where} summary: ${notes.length} unread`
     : notes.length === 1
       ? headline(notes[0])
-      : `${notes.length} unread messages in Seek`;
+      : `${notes.length} unread messages ${brand ? 'from ' + brand.name : 'in Seek'}`;
+  // the agency's logo and name for a client; Seek's mark for the team
+  const head = brand
+    ? `<tr><td style="padding-bottom:16px">${brand.logo ? `<img src="${esc(brand.logo)}" width="30" height="30" alt="" style="display:inline-block;width:30px;height:30px;border:0;border-radius:8px;vertical-align:middle">` : ''}
+<span style="font-weight:700;font-size:16px;color:#261325;vertical-align:middle;margin-left:${brand.logo ? 8 : 0}px">${esc(brand.name)}</span> <span style="font-size:13px;color:#7a6179;vertical-align:middle">on Seek</span></td></tr>`
+    : `<tr><td style="padding-bottom:16px"><span style="display:inline-block;width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;background:${SEEK_PURPLE};color:#fff;font-weight:800">S</span>
+<span style="font-weight:700;font-size:16px;color:#261325;vertical-align:middle;margin-left:8px">Seek</span></td></tr>`;
   const rows = notes
     .slice(0, 20)
     .map(
       (n) => `<tr><td style="padding:14px 0;border-top:1px solid #eee3ee">
   <div style="font-weight:600;color:#261325;font-size:15px">${esc(headline(n))}</div>
   ${n.body ? `<div style="color:#5f4a5e;font-size:14px;margin-top:4px;line-height:1.45">${esc(n.body.slice(0, 220))}</div>` : ''}
-  <a href="${linkOf(n)}" style="display:inline-block;margin-top:8px;color:#4b154a;font-weight:600;font-size:14px;text-decoration:none">Open in Seek →</a>
+  <a href="${linkOf(n)}" style="display:inline-block;margin-top:8px;color:${button};font-weight:600;font-size:14px;text-decoration:none">Open in Seek →</a>
 </td></tr>`,
     )
     .join('');
   const html = `<!doctype html><html><body style="margin:0;background:#f8f4f8;font-family:Inter,-apple-system,Segoe UI,Arial,sans-serif">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f4f8;padding:28px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;padding:28px 28px 22px">
-<tr><td style="padding-bottom:16px"><span style="display:inline-block;width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;background:#4b154a;color:#fff;font-weight:800">S</span>
-<span style="font-weight:700;font-size:16px;color:#261325;vertical-align:middle;margin-left:8px">Seek</span></td></tr>
+${head}
 <tr><td style="font-size:20px;font-weight:700;color:#261325;padding-bottom:6px">${daily ? 'Here’s what you missed' : `Hi ${esc(first)}, you have ${notes.length === 1 ? 'a new message' : notes.length + ' unread messages'}`}</td></tr>
 <tr><td style="font-size:14px;color:#7a6179;padding-bottom:6px">${daily ? 'Unread from the last day.' : 'Sent while you were away from Seek.'}</td></tr>
 ${rows}
 ${notes.length > 20 ? `<tr><td style="padding-top:12px;font-size:14px;color:#5f4a5e">and ${notes.length - 20} more.</td></tr>` : ''}
-<tr><td style="padding-top:20px"><a href="${SITE}/channels" style="display:inline-block;background:#4b154a;color:#fff;font-weight:600;font-size:15px;padding:11px 20px;border-radius:10px;text-decoration:none">Open Seek</a></td></tr>
+<tr><td style="padding-top:20px"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="${button}" style="border-radius:10px;background:${button}"><a href="${home}" style="display:inline-block;color:#fff;font-weight:600;font-size:15px;padding:11px 20px;border-radius:10px;text-decoration:none">${brand ? 'Open your project' : 'Open Seek'}</a></td></tr></table></td></tr>
 </table>
-<div style="max-width:520px;font-size:12px;color:#9a8599;padding:14px 8px;line-height:1.5">You get these emails because of your notification settings. Change them in Seek: Account settings → Notifications → Email.</div>
+<div style="max-width:520px;font-size:12px;color:#9a8599;padding:14px 8px;line-height:1.5">${brand ? `You get these emails because ${esc(brand.name)} works with you on Seek. Change them in your project: Settings → Email me about replies, approvals and calls.` : 'You get these emails because of your notification settings. Change them in Seek: Account settings → Notifications → Email.'}</div>
 </td></tr></table></body></html>`;
-  const text = [daily ? 'Here’s what you missed in Seek' : `Hi ${first}, you have unread messages in Seek`, '', ...notes.slice(0, 20).map((n) => `• ${headline(n)}${n.body ? ': ' + n.body.slice(0, 160) : ''}\n  ${linkOf(n)}`), '', 'Change these emails in Seek: Account settings → Notifications → Email.'].join('\n');
+  const text = [daily ? `Here’s what you missed in ${where}` : `Hi ${first}, you have unread messages ${brand ? 'from ' + brand.name : 'in Seek'}`, '', ...notes.slice(0, 20).map((n) => `• ${headline(n)}${n.body ? ': ' + n.body.slice(0, 160) : ''}\n  ${linkOf(n)}`), '', brand ? 'Change these emails in your project on Seek: Settings.' : 'Change these emails in Seek: Account settings → Notifications → Email.'].join('\n');
   return { subject, html, text };
 }
 
@@ -285,6 +335,7 @@ async function flush(admin: Client) {
   if (mine.size && Deno.env.get('BREVO_API_KEY') && FROM) {
     const { data: st } = await admin.from('notify_state').select('user_id, last_email_at, last_digest_on').in('user_id', [...mine.keys()]);
     const state = new Map(((st ?? []) as { user_id: string; last_email_at: string | null; last_digest_on: string | null }[]).map((x) => [x.user_id, x]));
+    const brandOf = await brands(admin, [...mine.keys()]).catch(() => new Map<string, Brand>());
     for (const [uid, notes] of mine) {
       const p = who.get(uid);
       if (!p?.email) continue;
@@ -295,7 +346,7 @@ async function flush(admin: Client) {
         // away a while already: now. Otherwise once a note has waited 10 minutes and they still haven't looked
         const due = away(p, EMAIL_AWAY_MS) || (away(p, PUSH_AWAY_MS) && notes.some((n) => Date.now() - Date.parse(n.created_at) > EMAIL_AWAY_MS));
         if (!due) continue;
-        const e = emailOf(notes, p.name.split(/\s+/)[0], false);
+        const e = emailOf(notes, p.name.split(/\s+/)[0], false, brandOf.get(uid));
         if ((await sendEmail({ email: p.email, name: p.name }, e.subject, e.html, e.text)).ok) {
           out.emailed++;
           await admin.from('notifications').update({ emailed_at: new Date().toISOString() }).in('id', notes.map((n) => n.id));
@@ -304,7 +355,7 @@ async function flush(admin: Client) {
       } else if (p.notify_email === 'daily') {
         const z = zoned(new Date(), p.time_zone);
         if (z.min < 9 * 60 || s?.last_digest_on === z.day) continue;
-        const e = emailOf(notes, p.name.split(/\s+/)[0], true);
+        const e = emailOf(notes, p.name.split(/\s+/)[0], true, brandOf.get(uid));
         if ((await sendEmail({ email: p.email, name: p.name }, e.subject, e.html, e.text)).ok) {
           out.digests++;
           await admin.from('notifications').update({ emailed_at: new Date().toISOString() }).in('id', notes.map((n) => n.id));
@@ -340,7 +391,8 @@ Deno.serve(async (req) => {
       const to = p?.email || user.email;
       if (!to) return json({ error: 'Your account has no email address' }, 400);
       const sample: Note = { id: 0, user_id: user.id, workspace_id: null, kind: 'dm', title: 'Seek', body: 'This is a test. Unread direct messages, mentions, replies and client messages will reach you like this when you’re away.', conv: 'test', message_id: null, created_at: new Date().toISOString() };
-      const e = emailOf([sample], (p?.name || 'there').split(/\s+/)[0], false);
+      const brand = (await brands(admin, [user.id]).catch(() => new Map<string, Brand>())).get(user.id);
+      const e = emailOf([sample], (p?.name || 'there').split(/\s+/)[0], false, brand);
       const r = await sendEmail({ email: to, name: p?.name || to }, 'Seek email notifications are on', e.html, e.text);
       return r.ok ? json({ sent: to }) : json({ error: r.why }, 502);
     }

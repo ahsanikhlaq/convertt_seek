@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { backendOn, currentAccount, dropAccountSnapshot, forgetAccount, sb, snapshotAccount, type Account } from './backend';
 import { DEFAULT_THEME, initialState, PEOPLE, STATE_VERSION, STATUSES, type State } from './data';
 import { initialsOf } from './format';
-import { applyTheme } from './theme';
+import { applyTheme, usableAccent } from './theme';
 
 const KEY = 'seek:state';
 
@@ -120,6 +120,16 @@ export function applyAccount(d: State, acc: Account | null) {
   }
   // a real account starts setup with no sample teammates to invite
   else d.ws.invites = [];
+  // a client's portal takes their agency's brand colour, when it is readable and they haven't picked their own
+  if (!acc.workspace && acc.clientSpaces.length) {
+    const c = acc.clientSpaces.find((x) => x.id === d.cs) ?? acc.clientSpaces[0];
+    const brand = usableAccent(c.agencyAccent);
+    if (brand && d.theme.acc === DEFAULT_THEME.acc) {
+      d.theme = { ...d.theme, acc: brand };
+      // the agency's colour, not a choice of theirs: nothing to save to their profile
+      d.savedLook = JSON.stringify({ theme: d.theme, mode: d.mode });
+    }
+  }
 }
 
 /** Your name and initials wherever your avatar shows (you are always person 'AH'). */

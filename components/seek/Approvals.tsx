@@ -119,6 +119,7 @@ export function ApprovalsTab({
   team,
   approvers,
   pendingApprovers,
+  focus,
 }: {
   space: string;
   list: Approval[] | null;
@@ -129,6 +130,8 @@ export function ApprovalsTab({
   approvers: Approver[];
   /** approvers still to join, named in the empty state */
   pendingApprovers?: string[];
+  /** an approval to scroll to and highlight (opened from "Waiting for you") */
+  focus?: number | null;
 }) {
   const { toast } = useSeek();
   const [asking, setAsking] = useState<{ decision?: number; title?: string } | null>(null);
@@ -143,6 +146,14 @@ export function ApprovalsTab({
       setAsking({ decision: d.decision, title: d.title });
     }
   }, [team, space]);
+
+  // opened from "Waiting for you": bring that approval into view
+  const loaded = !!list;
+  useEffect(() => {
+    if (!focus || !loaded) return;
+    const id = setTimeout(() => document.getElementById('appr-' + focus)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60);
+    return () => clearTimeout(id);
+  }, [focus, loaded]);
 
   const done = (err: string | null, ok: string) => {
     toast(err ?? ok);
@@ -184,7 +195,7 @@ export function ApprovalsTab({
           const mine = a.approver === me && a.status === 'requested';
           const nudgedToday = !!a.nudgedAt && Date.now() - new Date(a.nudgedAt).getTime() < 864e5;
           return (
-            <div key={a.id} className={'appr' + (a.status === 'approved' ? ' done' : '')}>
+            <div key={a.id} id={'appr-' + a.id} className={'appr' + (a.status === 'approved' ? ' done' : '') + (a.id === focus ? ' focus' : '')}>
               <div className="k">
                 <b>{a.title}</b>
                 <StateTag a={a} />
