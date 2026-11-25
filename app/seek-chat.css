@@ -1,0 +1,227 @@
+/* ===== Chat layout (channels, DMs, client spaces) =====
+   Loaded last (app/layout.tsx), after seek.css and seek-a11y.css, so equal-specificity rules here win.
+   Colours come from the theme variables, so light, dark and custom themes all follow. */
+
+/* ---------- the message list: calm rhythm, one avatar size, readable line length ---------- */
+.feed{padding:12px 0 18px}
+.msg{padding:6px 28px;margin-top:10px;gap:12px}
+.msg.cmp{padding:2px 28px;margin-top:0}
+.msg>.av,.msg>.pav .av{width:36px!important;height:36px!important;font-size:13px!important;border-radius:9px!important}
+.msg .gut{width:36px;font-size:11px;padding-top:3px;color:var(--sb);font-variant-numeric:tabular-nums}
+.msg.cmp:focus-within .gut{opacity:1}
+.msg .nm{gap:8px;line-height:1.3}
+.msg .nm b{font-size:15px;font-weight:650;letter-spacing:-.005em}
+.msg .nm small{font-size:12px;color:var(--sb);cursor:default}
+.msg .nm .tag{height:19px;font-size:11px;padding:0 6px}
+.msg .tx{margin-top:2px;font-size:15px;line-height:1.55;max-width:75ch}
+.msg.cmp .tx{margin-top:0}
+.msg.failed .tx{opacity:.6}
+.msg:hover{background:color-mix(in srgb,var(--ink) 3%,transparent)!important}
+.msg.ai:hover{background:color-mix(in srgb,var(--ai) 7%,transparent)!important}
+/* a card-only message (meeting, huddle, a file without a caption): the card sits right under the name */
+.msg.cardonly .bd>.dec:first-of-type,.msg.cardonly .bd>.files:first-of-type{margin-top:6px}
+.msg.cmp.cardonly .bd>.dec:first-of-type,.msg.cmp.cardonly .bd>.files:first-of-type{margin-top:2px}
+/* the hover toolbar */
+.mt{top:-15px;right:24px;border-radius:10px;border-color:var(--ln);box-shadow:0 1px 2px rgba(38,19,37,.06),0 6px 18px -6px rgba(38,19,37,.22)}
+.mt button{width:30px;height:30px}
+/* pinned / saved under a message */
+.mflags{display:flex;gap:12px;margin-top:6px;font-size:12px;font-weight:600;color:var(--vtext)}
+
+/* ---------- day dividers and the unread line ---------- */
+.daysep{margin:22px 0 8px}
+.daysep:before{background:var(--ln)}
+.daysep span{font-size:12px;font-weight:600;color:var(--mu);padding:3px 12px;border-color:var(--ln);box-shadow:none;letter-spacing:.005em}
+.newsep{margin:14px 28px 6px;color:var(--red);font-size:12px;font-weight:700;gap:0}
+.newsep:before{background:color-mix(in srgb,var(--red) 55%,transparent)}
+.newsep span{padding:1px 9px;border-radius:999px;background:var(--reds);margin-left:8px}
+
+/* ---------- cards in the conversation: decision, approval, meeting, huddle, task, file ---------- */
+.dec{border-radius:12px;padding:12px 14px 12px 16px;gap:4px;border:1px solid var(--ln)}
+.dec .k{gap:6px;min-height:20px;flex-wrap:wrap}
+.dec .k>span:first-child{font:700 10.5px 'Geist Mono',ui-monospace,monospace;letter-spacing:.1em;display:inline-flex;align-items:center;gap:5px}
+.dec .k .tag{height:19px;font-size:11px;padding:0 6px}
+.dec b{font-size:15px;font-weight:650;line-height:1.4}
+.dec small{font-size:13px;line-height:1.45}
+.dec .a{margin-top:8px;gap:6px}
+.dec .a .btn.sm{height:30px}
+.msg .dec{margin:8px 0 2px;max-width:560px}
+/* a decision or approval logged from a message lines up with the message's text */
+.feed>.dec{margin:4px 28px 8px 76px;max-width:560px}
+.msg .file{max-width:360px;border-radius:11px;padding:9px 12px}
+.msg .file:hover{border-color:var(--ln2)}
+.msg .files{max-width:560px}
+.task{display:flex;align-items:center;gap:6px 10px;padding:8px 12px;border-radius:11px;border:1px solid var(--ln);max-width:560px;font-size:14px;line-height:1.4}
+.msg .task{margin-top:8px}
+.task i{width:16px;height:16px;border-radius:5px;border:1.5px solid var(--vtext);display:grid;place-items:center;flex:none;color:#fff}
+.task.done i{background:var(--vtext)}
+html.dark .task.done i{color:var(--card)}
+.task>span.tt{flex:1 1 180px;min-width:0;font-weight:600;color:var(--ink)}
+.task.done>span.tt{text-decoration:line-through;color:var(--sb);font-weight:500}
+.task small{color:var(--sb);font-size:12.5px;white-space:nowrap}
+.task.late small{color:var(--red);font-weight:600}
+.task>.tag{flex:none}
+
+/* ---------- notes at the top of a conversation ---------- */
+/* slim, dismissible: who can read Client chat / Team notes */
+.hint{display:flex;align-items:center;gap:8px;margin:2px 28px 8px;padding:4px 4px 4px 12px;border-radius:9px;font-size:13px;line-height:1.4;min-height:36px}
+.hint.gold{background:var(--golds);color:var(--gold)}
+.hint.v{background:var(--vs);color:var(--vd)}
+.hint>svg{flex:none}
+.hint>span{flex:1;min-width:0}
+.hint b{font-weight:650}
+.hint .linkbtn{color:inherit;font-weight:600;text-decoration:underline;text-underline-offset:2px}
+.hint .linkbtn:hover{color:inherit}
+.hint-x{flex:none;position:relative;width:28px;height:28px;border:0;padding:0;background:none;border-radius:7px;color:inherit;opacity:.75;display:grid;place-items:center}
+.hint-x:hover{opacity:1;background:color-mix(in srgb,currentColor 12%,transparent)}
+.hint-x:after{content:"";position:absolute;inset:-6px}
+/* quiet one-liners (DM privacy, the client's reply promise) */
+.fnote{display:flex;align-items:center;justify-content:center;gap:6px;margin:2px 28px 6px;font-size:12.5px;color:var(--sb);text-align:center}
+.fnote.gold{color:var(--gold)}
+/* other notices: one compact line, not a block */
+.banner{padding:7px 12px;font-size:13.5px;line-height:1.45;border-radius:9px;margin-bottom:8px}
+.badge.gold{background:var(--gold)}
+html.dark .badge.gold{background:#946615}
+
+/* ---------- an empty conversation: where it starts and what to do first ---------- */
+.fempty-w{min-height:100%;display:flex;flex-direction:column}
+.fempty-w>.fnote{display:none}
+.fempty{margin-top:auto;padding:28px 28px 8px;animation:fempty-in .3s ease .35s both}
+@keyframes fempty-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.cstart{max-width:600px}
+.cstart-mk{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;background:var(--vs);color:var(--vtext);margin-bottom:14px}
+.cstart-mk:has(.av,.orgmark,.pav){background:none;width:auto;height:auto;justify-content:start}
+.cstart-mk .av,.cstart-mk .orgmark{border-radius:14px!important}
+.cstart h2{margin:0 0 6px;font-size:21px;font-weight:700;letter-spacing:-.02em;line-height:1.3;color:var(--ink);overflow-wrap:anywhere}
+.cstart p{margin:0;color:var(--mu);font-size:15px;line-height:1.55;max-width:62ch}
+.cstart p b{color:var(--ink);font-weight:600}
+.cstart-a{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.cstart-a .btn.sm{height:34px;padding:0 12px;font-size:13.5px;background:var(--card);border-color:var(--ln2)}
+.cstart-a .btn.sm:hover{background:var(--soft)}
+.nowrap{white-space:nowrap}
+
+/* ---------- "N new messages" while you read further up ---------- */
+.jump.latest{display:inline-flex;align-items:center;gap:6px;animation:fi .15s}
+
+/* ---------- the composer: one compact unit ---------- */
+.comp{border-radius:14px;border-color:var(--ln2)}
+.comp .lane{display:flex;align-items:center;gap:6px;padding:8px 14px 0;font-size:12.5px;line-height:1.3;color:var(--sb);min-width:0}
+.comp .lane>svg{flex:none}
+.comp .lane span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.comp .lane b{font-weight:650}
+.comp.gold .lane{color:var(--gold)}
+.comp .fmt{padding:6px 8px 4px;margin:0 6px;border-bottom:1px solid var(--ln)!important}
+.comp .fmt button{width:30px;height:28px}
+.comp textarea{padding:9px 14px 2px;min-height:42px;font-size:15px}
+.comp .cr{flex-wrap:nowrap;gap:2px;padding:2px 6px 6px}
+.comp .cr .ic{width:34px;height:34px;border-radius:8px;color:var(--sb);flex:none}
+.comp .cr .ic svg{width:19px;height:19px}
+.comp .cr .ic:hover{color:var(--ink)}
+.comp .cr .ic.on{background:var(--soft);color:var(--ink)}
+.comp .cr .ic:disabled{opacity:.45;cursor:default}
+.comp .cr .btn.later{height:34px;padding:0 9px;color:var(--sb);font-size:13px;gap:5px;flex:none}
+.comp .cr .btn.later:hover{color:var(--ink)}
+html.dark .comp .cr .btn.later{background-color:transparent!important;border-color:transparent!important}
+html.dark .comp .cr .btn.later:hover{background-color:var(--soft)!important}
+.comp .cr .btn.send{height:34px;min-width:38px;padding:0 11px;border-radius:9px;gap:7px;font-size:13.5px;flex:none;transition:background .15s,color .15s,border-color .15s,opacity .15s}
+.comp .cr .btn.send.wl{padding:0 12px 0 14px}
+/* nothing typed yet: the button waits quietly (the client lane stays gold, so it is clear where it goes) */
+.comp .cr .btn.send.idle{opacity:1;background:var(--soft)!important;border-color:transparent!important;color:var(--sb)!important;cursor:default}
+.comp .cr .btn.send.gold.idle{background:var(--golds)!important;border-color:var(--goldl)!important;color:var(--gold)!important}
+.comp .cr .btn.send.busy svg{animation:sendgo .9s ease-in-out infinite}
+@keyframes sendgo{50%{transform:translateX(3px);opacity:.5}}
+/* files on their way up */
+.comp .upl{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px 0}
+.comp .upc{display:inline-flex;align-items:center;gap:7px;max-width:260px;height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--ln);background:var(--soft);font-size:13px;color:var(--mu)}
+.comp .upc span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--ln2);border-top-color:var(--vtext);animation:chatspin .8s linear infinite;flex:none}
+@keyframes chatspin{to{transform:rotate(360deg)}}
+/* thread replies: the box is smaller */
+.comp.thr .cr label{font-size:13px}
+
+/* ---------- tabs; client spaces put the rest under "More" ---------- */
+.main .tabs{gap:2px}
+.tb{height:42px;padding:0 10px;font-size:14px;color:var(--sb)}
+.tb .badge{height:18px;min-width:18px;font-size:11px}
+.stabs{position:relative;z-index:6;display:flex;align-items:stretch;border-bottom:1px solid var(--ln);flex:none;container:stabs/inline-size}
+.stabs>.tabs{border-bottom:0;flex:0 1 auto;min-width:0}
+.tmore-w{position:relative;display:none;flex:none}
+.tb.tmore{gap:4px;margin-bottom:0}
+.tb.tmore.open{color:var(--ink)}
+.tmenu{position:absolute;top:calc(100% + 2px);left:0;min-width:210px;background:var(--card,#fff);border:1px solid var(--ln);border-radius:12px;box-shadow:0 14px 34px rgba(38,19,37,.18);padding:5px;display:flex;flex-direction:column;gap:1px;z-index:30;animation:fi .12s}
+.tmenu button{display:none;align-items:center;gap:8px;height:36px;border:0;background:none;border-radius:8px;padding:0 10px;font-size:14px;font-weight:500;color:var(--ink);text-align:left;cursor:pointer}
+.tmenu button>span:first-child{flex:1}
+.tmenu button:hover,.tmenu button:focus-visible{background:var(--soft)}
+.tmenu button.on{color:var(--vtext);font-weight:650}
+.tmenu button.t3{display:flex}
+html.dark .tmenu{box-shadow:0 14px 34px rgba(0,0,0,.5)}
+@media (min-width:761px){
+  .stabs .tb.t3:not(.on){display:none}
+  .stabs .tmore-w{display:flex}
+}
+/* a narrow column (details pane open on a laptop): Status and Files move under More too */
+@media (min-width:761px){
+  @container stabs (max-width:580px){
+    .stabs .tb.t2:not(.on){display:none}
+    .tmenu button.t2{display:flex}
+  }
+}
+
+/* ---------- client space: the details pane is narrower, and closes to give the chat room ---------- */
+@media (min-width:761px){.pane.sp-pane{width:296px}}
+@media (min-width:761px) and (max-width:1180px){.pane.sp-pane{width:272px}}
+.main .mh .btn.sm.on{background:var(--soft);color:var(--ink)}
+/* header labels give way to icons when the column is narrow (room for one more button) */
+@media (max-width:1440px){.app.has-pane .main .mh .hide-n{display:none}}
+@media (max-width:1100px){.main .mh .hide-n{display:none}}
+
+/* ---------- touch screens: a quiet "⋮" (first line of a group; grouped lines after a tap); long press stays ---------- */
+@media (hover:none){
+  .mtt{width:28px;height:28px;top:4px;right:6px;color:var(--sb);opacity:.6}
+  .mtt svg{width:15px;height:15px}
+  .msg.cmp .mtt{top:0;opacity:0;pointer-events:none;transition:opacity .15s}
+  .msg.cmp.tap .mtt,.msg.cmp .mtt:focus-visible,.msg.cmp .mtt[aria-expanded=true]{opacity:.6;pointer-events:auto}
+  .msg.tap{background:color-mix(in srgb,var(--ink) 3%,transparent)}
+  .msg .tx{max-width:none}
+}
+
+/* ---------- desktop spacing ---------- */
+@media (min-width:761px){
+  .msg{padding:6px 28px}
+  .msg.cmp{padding:2px 28px}
+  .hint,.fnote,.banner{margin-left:28px;margin-right:28px}
+  .comp{margin:6px 28px 20px}
+  .main .tabs{padding:0 20px}
+}
+
+/* ---------- phones ---------- */
+@media (max-width:760px){
+  .feed{padding:8px 0 10px}
+  .msg{padding:6px 14px;gap:10px;margin-top:8px}
+  .msg.cmp{padding:2px 14px;margin-top:0}
+  .msg>.av,.msg>.pav .av{width:34px!important;height:34px!important;font-size:12.5px!important}
+  .msg .gut{width:34px}
+  .feed>.dec{margin:4px 14px 8px 58px;max-width:none}
+  .msg .dec,.msg .task,.msg .files{max-width:100%}
+  .hint,.fnote,.banner{margin-left:12px;margin-right:12px}
+  .hint{font-size:12.5px}
+  .newsep{margin:12px 14px 4px}
+  .daysep{margin:16px 0 6px}
+  .fempty{padding:20px 16px 8px}
+  .cstart h2{font-size:19px}
+  .cstart p{font-size:14.5px}
+  .comp{margin:4px 10px 10px}
+  .comp .lane{padding:7px 12px 0}
+  .comp textarea{padding:8px 12px 2px}
+  .comp .cr .ic{width:36px;height:36px}
+  .comp .cr .ic.fmtb{display:none}
+  .comp .cr .btn.later{width:36px;padding:0;justify-content:center}
+  .comp .cr .btn.later .btxt{display:none}
+  .comp .cr .btn.send{height:36px}
+  .tb{height:40px}
+  .stabs>.tabs{flex:1 1 auto}
+}
+/* narrow phones: the client lane's send button keeps its colour; the strip above says who sees it */
+@media (max-width:430px){
+  .comp .cr .btn.send.wl{padding:0 11px}
+  .comp .cr .btn.send.wl .btxt{display:none}
+}

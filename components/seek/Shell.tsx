@@ -414,9 +414,9 @@ export function MainHeader({ title, sub, right, below, mark }: { title: React.Re
 }
 
 /** Right-hand detail pane (full screen on phones). */
-export function Pane({ title, sub, icon, onClose, children }: { title: React.ReactNode; sub?: React.ReactNode; icon?: React.ReactNode; onClose: () => void; children: React.ReactNode }) {
+export function Pane({ title, sub, icon, onClose, children, className }: { title: React.ReactNode; sub?: React.ReactNode; icon?: React.ReactNode; onClose: () => void; children: React.ReactNode; className?: string }) {
   return (
-    <aside className="pane">
+    <aside className={'pane' + (className ? ' ' + className : '')} aria-label={typeof title === 'string' ? title : undefined}>
       <div className="ph">
         {icon}
         <div style={{ flex: 1, minWidth: 0 }}>

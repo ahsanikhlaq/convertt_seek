@@ -7,7 +7,7 @@ import { useLiveChat } from '@/lib/seek/liveProvider';
 import { channelId } from '@/lib/seek/format';
 import { useSeek } from '@/lib/seek/store';
 import { Modal, PromptDialog } from '../Dialogs';
-import { Composer, Feed, ThreadPane, useSendTo, type FeedRef } from '../Messages';
+import { Composer, ConvStart, Feed, ThreadPane, useSendTo, type FeedRef } from '../Messages';
 import { MainHeader, Shell, Sidebar } from '../Shell';
 import { Avatar, OrgMark } from '../ui';
 import { FileList, useAttach } from '../Files';
@@ -83,7 +83,14 @@ export function ChannelsPage() {
       title={wsName}
       onTitle={live ? () => setWsOpen(true) : undefined}
       titleHint={live ? (live.admin ? 'Workspace settings' : 'About this workspace') : undefined}
-      sub={backendOn ? `Team · ${ws.channels.length} ${ws.channels.length === 1 ? 'channel' : 'channels'} · ${team.length} ${team.length === 1 ? 'person' : 'people'}` : WORKSPACES[wsId].sub}
+      sub={
+        backendOn
+          ? // until the channels and the team have loaded, a neutral line instead of "0 people"
+            live?.ready && team.length > 0
+            ? `Team · ${ws.channels.length} ${ws.channels.length === 1 ? 'channel' : 'channels'} · ${team.length} ${team.length === 1 ? 'person' : 'people'}`
+            : 'Team workspace'
+          : WORKSPACES[wsId].sub
+      }
       action={
         <button type="button" className="btn sm" onClick={() => setCreating(true)} aria-label="New channel">
           <Ic n="plus" size={18} />
@@ -187,9 +194,48 @@ export function ChannelsPage() {
   let body: React.ReactNode;
   if (ui.chTab === 'Messages') {
     const showJump = !live && wsId === 'C' && ch === 'launch-squad' && !s.seenNew;
+    const others = team.filter((k) => k !== 'AH').length;
     body = (
       <>
-        <Feed feed={feed} />
+        <Feed
+          feed={feed}
+          empty={
+            <ConvStart
+              mark={c.private ? <Ic n="lock" size={22} /> : <Ic n="hash" size={22} />}
+              title={
+                <>
+                  This is the start of <span className="nowrap">{(c.private ? '' : '#') + ch}</span>
+                </>
+              }
+              actions={
+                <>
+                  {live && (
+                    <button type="button" className="btn sm" onClick={() => setInviting(true)}>
+                      <Ic n="users" size={14} /> Invite people
+                    </button>
+                  )}
+                  {live && c.cid && (
+                    <button type="button" className="btn sm" onClick={() => setMembersOf(ch)}>
+                      <Ic n="settings" size={14} /> Members & settings
+                    </button>
+                  )}
+                  {!live && (
+                    <button type="button" className="btn sm" onClick={() => toast('Invite people to #' + ch)}>
+                      <Ic n="users" size={14} /> Invite people
+                    </button>
+                  )}
+                </>
+              }
+            >
+              {c.desc ? c.desc.replace(/\.\s*$/, '') + '. ' : ''}
+              {c.private
+                ? 'Only the people added to this channel can read it.'
+                : live && others > 0
+                  ? 'Everyone on the team can join and read it. Say hello, share a file or start a huddle.'
+                  : 'Share updates, files and decisions here. Messages stay searchable for the whole team.'}
+            </ConvStart>
+          }
+        />
         {showJump && (
           <button
             type="button"
@@ -205,7 +251,10 @@ export function ChannelsPage() {
             <Ic n="down" size={14} /> 2 new messages
           </button>
         )}
-        <Composer key={wsId + ch} placeholder={'Message #' + ch} people={team} onSend={(t) => (live ? void live.send(ch, t) : send(t))} onAttach={attach} onSchedule={schedule} />
+        <Composer key={wsId + ch} placeholder={'Message #' + ch} people={team} onSend={(t) => {
+            if (live) return live.send(ch, t);
+            send(t);
+          }} onAttach={attach} onSchedule={schedule} />
       </>
     );
   } else if (live && ui.chTab === 'Files') {

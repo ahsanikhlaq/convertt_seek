@@ -61,6 +61,29 @@ export function clockOf12(m: { at?: string; time: string }) {
   return new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+/** "Wednesday, 18 November 2026 at 3:06 PM" for a timestamp's tooltip. */
+function fullWhen(m: { at?: string; time: string }) {
+  const at = atOf(m);
+  if (!at) return m.time;
+  const d = new Date(at);
+  return d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' at ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+/**
+ * The message's own text adds nothing next to its card: a meeting or huddle card says it all, and a file sent
+ * without a caption gets the file's name as its text. The text stays on the message (notifications, search).
+ */
+function textIsCardOnly(m: ChatMessage) {
+  if (m.failed) return false;
+  if (m.card?.type === 'meeting' || m.card?.type === 'huddle') return true;
+  const f = m.files;
+  if (f?.length) {
+    const t = m.text.trim();
+    return t === '' || t === (f.length === 1 ? f[0].name : f.length + ' files');
+  }
+  return false;
+}
+
 /** "Today", "Yesterday", "Monday, June 15th" (with the year when it isn't this year). */
 export function dayLabel(iso: string) {
   const d = new Date(iso);
@@ -304,13 +327,21 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
 
   const rowRef = useRef<HTMLDivElement>(null);
   // touch: a long press (about 450 ms) on the message opens its actions
-  const press = useRef<{ t: number; x: number; y: number } | null>(null);
+  const press = useRef<{ t: number; x: number; y: number; at: number } | null>(null);
   const pressedAt = useRef(0);
   const endPress = () => {
     if (press.current) clearTimeout(press.current.t);
     press.current = null;
   };
   useEffect(() => endPress, []);
+  // touch: a short tap on a grouped line shows its "⋮" for a few seconds (the first line of a group always has one)
+  const [tapped, setTapped] = useState(false);
+  useEffect(() => {
+    if (!tapped) return;
+    const t = setTimeout(() => setTapped(false), 5000);
+    return () => clearTimeout(t);
+  }, [tapped]);
+  const cardOnly = textIsCardOnly(m);
   // close the "More" menu on a click elsewhere
   useEffect(() => {
     if (!menuOpen) return;
@@ -404,7 +435,17 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
   return (
     <div
       ref={rowRef}
-      className={'msg' + (compact ? ' cmp' : '') + (m.ai ? ' ai' : '') + (m.client ? ' client' : '') + (menuOpen ? ' menu' : '') + (m.flash ? ' flash' : '')}
+      className={
+        'msg' +
+        (compact ? ' cmp' : '') +
+        (m.ai ? ' ai' : '') +
+        (m.client ? ' client' : '') +
+        (menuOpen ? ' menu' : '') +
+        (m.flash ? ' flash' : '') +
+        (tapped ? ' tap' : '') +
+        (cardOnly ? ' cardonly' : '') +
+        (m.failed ? ' failed' : '')
+      }
       data-id={m.id}
       onPointerDown={(e) => {
         if (e.pointerType !== 'touch' || inThread || (e.target as HTMLElement).closest('button,a,input,textarea,select,audio,video')) return;
@@ -415,13 +456,17 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
           setUI({ menu: m.id });
           navigator.vibrate?.(10);
         }, 450);
-        press.current = { t, x: e.clientX, y: e.clientY };
+        press.current = { t, x: e.clientX, y: e.clientY, at: Date.now() };
       }}
       onPointerMove={(e) => {
         const p0 = press.current;
         if (p0 && Math.hypot(e.clientX - p0.x, e.clientY - p0.y) > 10) endPress(); // scrolling, not pressing
       }}
-      onPointerUp={endPress}
+      onPointerUp={() => {
+        // a short tap (not a long press, not a scroll) reveals this line's "⋮"
+        if (press.current && Date.now() - press.current.at < 400) setTapped(true);
+        endPress();
+      }}
       onPointerCancel={endPress}
       onContextMenu={(e) => {
         // no browser menu on top of the message actions after a long press
@@ -429,11 +474,11 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
       }}
     >
       {compact ? (
-        <span className="gut" title={m.time}>
+        <span className="gut" title={fullWhen(m)}>
           {clockOf12(m).replace(/\s?[AP]M$/i, '')}
         </span>
       ) : (
-        <Avatar k={m.who} size={40} />
+        <Avatar k={m.who} size={36} />
       )}
       <div className="bd">
         {!compact && (
@@ -441,13 +486,15 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
             <b>{p.name}</b>
             {m.ai && <span className="tag ai">AI</span>}
             {m.client && <span className="tag gold">client</span>}
-            <small title={m.time}>{clockOf12(m)}</small>
+            <small title={fullWhen(m)}>{clockOf12(m)}</small>
             {m.edited && <small className="ed">(edited)</small>}
           </div>
         )}
-        <div className="tx" style={m.failed ? { opacity: 0.6 } : undefined}>
-          <RichText text={backendOn ? localMeetingText(m.text, m.at) : m.text} />
-        </div>
+        {!cardOnly && (
+          <div className="tx">
+            <RichText text={backendOn ? localMeetingText(m.text, m.at) : m.text} />
+          </div>
+        )}
         {m.failed && (
           <div className="unsent" role="status">
             <b>Not sent</b>
@@ -483,16 +530,24 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
             <RichText text={m.after} />
           </div>
         )}
-        {myTasks.map((t) => (
-          <div key={t.id} className="task" style={t.status === 'done' ? { opacity: 0.6 } : undefined}>
-            <i></i>
-            <span style={t.status === 'done' ? { textDecoration: 'line-through' } : undefined}>{t.title}</span> · {t.owner === meId ? 'you' : (PEOPLE[t.owner]?.name ?? 'teammate')} · {t.status === 'done' ? 'done' : dueText(t.due)} <span className="tag v">task</span>
-          </div>
-        ))}
+        {myTasks.map((t) => {
+          const due = t.status === 'done' ? 'done' : dueText(t.due);
+          return (
+            <div key={t.id} className={'task' + (t.status === 'done' ? ' done' : '') + (due === 'overdue' ? ' late' : '')}>
+              <i aria-hidden="true">{t.status === 'done' && <Ic n="check" size={11} />}</i>
+              <span className="tt">{t.title}</span>
+              <small>
+                {t.owner === meId ? 'You' : (PEOPLE[t.owner]?.name ?? 'Teammate')} · {due}
+              </small>
+              <span className="tag v">Task</span>
+            </div>
+          );
+        })}
         {m.task && (
           <div className="task">
-            <i></i>
-            {m.task} <span className="tag v">task</span>
+            <i aria-hidden="true"></i>
+            <span className="tt">{m.task}</span>
+            <span className="tag v">Task</span>
           </div>
         )}
         {Object.keys(rx).length > 0 && (
@@ -522,7 +577,7 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
           </button>
         )}
         {(isSaved || (backendOn && m.pinned)) && (
-          <div style={{ fontSize: 12.5, color: 'var(--vtext)', marginTop: 4, fontWeight: 600, display: 'flex', gap: 10 }}>
+          <div className="mflags">
             {backendOn && m.pinned && <span className="mtl"><Ic n="pin" size={12} /> Pinned</span>}
             {isSaved && <span className="mtl"><Ic n="star" size={12} /> Saved</span>}
           </div>
@@ -793,7 +848,12 @@ function DecisionRow({ c }: { c: DecisionCard }) {
 /* ---------------- feed ---------------- */
 
 export function FeedItemView({ item, feed, inThread, compact }: { item: FeedItem; feed: FeedRef; inThread?: boolean; compact?: boolean }) {
-  if (item.kind === 'new') return <div className="newsep"><span>New</span></div>;
+  if (item.kind === 'new')
+    return (
+      <div className="newsep" role="separator" aria-label="New messages">
+        <span>New messages</span>
+      </div>
+    );
   if (item.kind === 'dec') return <DecisionRow c={item} />;
   if (backendOn) return <LiveMessage m={item} feed={feed} inThread={inThread} compact={compact} />;
   return <MessageRow m={item} feed={feed} inThread={inThread} compact={compact} />;
@@ -841,20 +901,46 @@ function LiveMessage({ m, feed, inThread, compact }: { m: ChatMessage; feed: Fee
   );
 }
 
-/** Scrollable message list that sticks to the newest message. */
-export function Feed({ feed, banner, footer, children }: { feed: FeedRef; banner?: React.ReactNode; footer?: React.ReactNode; children?: React.ReactNode }) {
+/**
+ * Scrollable message list that sticks to the newest message. If you have scrolled up to read, new messages from
+ * others don't pull you down: a "New messages" pill appears instead. `empty` is shown when there are no messages yet.
+ */
+export function Feed({ feed, banner, footer, children, empty }: { feed: FeedRef; banner?: React.ReactNode; footer?: React.ReactNode; children?: React.ReactNode; empty?: React.ReactNode }) {
   const { s } = useSeek();
   const items = feed.get(s);
   const ref = useRef<HTMLDivElement>(null);
   const count = useRef(-1);
   const last = items[items.length - 1];
+  // whether the newest message is in view, and how many arrived below while you were reading further up
+  const atBottom = useRef(true);
+  const [below, setBelow] = useState(0);
 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    if (count.current === -1 || items.length > count.current) el.scrollTop = el.scrollHeight;
+    const grew = items.length - Math.max(count.current, 0);
+    const mine = last?.kind === 'msg' && last.who === 'AH';
+    if (count.current === -1 || (grew > 0 && (atBottom.current || mine))) {
+      el.scrollTop = el.scrollHeight;
+      atBottom.current = true;
+      setBelow(0);
+    } else if (grew > 0) setBelow((n) => n + grew);
     count.current = items.length;
-  }, [items.length, last]);
+  }, [items.length, last]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onScroll = () => {
+    const el = ref.current;
+    if (!el) return;
+    atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (atBottom.current && below) setBelow(0);
+  };
+  const toLatest = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    setBelow(0);
+  };
+  const hasMsgs = items.some((x) => x.kind === 'msg');
 
   // screen readers: "New message from …" for messages that arrive while the conversation is open (not the history)
   const [said, setSaid] = useState<{ text: string; n: number } | null>(null);
@@ -876,22 +962,48 @@ export function Feed({ feed, banner, footer, children }: { feed: FeedRef; banner
   }, [items, feed.where]);
 
   return (
-    <div className="feed" id="feed" ref={ref}>
-      <div className="sr-only" aria-live="polite" aria-atomic="true">
-        {said && <span key={said.n}>{said.text}</span>}
-      </div>
-      {banner}
-      {layoutFeed(items).map((x) =>
-        'day' in x ? (
-          <div key={x.key} className="daysep" role="separator">
-            <span>{x.day}</span>
+    <>
+      <div className="feed" id="feed" ref={ref} onScroll={onScroll}>
+        <div className="sr-only" aria-live="polite" aria-atomic="true">
+          {said && <span key={said.n}>{said.text}</span>}
+        </div>
+        {!hasMsgs && empty ? (
+          <div className="fempty-w">
+            {banner}
+            <div className="fempty">{empty}</div>
           </div>
         ) : (
-          <FeedItemView key={x.item.kind + x.item.id} item={x.item} feed={feed} compact={x.compact} />
-        ),
+          banner
+        )}
+        {layoutFeed(items).map((x) =>
+          'day' in x ? (
+            <div key={x.key} className="daysep" role="separator" aria-label={x.day}>
+              <span>{x.day}</span>
+            </div>
+          ) : (
+            <FeedItemView key={x.item.kind + x.item.id} item={x.item} feed={feed} compact={x.compact} />
+          ),
+        )}
+        {children}
+        {footer}
+      </div>
+      {below > 0 && (
+        <button type="button" className="jump latest" onClick={toLatest}>
+          <Ic n="down" size={14} /> {below === 1 ? '1 new message' : below + ' new messages'}
+        </button>
       )}
-      {children}
-      {footer}
+    </>
+  );
+}
+
+/** The start of a conversation: a mark, a title, a line or two about it, and a few things to do first. */
+export function ConvStart({ mark, title, children, actions }: { mark: React.ReactNode; title: React.ReactNode; children?: React.ReactNode; actions?: React.ReactNode }) {
+  return (
+    <div className="cstart">
+      <span className="cstart-mk">{mark}</span>
+      <h2>{title}</h2>
+      {children && <p>{children}</p>}
+      {actions && <div className="cstart-a">{actions}</div>}
     </div>
   );
 }
@@ -928,10 +1040,13 @@ export function Composer({
 }: {
   placeholder: string;
   button?: string;
+  /** the client lane: gold, with the send button saying who it goes to */
   gold?: boolean;
-  note?: string;
+  /** who can read what you write, shown in a slim strip at the top of the box */
+  note?: React.ReactNode;
   people: PersonKey[];
-  onSend: (text: string, alsoToChannel?: boolean) => void;
+  /** may return a promise: the send button shows it is sending until it settles */
+  onSend: (text: string, alsoToChannel?: boolean) => void | Promise<unknown>;
   thread?: boolean;
   autoFocus?: boolean;
   style?: React.CSSProperties;
@@ -943,17 +1058,36 @@ export function Composer({
   const { toast } = useSeek();
   const [askLink, linkDialog] = usePrompt();
   const fileIn = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(0);
+  // the files on their way up (shown as chips in the box until they are sent)
+  const [uploading, setUploading] = useState<string[]>([]);
+  const busyUp = uploading.length > 0;
   const [later, setLater] = useState(false);
   const [recording, setRecording] = useState<null | 'voice' | 'video'>(null);
+  // messages still on their way to the server
+  const [sending, setSending] = useState(0);
+  // the formatting bar (Bold, Italic…) shows when you turn it on with Aa; remembered on this device
+  const [fmtOn, setFmtOn] = useState(false);
+  useEffect(() => {
+    try {
+      setFmtOn(localStorage.getItem('seek:fmtbar') === '1');
+    } catch {}
+  }, []);
+  const toggleFmt = () => {
+    const on = !fmtOn;
+    setFmtOn(on);
+    try {
+      localStorage.setItem('seek:fmtbar', on ? '1' : '0');
+    } catch {}
+    requestAnimationFrame(() => ta.current?.focus());
+  };
   const recordable = !!onAttach && canRecord();
   /** Sends a recorded voice or video message (the typed text, if any, is its caption). */
   const sendRecorded = async (file: File, label: string) => {
     setRecording(null);
     if (!onAttach) return;
-    setUploading(1);
+    setUploading([label]);
     const ok = await onAttach([file], v.trim() || label);
-    setUploading(0);
+    setUploading([]);
     if (ok) {
       setV('');
       setMn(null);
@@ -1066,10 +1200,10 @@ export function Composer({
 
   const attach = async (list: FileList | File[] | null | undefined) => {
     const files = Array.from(list ?? []);
-    if (!files.length || !onAttach || uploading) return;
-    setUploading(files.length);
+    if (!files.length || !onAttach || busyUp) return;
+    setUploading(files.map((f) => f.name));
     const ok = await onAttach(files, v.trim());
-    setUploading(0);
+    setUploading([]);
     if (ok) {
       setV('');
       setMn(null);
@@ -1079,14 +1213,18 @@ export function Composer({
   const send = () => {
     const text = v.trim();
     if (!text) return;
-    onSend(text, also);
+    const r = onSend(text, also);
     setV('');
     setMn(null);
+    if (r && typeof (r as Promise<unknown>).then === 'function') {
+      setSending((n) => n + 1);
+      void (r as Promise<unknown>).finally(() => setSending((n) => Math.max(0, n - 1)));
+    }
   };
 
   return (
     <div
-      className={'comp' + (gold ? ' gold' : '')}
+      className={'comp' + (gold ? ' gold' : '') + (thread ? ' thr' : '') + (fmtOn && !thread ? ' fmt-on' : '')}
       style={{ position: 'relative', ...style }}
       onDragOver={onAttach ? (e) => e.preventDefault() : undefined}
       onDrop={
@@ -1099,12 +1237,29 @@ export function Composer({
           : undefined
       }
     >
-      {!thread && (
+      {note && !thread && (
+        <div className="lane">
+          <Ic n={gold ? 'eye' : 'lock'} size={13} />
+          <span>{note}</span>
+        </div>
+      )}
+      {!thread && fmtOn && (
         <div className="fmt" role="toolbar" aria-label="Formatting">
           {FORMATS.map(([icon, label, run, keys]) => (
             <button key={icon} type="button" title={label + (keys ? ' (' + keys + ')' : '')} aria-label={label} onMouseDown={(e) => e.preventDefault()} onClick={run}>
               <Ic n={icon} size={16} />
             </button>
+          ))}
+        </div>
+      )}
+      {busyUp && (
+        <div className="upl" role="status">
+          <span className="sr-only">Uploading</span>
+          {uploading.map((n, i) => (
+            <span key={i} className="upc" title={n}>
+              <i className="spin" aria-hidden="true"></i>
+              <span>{n}</span>
+            </span>
           ))}
         </div>
       )}
@@ -1210,9 +1365,12 @@ export function Composer({
               onClick={() => (onAttach ? fileIn.current?.click() : toast('Attach a file'))}
               aria-label="Attach files"
               title="Attach files (up to 100 MB each)"
-              disabled={!!uploading}
+              disabled={busyUp}
             >
               <Ic n="plus" size={20} />
+            </button>
+            <button type="button" className={'ic fmtb' + (fmtOn ? ' on' : '')} onClick={toggleFmt} aria-pressed={fmtOn} aria-label="Formatting" title={fmtOn ? 'Hide formatting' : 'Show formatting'}>
+              <Ic n="type" size={18} />
             </button>
             {onAttach && (
               <input
@@ -1226,7 +1384,6 @@ export function Composer({
                 }}
               />
             )}
-            {uploading > 0 && <small className="up">Uploading {uploading === 1 ? 'file' : uploading + ' files'}…</small>}
             <button type="button" className="ic" onClick={(e) => pop.openEmoji(e.currentTarget, (k) => insert(k))} aria-label="Emoji">
               <Ic n="smile" size={20} />
             </button>
@@ -1237,32 +1394,32 @@ export function Composer({
               /
             </button>
             {recordable && (
-              <button type="button" className="ic" aria-label="Record a voice message" title="Voice message" disabled={!!uploading || !!recording} onClick={() => setRecording('voice')}>
+              <button type="button" className="ic" aria-label="Record a voice message" title="Voice message" disabled={busyUp || !!recording} onClick={() => setRecording('voice')}>
                 <Ic n="mic" size={19} />
               </button>
             )}
             {recordable && (
-              <button type="button" className="ic" aria-label="Record a video message" title="Video message" disabled={!!uploading || !!recording} onClick={() => setRecording('video')}>
+              <button type="button" className="ic" aria-label="Record a video message" title="Video message" disabled={busyUp || !!recording} onClick={() => setRecording('video')}>
                 <Ic n="video" size={19} />
               </button>
             )}
-            {note && <small>{note}</small>}
           </>
         )}
         <span className="sp"></span>
         {!thread && !onAttach && (
-          <button type="button" className="btn sm ghost" onClick={() => toast('Scheduled for tomorrow 09:00')}>
-            Send later
+          <button type="button" className="btn sm ghost later" title="Send later" aria-label="Send later" onClick={() => toast('Scheduled for tomorrow 09:00')}>
+            <Ic n="clock" /> <span className="btxt">Later</span>
           </button>
         )}
         {!thread && onSchedule && (
           <button
             type="button"
-            className="btn sm ghost"
+            className="btn sm ghost later"
             title="Send later"
+            aria-label="Send later"
             onClick={() => (v.trim() ? setLater(true) : toast('Write the message first, then pick when to send it'))}
           >
-            <Ic n="clock" /> Later
+            <Ic n="clock" /> <span className="btxt">Later</span>
           </button>
         )}
         {later && onSchedule &&
@@ -1280,10 +1437,21 @@ export function Composer({
             document.body,
           )}
         {linkDialog}
-        <button type="button" className={'btn sm send ' + (gold ? 'gold' : 'pri') + (v.trim() ? '' : ' idle')} onClick={send} aria-label={button} title={button + (enterSends() ? ' (Enter)' : ' (Ctrl+Enter)')}>
+        <button
+          type="button"
+          className={'btn sm send ' + (gold ? 'gold' : 'pri') + (v.trim() ? '' : ' idle') + (sending ? ' busy' : '') + (button !== 'Send' ? ' wl' : '')}
+          onClick={send}
+          aria-label={button}
+          title={button + (enterSends() ? ' (Enter)' : ' (Ctrl+Enter)')}
+        >
+          {button !== 'Send' && <span className="btxt">{button}</span>}
           <Ic n="send" size={16} />
-          {button !== 'Send' && <span>{button}</span>}
         </button>
+        {sending > 0 && (
+          <span className="sr-only" role="status">
+            Sending
+          </span>
+        )}
       </div>
     </div>
   );

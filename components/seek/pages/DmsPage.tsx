@@ -8,7 +8,7 @@ import { now } from '@/lib/seek/format';
 import { useLiveDms } from '@/lib/seek/liveProvider';
 import { useSeek } from '@/lib/seek/store';
 import { Modal } from '../Dialogs';
-import { Composer, Feed, type FeedRef } from '../Messages';
+import { Composer, ConvStart, Feed, type FeedRef } from '../Messages';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar, SeenText } from '../ui';
 import { FileList, useAttach } from '../Files';
@@ -31,6 +31,15 @@ export function DmsPage() {
 }
 
 const nameOf = (k: PersonKey) => PEOPLE[k]?.name ?? 'Someone';
+
+/** A quiet line at the top of a DM: who can read it. */
+function DmPrivate({ name }: { name: string }) {
+  return (
+    <div className="fnote">
+      <Ic n="lock" size={12} /> Private between you and {name}
+    </div>
+  );
+}
 
 function LiveDmsPage() {
   const { s, ui, setUI, toast, update } = useSeek();
@@ -317,8 +326,19 @@ function LiveDmsPage() {
         </div>
       ) : dm ? (
         <>
-          <Feed key={dm} feed={feed} banner={<div className="banner v"><Ic n="lock" size={14} /> This conversation is just between you and {nameOf(dm)}.</div>} />
-          <Composer key={'c' + dm} placeholder={'Message ' + nameOf(dm)} people={[dm, 'AH']} onSend={(t) => void live?.send(t)} onAttach={attach} onSchedule={schedule} />
+          <Feed
+            key={dm}
+            feed={feed}
+            banner={<DmPrivate name={nameOf(dm)} />}
+            empty={
+              <ConvStart mark={<Avatar k={dm} size={56} />} title={dm === 'AH' ? 'This is your space' : <>This is the start of your conversation with {nameOf(dm)}</>}>
+                {dm === 'AH'
+                  ? 'Jot down notes, drafts and links. Only you can see them.'
+                  : 'Only the two of you can see what’s shared here. Say hello, share a file or start a call.'}
+              </ConvStart>
+            }
+          />
+          <Composer key={'c' + dm} placeholder={'Message ' + nameOf(dm)} people={[dm, 'AH']} onSend={(t) => live?.send(t)} onAttach={attach} onSchedule={schedule} />
         </>
       ) : (
         <div className="pg">
@@ -476,7 +496,16 @@ function DemoDmsPage() {
           </div>
         }
       />
-      <Feed key={dm} feed={feed} banner={<div className="banner v"><Ic n="lock" size={14} /> This conversation is just between you and {p.name}.</div>} />
+      <Feed
+        key={dm}
+        feed={feed}
+        banner={<DmPrivate name={p.name} />}
+        empty={
+          <ConvStart mark={<Avatar k={dm} size={56} />} title={<>This is the start of your conversation with {p.name}</>}>
+            Only the two of you can see what’s shared here. Say hello, share a file or start a huddle.
+          </ConvStart>
+        }
+      />
       <Composer key={'c' + dm} placeholder={'Message ' + p.name} people={[dm, 'AH']} onSend={send} />
     </Shell>
   );

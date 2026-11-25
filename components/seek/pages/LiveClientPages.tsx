@@ -9,7 +9,7 @@ import { isEmail } from '@/lib/seek/format';
 import { laneKey, namesOf, pending, useLiveClients, type LiveClients, type Space } from '@/lib/seek/liveClients';
 import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
-import { Composer, Feed, type FeedRef } from '../Messages';
+import { Composer, ConvStart, Feed, type FeedRef } from '../Messages';
 import { ClientRail, MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar, OrgMark, SeenText } from '../ui';
 import { ClientStatus, useSpaceCalls, WaitingBanner, WaitingForYou } from '../ClientHome';
@@ -24,6 +24,7 @@ import { PinsList, useSchedule } from '../Extras';
 import { useApprovals } from '@/lib/seek/liveApprovals';
 import { spaceFiles, type SharedFile } from '@/lib/seek/liveFiles';
 import { Ic } from '../icons';
+import { SpaceHint, SpaceTabs } from '../SpaceChat';
 import { DraftUpdateDialog, ScopeHoursTab } from '../ScopeHours';
 import { useConfirm } from '../Dialogs';
 import { markRead, spaceUnreadCounts, viewingSpace } from '@/lib/seek/liveSync';
@@ -169,6 +170,23 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
   const [newClient, setNewClient] = useState(!!inviting);
   const [settings, setSettings] = useState<SpaceSettingsTab | null>(null);
   const router = useRouter();
+  // the details pane stays open or closed as you left it (this device); the first time, only wide screens open it
+  useEffect(() => {
+    if (window.innerWidth <= 760) return;
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem('seek:spacePane');
+    } catch {}
+    const want = saved ? saved === '1' : window.innerWidth >= 1440;
+    setUI({ paneOpen: want });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const setPane = (open: boolean) => {
+    setUI({ paneOpen: open });
+    if (window.innerWidth <= 760) return;
+    try {
+      localStorage.setItem('seek:spacePane', open ? '1' : '0');
+    } catch {}
+  };
 
   // the open Client chat or Team notes counts as read while it is on screen (and new messages in it too)
   const viewKey = sp && (tab === 'Client chat' || tab === 'Team notes') ? laneKey(sp.id, tab === 'Team notes' ? 'team' : 'client') : null;
@@ -254,17 +272,15 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
   const approvers: Approver[] = sp.people.filter((p) => p.role === 'approver' && p.userId).map((p) => ({ userId: p.userId!, name: personName(p) }));
   const waiting = (appr.list ?? []).filter((a) => a.status === 'requested');
 
-  const tabs = (
-    <div className="tabs" role="tablist">
-      {TABS.map((t) => (
-        <button key={t} type="button" role="tab" aria-selected={tab === t} className={'tb' + (tab === t ? ' on' : '') + (t === 'Client chat' ? ' gold' : '')} onClick={() => setTab(t)}>
-          {t}
-          {t === 'Status' && sp.status === 'onboarding' && prog.total > 0 && <span className="badge">{`${prog.done}/${prog.total}`}</span>}
-          {t === 'Approvals' && waiting.length > 0 && <span className="badge" style={{ background: 'var(--gold)' }}>{waiting.length}</span>}
-        </button>
-      ))}
-    </div>
-  );
+  const tabBadge = (t: ClientTab) =>
+    t === 'Status' && sp.status === 'onboarding' && prog.total > 0 ? (
+      <span className="badge">{`${prog.done}/${prog.total}`}</span>
+    ) : t === 'Approvals' && waiting.length > 0 ? (
+      <span className="badge gold">{waiting.length}</span>
+    ) : null;
+  const tabs = <SpaceTabs tabs={TABS} tab={tab} setTab={setTab} badge={tabBadge} />;
+  const sees = clients.length > 1 || !clients.length ? 'see' : 'sees';
+  const toJoin = joined.length < clients.length ? pending(sp).length : 0;
 
   let body: React.ReactNode;
   if (tab === 'Client chat' || team) {
@@ -275,40 +291,69 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
           feed={feed}
           banner={
             team ? (
-              <div className="banner v">
-                <Ic n="lock" size={13} />{' '}
-                <span>
-                  <b>Team notes</b> are private to your team. {readers} never see this.
-                </span>
-              </div>
+              <SpaceHint id={sp.id + ':team'} tone="v" icon="lock">
+                <b>Private to your team.</b> {readers} never {clients.length > 1 || !clients.length ? 'see' : 'sees'} Team notes.
+              </SpaceHint>
             ) : (
-              <div className="banner gold">
-                <Ic n="eye" size={13} />{' '}
-                <span>
-                  <b>{readers}</b> {clients.length > 1 || !clients.length ? 'see' : 'sees'} everything in Client chat
-                  {joined.length < clients.length ? ` (${pending(sp).length} still to join)` : ''}. For internal discussion, use{' '}
-                  <button type="button" className="linkbtn" style={{ color: 'inherit', textDecoration: 'underline' }} onClick={() => setTab('Team notes')}>
-                    Team notes
-                  </button>
-                  .
-                </span>
-              </div>
+              <SpaceHint id={sp.id + ':client'} tone="gold" icon="eye">
+                <b>{readers}</b> {sees} everything here{toJoin ? ` (${toJoin} still to join)` : ''}. For internal talk, use{' '}
+                <button type="button" className="linkbtn" onClick={() => setTab('Team notes')}>
+                  Team notes
+                </button>
+                .
+              </SpaceHint>
+            )
+          }
+          empty={
+            team ? (
+              <ConvStart mark={<Ic n="lock" size={22} />} title={<>Team notes for {sp.name}</>}>
+                Only your team sees this; {readers} never {clients.length > 1 || !clients.length ? 'do' : 'does'}. Plan the work, share drafts and agree on replies before they go to the client.
+              </ConvStart>
+            ) : (
+              <ConvStart
+                mark={<SpaceMark sp={sp} size={52} />}
+                title={<>Start the conversation with {sp.name}</>}
+                actions={
+                  <>
+                    <button type="button" className="btn sm" onClick={() => setScheduling(true)}>
+                      <Ic n="calendar" size={14} /> Schedule a call
+                    </button>
+                    <button type="button" className="btn sm" onClick={() => setTab('Team notes')}>
+                      <Ic n="lock" size={14} /> Open Team notes
+                    </button>
+                  </>
+                }
+              >
+                <b>{readers}</b> {sees} everything in Client chat{toJoin ? ` (${toJoin} still to join)` : ''}. Say hello, share a file or book a first call.
+              </ConvStart>
             )
           }
         />
         {team ? (
-          <Composer key={'team' + sp.id} placeholder="Note for the team…" people={teamKeys} onSend={(t) => void live.send(sp.id, 'team', t)} onAttach={attachTeam} onSchedule={scheduleTeam} />
+          <Composer
+            key={'team' + sp.id}
+            placeholder="Note for the team…"
+            note={<>Team notes · only your team</>}
+            people={teamKeys}
+            onSend={(t) => live.send(sp.id, 'team', t)}
+            onAttach={attachTeam}
+            onSchedule={scheduleTeam}
+          />
         ) : (
           <Composer
             key={'client' + sp.id}
             placeholder={`Message ${sp.name}…`}
             button="Send to client"
             gold
-            note={`Client chat · Visible to ${readers}`}
+            note={
+              <>
+                Visible to <b>{readers}</b>
+              </>
+            }
             people={[...clientKeys, ...teamKeys]}
             onSend={(t) => {
-              void live.send(sp.id, 'client', t);
               toast('Sent to ' + readers);
+              return live.send(sp.id, 'client', t);
             }}
             onAttach={attachClient}
             onSchedule={scheduleClient}
@@ -377,7 +422,7 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
   }
 
   const pane = ui.paneOpen ? (
-    <Pane title="In this client space" onClose={() => setUI({ paneOpen: false })}>
+    <Pane title="In this client space" className="sp-pane" onClose={() => setPane(false)}>
       <div className="ppl">
         {clients.map((p) => (
           <div key={p.id}>
@@ -466,17 +511,24 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
                 <Avatar key={k} k={k} size={26} />
               ))}
             </span>
-            <button type="button" className="btn sm" onClick={() => setDrafting(true)} title="Draft weekly update (Status drafter)">
-              <Ic n="ai" /> <span className="hide-m">Draft update</span>
+            <button type="button" className="btn sm" onClick={() => setDrafting(true)} title="Draft weekly update (Status drafter)" aria-label="Draft update">
+              <Ic n="ai" /> <span className="hide-m hide-n">Draft update</span>
             </button>
-            <button type="button" className="btn sm" onClick={() => setScheduling(true)} title="Schedule a call">
-              <Ic n="calendar" /> <span className="hide-m">Schedule</span>
+            <button type="button" className="btn sm" onClick={() => setScheduling(true)} title="Schedule a call" aria-label="Schedule a call">
+              <Ic n="calendar" /> <span className="hide-m hide-n">Schedule</span>
             </button>
             <button type="button" className="btn sm" onClick={() => setSettings('General')} aria-label="Space settings" title="Space settings: name, team, checklist, archive">
               <Ic n="settings" />
             </button>
-            <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Space details" aria-pressed={ui.paneOpen}>
-              <Ic n="info" />
+            <button
+              type="button"
+              className={'btn sm' + (ui.paneOpen ? ' on' : '')}
+              onClick={() => setPane(!ui.paneOpen)}
+              aria-label="Space details"
+              aria-pressed={ui.paneOpen}
+              title={ui.paneOpen ? 'Hide space details' : 'Show space details'}
+            >
+              <Ic n="panel" />
             </button>
           </>
         }
@@ -962,14 +1014,19 @@ function ClientPortal({ live }: { live: LiveClients }) {
           banner={
             <>
               <WaitingBanner approvals={appr.list} me={live.me} next={nextCall} onOpenApprovals={() => open('approvals')} />
-              <div className="banner gold">
-                <Ic n="clock" /> <span>{replyLine}</span>
+              <div className="fnote gold">
+                <Ic n="clock" size={12} /> {replyLine}
               </div>
             </>
           }
+          empty={
+            <ConvStart mark={<OrgMark name={agency} logo={s.ws.logo} size={52} />} title={<>Say hello to the {agency} team</>}>
+              Ask a question, share a file or check what’s next. {replyLine}
+            </ConvStart>
+          }
         />
         {canWrite ? (
-          <Composer key={'c' + sp.id} placeholder={`Message the ${agency} team…`} people={[...team, ...others]} onSend={(t) => void live.send(sp.id, 'client', t)} onAttach={attach} />
+          <Composer key={'c' + sp.id} placeholder={`Message the ${agency} team…`} people={[...team, ...others]} onSend={(t) => live.send(sp.id, 'client', t)} onAttach={attach} />
         ) : (
           <div className="banner">You can read this conversation. Ask the team if you need to write here.</div>
         )}

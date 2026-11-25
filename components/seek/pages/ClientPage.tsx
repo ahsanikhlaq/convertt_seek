@@ -14,6 +14,7 @@ import { Composer, Feed, type FeedRef } from '../Messages';
 import { MainHeader, Pane, Shell, Sidebar } from '../Shell';
 import { Avatar, Switch } from '../ui';
 import { Ic } from '../icons';
+import { SpaceHint, SpaceTabs } from '../SpaceChat';
 
 const TABS: ClientTab[] = ['Client chat', 'Team notes', 'Status', 'Approvals', 'People'];
 const CLIENT_PEOPLE: PersonKey[] = ['CH', 'PR', 'AH', 'MO'];
@@ -104,19 +105,12 @@ function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
   );
 
   const tabs = (
-    <div className="tabs" role="tablist">
-      {TABS.map((t) => (
-        <button key={t} type="button" role="tab" aria-selected={tab === t} className={'tb' + (tab === t ? ' on' : '') + (t === 'Client chat' ? ' gold' : '')} onClick={() => setTab(t)}>
-          {t}
-          {t === 'Team notes' && <span className="badge">2</span>}
-          {t === 'Approvals' && s.approval !== 'done' && (
-            <span className="badge" style={{ background: 'var(--gold)' }}>
-              1
-            </span>
-          )}
-        </button>
-      ))}
-    </div>
+    <SpaceTabs
+      tabs={TABS}
+      tab={tab}
+      setTab={setTab}
+      badge={(t) => (t === 'Team notes' ? <span className="badge">2</span> : t === 'Approvals' && s.approval !== 'done' ? <span className="badge gold">1</span> : null)}
+    />
   );
 
   let body: React.ReactNode;
@@ -148,23 +142,17 @@ function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
           feed={feed}
           banner={
             team ? (
-              <div className="banner v">
-                <Ic n="lock" size={13} />{' '}
-                <span>
-                  <b>Team notes</b> are private to your team. Chris and Priya never see this.
-                </span>
-              </div>
+              <SpaceHint id="demo-HB:team" tone="v" icon="lock">
+                <b>Private to your team.</b> Chris and Priya never see Team notes.
+              </SpaceHint>
             ) : (
-              <div className="banner gold">
-                <Ic n="eye" size={13} />{' '}
-                <span>
-                  <b>Chris and Priya</b> see everything in Client chat. For internal discussion, use{' '}
-                  <button type="button" className="linkbtn" style={{ color: 'inherit', textDecoration: 'underline' }} onClick={() => setTab('Team notes')}>
-                    Team notes
-                  </button>
-                  .
-                </span>
-              </div>
+              <SpaceHint id="demo-HB:client" tone="gold" icon="eye">
+                <b>Chris and Priya</b> see everything here. For internal talk, use{' '}
+                <button type="button" className="linkbtn" onClick={() => setTab('Team notes')}>
+                  Team notes
+                </button>
+                .
+              </SpaceHint>
             )
           }
           footer={
@@ -183,9 +171,21 @@ function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
           }
         />
         {team ? (
-          <Composer key="team" placeholder="Note for the team…" people={['AH', 'SY', 'MO']} onSend={send} />
+          <Composer key="team" placeholder="Note for the team…" note="Team notes · only your team" people={['AH', 'SY', 'MO']} onSend={send} />
         ) : (
-          <Composer key="client" placeholder="Message Hollow & Bright…" button="Send to client" gold note="Client chat · Visible to Chris and Priya" people={CLIENT_PEOPLE} onSend={send} />
+          <Composer
+            key="client"
+            placeholder="Message Hollow & Bright…"
+            button="Send to client"
+            gold
+            note={
+              <>
+                Visible to <b>Chris and Priya</b>
+              </>
+            }
+            people={CLIENT_PEOPLE}
+            onSend={send}
+          />
         )}
       </>
     );
@@ -253,7 +253,7 @@ function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
 
   const pane =
     isHB && ui.paneOpen ? (
-      <Pane title="In this client space" onClose={() => setUI({ paneOpen: false })}>
+      <Pane title="In this client space" className="sp-pane" onClose={() => setUI({ paneOpen: false })}>
         <div className="ppl">
           {CLIENT_PEOPLE.map((k) => (
             <div key={k}>
@@ -310,8 +310,15 @@ function DemoClientPage({ scheduling }: { scheduling?: boolean }) {
             <Link className="btn sm" href={ROUTES.meetings}>
               <Ic n="calendar" /> <span className="hide-m">Schedule</span>
             </Link>
-            <button type="button" className="btn sm" onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))} aria-label="Space details" aria-pressed={ui.paneOpen}>
-              <Ic n="info" />
+            <button
+              type="button"
+              className={'btn sm' + (ui.paneOpen ? ' on' : '')}
+              onClick={() => setUI((u) => ({ paneOpen: !u.paneOpen }))}
+              aria-label="Space details"
+              aria-pressed={ui.paneOpen}
+              title={ui.paneOpen ? 'Hide space details' : 'Show space details'}
+            >
+              <Ic n="panel" />
             </button>
           </>
         }
