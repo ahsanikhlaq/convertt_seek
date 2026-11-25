@@ -28,6 +28,20 @@ export function checkScope(messageId: number) {
     );
 }
 
+/**
+ * Fire and forget: the Away assistant may answer a Client chat message the client just sent, if it's on for this
+ * space and nobody on the team is available (the server checks all of that; clients can't see whether it's on).
+ */
+export function askAwayAssistant(messageId: number) {
+  if (!clientSide) return;
+  void sb()
+    .functions.invoke('seek-ai', { body: { action: 'away', message_id: messageId } })
+    .then(
+      () => {},
+      () => {},
+    );
+}
+
 export async function saveScope(space: string, scope: string): Promise<string | null> {
   const { error } = await sb().from('client_spaces').update({ scope: scope.slice(0, 8000) }).eq('id', space);
   return error ? 'Couldn’t save the scope. Check your connection' : null;

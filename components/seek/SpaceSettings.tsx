@@ -1,23 +1,28 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { PEOPLE } from '@/lib/seek/data';
 import { learnProfiles } from '@/lib/seek/live';
+import { AGENTS, type AgentKey } from '@/lib/seek/liveAgents';
 import type { LiveClients, Space, Step } from '@/lib/seek/liveClients';
 import { workspaceMembers } from '@/lib/seek/liveSync';
-import { addStep, addTeammate, archiveSpace, deleteStep, removeTeammate, reorderSteps, saveSpace, setLead, syncStatus, updateStep } from '@/lib/seek/liveSpaces';
+import { addStep, addTeammate, archiveSpace, canManageSpaceAgents, deleteStep, removeTeammate, reorderSteps, saveSpace, setLead, setSpaceAgent, syncStatus, updateStep } from '@/lib/seek/liveSpaces';
+import { ROUTES } from '@/lib/seek/routes';
 import { useSeek } from '@/lib/seek/store';
 import { Modal, useConfirm } from './Dialogs';
-import { Avatar } from './ui';
+import { useSpaceAgents } from './SpaceTools';
+import { Avatar, Switch } from './ui';
 import { Ic } from './icons';
 
 /**
  * Space settings (team only): rename the client, its project and reply target; who on your team works on it and who
- * leads; the onboarding checklist (add, edit, remove, reorder); and archiving the space when the work is over.
+ * leads; the onboarding checklist (add, edit, remove, reorder); archiving the space when the work is over; and the AI
+ * agents that work on this client (the Away assistant in Client chat is turned on here, per client).
  */
 
-export type SpaceSettingsTab = 'General' | 'Team' | 'Checklist';
-const TABS: SpaceSettingsTab[] = ['General', 'Team', 'Checklist'];
+export type SpaceSettingsTab = 'General' | 'Team' | 'Checklist' | 'AI agents';
+const TABS: SpaceSettingsTab[] = ['General', 'Team', 'Checklist', 'AI agents'];
 const REPLY = ['A few hours', 'Same working day', '1 working day', '2 working days', '3 working days'];
 
 export function SpaceSettings({ live, sp, tab: first = 'General', onClose, onArchived }: { live: LiveClients; sp: Space; tab?: SpaceSettingsTab; onClose: () => void; onArchived: () => void }) {
@@ -55,6 +60,8 @@ export function SpaceSettings({ live, sp, tab: first = 'General', onClose, onArc
           <GeneralTab live={live} sp={sp} ask={ask} onArchived={onArchived} />
         ) : tab === 'Team' ? (
           <TeamTab live={live} sp={sp} ask={ask} />
+        ) : tab === 'AI agents' ? (
+          <AgentsTab live={live} sp={sp} />
         ) : (
           <ChecklistTab live={live} sp={sp} ask={ask} />
         )}
@@ -244,6 +251,83 @@ function TeamTab({ live, sp, ask }: { live: LiveClients; sp: Space; ask: Ask }) 
           <em>Everyone on your team is already on this client. Invite more people to the workspace from People.</em>
         )}
       </form>
+    </>
+  );
+}
+
+/** The workspace-level agents that also work on each client (turned on/off and taught in Apps → AI agents). */
+const WORKSPACE_AGENTS: { key: AgentKey; name: string; line: string }[] = [
+  { key: 'scope_guard', name: 'Scope guard', line: 'Checks the client’s requests against the agreed scope (Scope & hours) and warns your team in Team notes. Never writes to the client.' },
+  { key: 'status_drafter', name: 'Status drafter', line: 'Drafts the weekly update from Client chat for you to edit and send yourself. Nothing is posted on its own.' },
+  { key: 'retainer_watch', name: 'Retainer watch', line: 'Warns in Team notes when logged time reaches 80% and 100% of the monthly retainer.' },
+  { key: 'summariser', name: 'Summariser', line: 'Catch up on Client chat or Team notes with a short summary, only for you.' },
+];
+
+function AgentsTab({ live, sp }: { live: LiveClients; sp: Space }) {
+  const { toast } = useSeek();
+  const { agents, settings, paused } = useSpaceAgents(sp.id, live.orgId);
+  const [can, setCan] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void canManageSpaceAgents(sp.id).then((v) => {
+      if (alive) setCan(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [sp.id]);
+  const away = !!agents?.includes('away_assistant');
+  const awayWs = settings?.get('away_assistant');
+  const isOn = (k: AgentKey) => settings?.get(k)?.enabled ?? AGENTS.find((a) => a.key === k)?.on ?? false;
+  const lead = sp.team.find((t) => t.isLead);
+  const toggle = async () => {
+    if (busy || !can || agents == null) return;
+    setBusy(true);
+    const err = await setSpaceAgent(sp.id, 'away_assistant', !away, live.me);
+    setBusy(false);
+    toast(err ?? (away ? 'Away assistant turned off for ' + sp.name : 'Away assistant turned on for ' + sp.name));
+  };
+  return (
+    <>
+      <small style={{ color: 'var(--mu)' }}>AI that works on this client. Every action is in the agent log (Apps → AI agents).</small>
+      {paused && (
+        <div className="banner gold" style={{ margin: 0 }}>
+          <Ic n="pause" /> <span>All AI is paused for this workspace, so none of these run until an admin resumes it in Apps → AI agents.</span>
+        </div>
+      )}
+      <div className="spag">
+        <div className="spag-row main">
+          <Avatar k="AI" size={32} />
+          <span className="x">
+            <b>Away assistant in Client chat</b>
+            <small>Replies to your client only when nobody on the team is available; it never makes promises. It says your team will reply, and answers only from what you teach it.</small>
+            {away && awayWs && !awayWs.enabled && <small className="spag-warn">On for this client, but turned off for the whole workspace in Apps → AI agents, so it won’t reply.</small>}
+            {can === false && <small className="spag-note">Only workspace admins and the lead on this client{lead ? ' (' + (lead.userId === live.me ? 'you' : (PEOPLE[lead.userId]?.name ?? 'the lead')) + ')' : ''} can turn it on or off.</small>}
+          </span>
+          <Switch on={away} disabled={busy || !can || agents == null} label={away ? 'Turn the Away assistant off for this client' : 'Turn the Away assistant on for this client'} onClick={() => void toggle()} />
+        </div>
+        <div className="spag-lbl">For every client (workspace settings)</div>
+        {WORKSPACE_AGENTS.map((a) => (
+          <div key={a.key} className="spag-row">
+            <span className="spag-ic" aria-hidden="true">
+              <Ic n="ai" size={16} />
+            </span>
+            <span className="x">
+              <b>{a.name}</b>
+              <small>{a.line}</small>
+            </span>
+            <span className={'tag' + (settings && isOn(a.key) && !paused ? ' ai' : '')}>{!settings ? '…' : paused ? 'Paused' : isOn(a.key) ? 'On' : 'Off'}</span>
+          </div>
+        ))}
+      </div>
+      <small style={{ color: 'var(--mu)' }}>
+        Teach the Away assistant what to say, or turn agents on and off for every client, in{' '}
+        <Link href={ROUTES.agents} className="linkbtn">
+          Apps → AI agents
+        </Link>
+        .
+      </small>
     </>
   );
 }

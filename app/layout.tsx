@@ -6,6 +6,7 @@ import { SeekProvider } from '@/lib/seek/store';
 import './fonts.css';
 import './seek.css';
 import './seek-a11y.css';
+import './seek-agents.css';
 
 // Inter: a clear, professional typeface made for screens (self-hosted by Next.js at build time)
 const inter = Inter({ subsets: ['latin', 'latin-ext'], display: 'swap', variable: '--font-sans' });

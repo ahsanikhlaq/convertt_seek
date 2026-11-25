@@ -1,0 +1,19 @@
+/* ---------- AI agents in client spaces (Space settings → AI agents, header button) ---------- */
+.spag{display:flex;flex-direction:column;gap:8px}
+.spag-row{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--ln);border-radius:10px}
+.spag-row.main{border-style:dashed;border-color:var(--ln2);background:var(--ais)}
+.spag-row .x{flex:1;min-width:0}
+.spag-row .x b{display:block;font-size:14.5px}
+.spag-row .x small{display:block;color:var(--mu);font-size:13px;line-height:1.4}
+.spag-row .x small.spag-warn{color:var(--gold);margin-top:4px}
+.spag-row .x small.spag-note{color:var(--sb);margin-top:4px}
+.spag-row .sw,.spag-row .tag{margin-top:2px}
+.spag-ic{width:32px;height:32px;border-radius:9px;background:var(--ais);color:var(--ai);display:grid;place-items:center;flex:none}
+.spag-lbl{margin-top:6px;font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--sb)}
+.spagbtn{position:relative}
+.spagdot{width:7px;height:7px;border-radius:50%;background:var(--sb);flex:none;margin-left:-2px}
+.spagdot.on{background:var(--ok);box-shadow:0 0 0 2px var(--oks)}
+html.dark .spag-row.main,html.dark .spag-ic{background:#26233a}
+html.dark .spag-ic{color:#b8aaf5}
+html.dark .spag-row .x small.spag-warn{color:#e9c37c}
+@media (max-width:760px){.spag-row{padding:9px 10px}.spag-row .x small{font-size:12.5px}}

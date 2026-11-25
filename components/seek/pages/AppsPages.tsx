@@ -184,6 +184,11 @@ function LiveAgentsPage() {
                   <div>
                     <b>{a.name}</b>
                     <small>{a.does}</small>
+                    {a.key === 'away_assistant' && (
+                      <small>
+                        For a client: open the client, then Space settings → AI agents. With clients it never promises dates, prices or scope. This switch turns it off everywhere.
+                      </small>
+                    )}
                   </div>
                   <Switch
                     on={st.enabled && !pa}

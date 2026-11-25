@@ -92,3 +92,43 @@ export async function syncStatus(sp: Space, steps: Pick<Step, 'doneAt'>[]): Prom
   const status = steps.length && steps.every((x) => x.doneAt) ? 'active' : steps.length ? 'onboarding' : sp.status;
   if (status !== sp.status) await sb().from('client_spaces').update({ status }).eq('id', sp.id);
 }
+
+// ---------------------------------------------------------------- AI agents on a client space
+// The Away assistant can be turned on per client space (seek.space_agents, 20261127000034_space_agents.sql). Only the
+// team reads it; workspace admins/owners and the space's lead turn it on or off. Clients never see it.
+
+export type SpaceAgent = 'away_assistant';
+
+// everyone showing a space's agents (the header button, the settings tab) hears about a change at once
+const agentListeners = new Set<(space: string, agents: SpaceAgent[]) => void>();
+export function onSpaceAgents(fn: (space: string, agents: SpaceAgent[]) => void): () => void {
+  agentListeners.add(fn);
+  return () => {
+    agentListeners.delete(fn);
+  };
+}
+
+/** The agents turned on for a space ([] when none, or when you can't see them); null when it couldn't load. */
+export async function spaceAgents(space: string): Promise<SpaceAgent[] | null> {
+  const { data, error } = await sb().from('space_agents').select('agent').eq('space_id', space);
+  if (error) return null;
+  return ((data ?? []) as { agent: SpaceAgent }[]).map((r) => r.agent);
+}
+
+/** Whether you may turn a space's agents on or off (a workspace admin/owner, or the lead on this client). */
+export async function canManageSpaceAgents(space: string): Promise<boolean> {
+  const { data, error } = await sb().rpc('can_manage_space_agents', { p_space: space });
+  return !error && data === true;
+}
+
+export async function setSpaceAgent(space: string, agent: SpaceAgent, on: boolean, me: string | null): Promise<string | null> {
+  const { data, error } = on
+    ? await sb().from('space_agents').insert({ space_id: space, agent, added_by: me }).select('agent')
+    : await sb().from('space_agents').delete().eq('space_id', space).eq('agent', agent).select('agent');
+  const NO_AGENTS = 'Only workspace admins and the lead on this client can change its AI agents';
+  if (error && error.code !== '23505') return error.code === '42501' || /row-level security/i.test(error.message) ? NO_AGENTS : 'Couldn’t save that. Check your connection';
+  if (!error && !on && !data?.length) return NO_AGENTS;
+  const now = await spaceAgents(space);
+  if (now) for (const fn of agentListeners) fn(space, now);
+  return null;
+}

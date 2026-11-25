@@ -8,7 +8,7 @@ import type { ChatMessage, FileRef, MessageCard } from './data';
 import { agentWho, keyFor, learnProfiles, timeLabel, toUiId } from './live';
 import { hydrateReactions, markNotSent } from './liveSync';
 import { mentionIds } from './liveNotes';
-import { checkScope, setSenderSide } from './liveScope';
+import { askAwayAssistant, checkScope, setSenderSide } from './liveScope';
 import { useSeek } from './store';
 
 /**
@@ -283,8 +283,13 @@ export function useLiveClients(): LiveClients | null {
       }
       notifyOut();
       const r = data as Row;
-      // a client's request in Client chat: Scope guard checks it against the agreed scope (notes go to Team notes only)
-      if (side === 'client' && ln === 'client') checkScope(r.id);
+      // a client's request in Client chat: Scope guard checks it against the agreed scope (notes go to Team notes only),
+      // and the Away assistant may answer if it's on for this space and nobody on the team is available (both in the
+      // background; neither slows the send)
+      if (side === 'client' && ln === 'client') {
+        checkScope(r.id);
+        askAwayAssistant(r.id);
+      }
       update((d) => {
         const list = ((d.lc ||= {})[laneKey(space, ln)] ||= []);
         if (!list.some((m) => m.id === toUiId(r.id))) list.push(toMsg(r, true));
