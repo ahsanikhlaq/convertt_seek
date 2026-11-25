@@ -156,14 +156,6 @@ const span = (mins: number) => (mins < 60 ? 'about ' + Math.max(1, Math.round(mi
  */
 const HOURS = /(\d{1,2}:\d{2})\s*[–—-]\s*(\d{1,2}:\d{2})/;
 
-/** Whether someone is inside their working hours now (Mon–Fri), or null when they haven't set any. */
-function insideHours(hours: string | null, tz: string): boolean | null {
-  const m = HOURS.exec(hours ?? '');
-  if (!m) return null;
-  const now = zoned(new Date(), tz || 'UTC');
-  return now.wd >= 1 && now.wd <= 5 && now.min >= hm(m[1]) && now.min < hm(m[2]);
-}
-
 function workingNow(hours: string | null, tz: string): string {
   const m = HOURS.exec(hours ?? '');
   if (!m) return '';
@@ -205,7 +197,7 @@ const SEEN_WITHIN = 3 * 60_000;
 /**
  * Who else is on the team / in the channel: status, last seen, working hours and their local time now. `here` is
  * true only for someone who can reply now: status Available (not Away, In a meeting or Focus time), notifications not
- * paused, seen in the last 3 minutes, and inside their working hours (when they have set any).
+ * paused, and seen in the last 3 minutes (someone online counts as available at any hour).
  */
 async function availability(admin: SupabaseClient, ws: string, ids: string[], fallbackTz = 'UTC'): Promise<Person[]> {
   if (!ids.length) return [];
@@ -223,7 +215,7 @@ async function availability(admin: SupabaseClient, ws: string, ids: string[], fa
       const status = STATUS[p.status ?? 'on'] ?? 'Available';
       const tz = p.time_zone || fallbackTz;
       const seen = !!p.last_seen_at && Date.now() - Date.parse(p.last_seen_at) < SEEN_WITHIN;
-      const here = !BUSY.has(p.status ?? 'on') && !paused && seen && insideHours(p.work_hours, tz) !== false;
+      const here = !BUSY.has(p.status ?? 'on') && !paused && seen;
       const hours = workingNow(p.work_hours, tz);
       const parts = [
         status + (paused ? ', notifications paused until ' + clock(p.dnd_until!, tz) : ''),
