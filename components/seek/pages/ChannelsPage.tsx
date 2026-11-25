@@ -402,7 +402,7 @@ export function ChannelsPage() {
             )}
             {live && c.cid && (
               <button type="button" className="btn sm" onClick={() => setCatchUp(true)} title="An AI summary of the latest messages">
-                <Ic n="ai" /> <span className="hide-m">Catch up</span>
+                <Ic n="summary" /> <span className="hide-m">Catch up</span>
               </button>
             )}
             <button type="button" className="btn sm hud" onClick={async () => {

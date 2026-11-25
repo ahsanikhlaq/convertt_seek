@@ -95,7 +95,7 @@ export function SpaceAgentsButton({ space, ws, onOpen, compact, className }: Spa
     : 'AI agents for this client';
   return (
     <button type="button" className={'btn sm spagbtn' + (className ? ' ' + className : '')} onClick={onOpen} title={title} aria-label={title}>
-      <Ic n="ai" />
+      <Ic n="bot" />
       {!compact && <span className="hide-m">Agents</span>}
       {away && <span className={'spagdot' + (live ? ' on' : '')} aria-hidden="true" />}
     </button>
@@ -120,7 +120,7 @@ export function SpaceCatchUp({ space, lane, name, className }: SpaceCatchUpProps
   return (
     <>
       <button type="button" className={'btn sm' + (className ? ' ' + className : '')} onClick={() => setOpen(true)} title="An AI summary of the latest messages">
-        <Ic n="ai" /> <span className="hide-m">Catch up</span>
+        <Ic n="summary" /> <span className="hide-m">Catch up</span>
       </button>
       {open && <CatchUpDialog conv={'sp:' + space + ':' + lane} where={name + (lane === 'team' ? ' · Team notes' : ' · Client chat')} onClose={() => setOpen(false)} />}
     </>

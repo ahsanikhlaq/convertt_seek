@@ -277,16 +277,25 @@ function AgentsTab({ live, sp }: { live: LiveClients; sp: Space }) {
       alive = false;
     };
   }, [sp.id]);
-  const away = !!agents?.includes('away_assistant');
+  const saved = !!agents?.includes('away_assistant');
+  // the switch moves at once; the saved value takes over again once the change arrives (or the save fails)
+  const [want, setWant] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (want !== null && saved === want) setWant(null);
+  }, [saved, want]);
+  const away = want ?? saved;
   const awayWs = settings?.get('away_assistant');
   const isOn = (k: AgentKey) => settings?.get(k)?.enabled ?? AGENTS.find((a) => a.key === k)?.on ?? false;
   const lead = sp.team.find((t) => t.isLead);
   const toggle = async () => {
     if (busy || !can || agents == null) return;
+    const next = !away;
+    setWant(next);
     setBusy(true);
-    const err = await setSpaceAgent(sp.id, 'away_assistant', !away, live.me);
+    const err = await setSpaceAgent(sp.id, 'away_assistant', next, live.me);
     setBusy(false);
-    toast(err ?? (away ? 'Away assistant turned off for ' + sp.name : 'Away assistant turned on for ' + sp.name));
+    if (err) setWant(null);
+    toast(err ?? (next ? 'Away assistant turned on for ' + sp.name : 'Away assistant turned off for ' + sp.name));
   };
   return (
     <>

@@ -210,7 +210,7 @@ function LiveDmsPage() {
                 else toast('Couldn’t open this conversation');
               }}
             >
-              <Ic n="ai" /> <span className="hide-m">Catch up</span>
+              <Ic n="summary" /> <span className="hide-m">Catch up</span>
             </button>
           )}
           {dm !== 'AH' && (
