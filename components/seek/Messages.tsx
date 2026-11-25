@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PEOPLE, type ChatMessage, type DecisionCard, type FeedItem, type PersonKey, type State } from '@/lib/seek/data';
 import { localMeetingText, now } from '@/lib/seek/format';
@@ -1025,6 +1025,35 @@ function mentionItems(people: PersonKey[]): MentionItem[] {
   ];
 }
 
+/** "@Name" for the people you can mention (and @everyone / @here), so the box can show them highlighted as you type. */
+function mentionPattern(people: PersonKey[]): RegExp {
+  const names = [...new Set(mentionItems(people).map((x) => x.n))]
+    .filter(Boolean)
+    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .sort((a, b) => b.length - a.length);
+  return new RegExp('(^|[\\s(])(@(?:' + names.join('|') + '))(?![\\w])', 'gi');
+}
+
+/** The typed text again, behind the (see-through) box, with mentions drawn bold and tinted. */
+function MirrorText({ text, re }: { text: string; re: RegExp }) {
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  re.lastIndex = 0;
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    const at = m.index + m[1].length;
+    if (at > last) out.push(text.slice(last, at));
+    out.push(
+      <b key={at} className="cmk">
+        {m[2]}
+      </b>,
+    );
+    last = at + m[2].length;
+  }
+  out.push(text.slice(last));
+  // a final newline needs something after it to take up a line, like it does in the box
+  return <>{out}{text.endsWith('\n') ? ' ' : null}</>;
+}
+
 export function Composer({
   placeholder,
   button = 'Send',
@@ -1111,6 +1140,29 @@ export function Composer({
     t.style.height = 'auto';
     t.style.height = Math.min(t.scrollHeight, 140) + 'px';
   }, [v]);
+
+  // mentions show bold and tinted while you type: the box turns see-through over a copy of the text that has them marked
+  const peopleKey = people.join(',');
+  const mentionRe = useMemo(() => mentionPattern(people), [peopleKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const marked = v.includes('@') && (mentionRe.lastIndex = 0, mentionRe.test(v));
+  const mirror = useRef<HTMLDivElement>(null);
+  const syncMirror = () => {
+    const t = ta.current;
+    const m = mirror.current;
+    if (!t || !m) return;
+    const cs = getComputedStyle(t);
+    // same text box as the textarea (its scrollbar excluded), so lines wrap in the same places
+    m.style.width = t.clientWidth + 'px';
+    m.style.height = t.clientHeight + 'px';
+    m.style.padding = cs.padding;
+    m.style.font = cs.font;
+    m.style.letterSpacing = cs.letterSpacing;
+    m.style.lineHeight = cs.lineHeight;
+    m.scrollTop = t.scrollTop;
+  };
+  useLayoutEffect(() => {
+    if (marked) syncMirror();
+  });
 
   const refreshMentions = (val: string, caret: number) => {
     const m = val.slice(0, caret).match(/(^|\s)@(\w*)$/);
@@ -1263,9 +1315,17 @@ export function Composer({
           ))}
         </div>
       )}
+      <div className="cmp-ed">
+      {marked && (
+        <div ref={mirror} className="cmp-mirror" aria-hidden="true">
+          <MirrorText text={v} re={mentionRe} />
+        </div>
+      )}
       <textarea
         ref={ta}
         rows={1}
+        className={marked ? 'mk' : undefined}
+        onScroll={marked ? syncMirror : undefined}
         placeholder={placeholder}
         aria-label={placeholder}
         // the @mention list: a textarea can't take role=combobox, so it is a textbox with list autocomplete
@@ -1314,6 +1374,7 @@ export function Composer({
         }}
         onBlur={() => setTimeout(() => setMn(null), 120)}
       />
+      </div>
       {mn && (
         <div className="mnp" id={mnId} role="listbox" aria-label="Mention someone">
           <div className="mnh">Mention someone</div>

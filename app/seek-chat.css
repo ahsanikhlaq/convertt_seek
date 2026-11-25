@@ -225,3 +225,11 @@ html.dark .tmenu{box-shadow:0 14px 34px rgba(0,0,0,.5)}
   .comp .cr .btn.send.wl{padding:0 11px}
   .comp .cr .btn.send.wl .btxt{display:none}
 }
+
+/* @mentions show bold and tinted while you type: the textarea turns see-through over a copy of the text with them marked */
+.comp .cmp-ed{position:relative}
+.comp .cmp-mirror{position:absolute;left:0;top:0;box-sizing:border-box;overflow:hidden;pointer-events:none;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;color:var(--ink)}
+.comp textarea.mk,html.dark .comp textarea.mk{position:relative;color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--ink)}
+.comp textarea.mk::placeholder{-webkit-text-fill-color:var(--mu)}
+/* bold look without changing letter widths (so the caret stays in line): a hairline shadow and a tinted pill */
+.comp .cmk{font-weight:inherit;color:var(--v);background:var(--vs);border-radius:4px;box-shadow:0 0 0 2px var(--vs);text-shadow:.5px 0 0 currentColor,-.2px 0 0 currentColor}
