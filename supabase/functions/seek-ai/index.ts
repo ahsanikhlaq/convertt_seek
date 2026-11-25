@@ -4,7 +4,9 @@
 //   { action: 'tasks', message_id: <id> }                                       → tasks suggested from one message
 //   { action: 'away', message_id: <id> }   → the assistant replies in the channel when nobody else is around (posted);
 //        for a client's Client chat message in a space with the assistant on (space_agents), it replies in Client chat
-//        when nobody on that client's team is available (at most once per space every 10 minutes)
+//        when nobody on that client's team is available (after the first reply, only when the client asks something;
+//        at most 3 replies per space every 15 minutes). Staying quiet for a reason an admin should know (AI paused,
+//        assistant off, AI error) is written to the agent log, at most once per conversation every 10 minutes.
 //   { action: 'preview', ws, question, instructions, knowledge } → admins try the assistant (nothing is posted)
 //   { action: 'scope', message_id: <id> }  → Scope guard: called by the client's app after a client posts in Client
 //        chat; if the request is clearly outside the space's agreed scope, posts one note in Team notes (never to the
@@ -93,6 +95,8 @@ async function gemini(system: string, prompt: string, asJson = false, order: str
     why = (await res.text().catch(() => '')).slice(0, 300);
     if (res.status !== 429 && res.status < 500) break; // a real error (bad key, bad request): don't retry
   }
+  // for the function's logs (status and Google's own error text; the key is sent in a header, never in the body)
+  console.error('gemini failed', last, why.replace(/\s+/g, ' ').slice(0, 200));
   if (last === 429) throw new Error('The free AI limit is used up for now. Try again in a minute (or tomorrow if the daily limit is reached).');
   if (last === 401 || last === 403 || /API key|API_KEY/i.test(why)) throw new Error('The Gemini API key was refused. Check the GEMINI_API_KEY secret in Supabase.');
   if (last === 504 || last === 503) throw new Error('The AI is busy right now. Try again in a minute.');
@@ -150,8 +154,18 @@ const span = (mins: number) => (mins < 60 ? 'about ' + Math.max(1, Math.round(mi
  * Whether someone is in their working hours now and, if not, when they start again (Monday to Friday is assumed),
  * worked out here so the AI never has to do time arithmetic.
  */
+const HOURS = /(\d{1,2}:\d{2})\s*[–—-]\s*(\d{1,2}:\d{2})/;
+
+/** Whether someone is inside their working hours now (Mon–Fri), or null when they haven't set any. */
+function insideHours(hours: string | null, tz: string): boolean | null {
+  const m = HOURS.exec(hours ?? '');
+  if (!m) return null;
+  const now = zoned(new Date(), tz || 'UTC');
+  return now.wd >= 1 && now.wd <= 5 && now.min >= hm(m[1]) && now.min < hm(m[2]);
+}
+
 function workingNow(hours: string | null, tz: string): string {
-  const m = /(\d{1,2}:\d{2})\s*[–—-]\s*(\d{1,2}:\d{2})/.exec(hours ?? '');
+  const m = HOURS.exec(hours ?? '');
   if (!m) return '';
   const start = hm(m[1]);
   const end = hm(m[2]);
@@ -183,8 +197,16 @@ function ago(iso: string | null) {
 }
 
 const STATUS: Record<string, string> = { on: 'Available', mt: 'In a meeting', fc: 'Focus time', aw: 'Away' };
+// statuses that mean "not available to reply right now" (the codes in lib/seek/data.ts StatusKey)
+const BUSY = new Set(['aw', 'mt', 'fc']);
+// the app's heartbeat updates last_seen_at every 90 s: 3 minutes allows one missed beat
+const SEEN_WITHIN = 3 * 60_000;
 
-/** Who else is on the team / in the channel: status, last seen, working hours and their local time now. */
+/**
+ * Who else is on the team / in the channel: status, last seen, working hours and their local time now. `here` is
+ * true only for someone who can reply now: status Available (not Away, In a meeting or Focus time), notifications not
+ * paused, seen in the last 3 minutes, and inside their working hours (when they have set any).
+ */
 async function availability(admin: SupabaseClient, ws: string, ids: string[], fallbackTz = 'UTC'): Promise<Person[]> {
   if (!ids.length) return [];
   const [{ data: ps }, { data: roles }] = await Promise.all([
@@ -199,8 +221,9 @@ async function availability(admin: SupabaseClient, ws: string, ids: string[], fa
       const name = (p.name || '').trim() || (p.email ?? '').split('@')[0];
       const paused = !!p.dnd_until && Date.parse(p.dnd_until) > Date.now();
       const status = STATUS[p.status ?? 'on'] ?? 'Available';
-      const here = p.status !== 'aw' && !paused && !!p.last_seen_at && Date.now() - Date.parse(p.last_seen_at) < 5 * 60_000;
       const tz = p.time_zone || fallbackTz;
+      const seen = !!p.last_seen_at && Date.now() - Date.parse(p.last_seen_at) < SEEN_WITHIN;
+      const here = !BUSY.has(p.status ?? 'on') && !paused && seen && insideHours(p.work_hours, tz) !== false;
       const hours = workingNow(p.work_hours, tz);
       const parts = [
         status + (paused ? ', notifications paused until ' + clock(p.dnd_until!, tz) : ''),
@@ -371,12 +394,68 @@ const shortDay = (iso: string, tz: string) => {
 
 type SpaceMsg = { id: number; space_id: string; lane: string | null; workspace_id: string; user_id: string | null; body: string; parent_id: number | null; agent: string | null; created_at: string };
 
+// a question: has a "?" or starts (after an optional "hi", "ok", "also"…) with a question word
+const QUESTION_START =
+  /^(?:(?:hi|hey|hello|ok|okay|also|and|so|sorry|thanks|thank you|quick question)\b[\s,!.:;-]*)*(?:who|whom|whose|what|when|where|why|how|which|is|are|am|was|were|do|does|did|can|could|would|will|should|shall|may|might|any|anyone|anybody)\b/i;
+const isQuestion = (t: string) => t.includes('?') || QUESTION_START.test(t.trim());
+
+/**
+ * Follow-ups after the assistant's first reply: at most 3 replies per conversation every 15 minutes, and after the
+ * first only when the person asks something. The question may be in any of their messages since the assistant's last
+ * reply (not only this one), so when two quick messages arrive and the earlier call stays quiet for the newer one,
+ * the newer one passes this check whenever the earlier one would have. Returns null to go ahead, or why not.
+ */
+async function followUpGate(admin: SupabaseClient, where: { channel_id: string } | { space_id: string; lane: string }, me: string, m: { body: string; created_at: string }): Promise<string | null> {
+  const scoped = (q: SupabaseClient) => {
+    for (const [k, v] of Object.entries(where)) q = q.eq(k, v);
+    return q;
+  };
+  const { data: replies } = await scoped(admin.from('messages').select('created_at'))
+    .eq('agent', 'away_assistant')
+    .gte('created_at', new Date(Date.now() - 15 * 60_000).toISOString())
+    .order('created_at', { ascending: false })
+    .limit(3);
+  const list = (replies ?? []) as { created_at: string }[];
+  if (list.length >= 3) return 'replied 3 times in 15 minutes';
+  if (!list.length || isQuestion(m.body)) return null;
+  // their other messages since the assistant's last reply
+  const { data: mine } = await scoped(admin.from('messages').select('body'))
+    .eq('user_id', me)
+    .is('parent_id', null)
+    .gt('created_at', list[0].created_at)
+    .lte('created_at', m.created_at)
+    .limit(20);
+  return ((mine ?? []) as { body: string }[]).some((x) => isQuestion(x.body)) ? null : 'not a question';
+}
+
+/**
+ * A line in the agent log when the Away assistant stays quiet for a reason an admin would care about, or fails.
+ * The same line for the same conversation is written at most once every 10 minutes. Never throws.
+ */
+async function logQuiet(admin: SupabaseClient, ws: string, conv: string, action: string, actor: string, source: number) {
+  try {
+    const { count } = await admin
+      .from('agent_log')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', ws)
+      .eq('agent', 'away_assistant')
+      .eq('conv', conv)
+      .eq('action', action)
+      .gte('at', new Date(Date.now() - 10 * 60_000).toISOString());
+    if ((count ?? 0) > 0) return;
+    const { error } = await admin.from('agent_log').insert({ workspace_id: ws, agent: 'away_assistant', action, conv, sources: [source], actor_id: actor });
+    if (error) console.error('agent_log insert failed', error.code);
+  } catch (e) {
+    console.error('agent_log failed', e instanceof Error ? e.message : e);
+  }
+}
+
 /**
  * The Away assistant in a client's Client chat. Replies (in Client chat, as agent 'away_assistant') only when:
  * the caller wrote this fresh, top-level Client chat message and is a client person of the space (not the team);
  * the space has the assistant turned on (space_agents); the workspace's Away assistant is on and AI isn't paused;
- * nobody on the space's team (or, if it has none, the workspace's team) is available; and it hasn't replied in this
- * space in the last 10 minutes.
+ * nobody on the space's team (or, if it has none, the workspace's team) is available; and, after its first reply,
+ * the client is asking something (at most 3 replies per space every 15 minutes, see followUpGate).
  */
 async function awayInSpace(admin: SupabaseClient, me: string, m: SpaceMsg): Promise<Response> {
   const no = (why: string) => json({ replied: false, why });
@@ -394,7 +473,16 @@ async function awayInSpace(admin: SupabaseClient, me: string, m: SpaceMsg): Prom
   if (!cp || (member && member.role !== 'guest')) return no('not a client message');
   if (!sa) return no('no assistant in this space');
   if (!sp || sp.status === 'closed') return no('space not open');
-  if (w?.ai_paused || (setting && !setting.enabled)) return no('assistant is off');
+  const conv = 'sp:' + m.space_id + ':client';
+  const quiet = (why: string) => logQuiet(admin, m.workspace_id, conv, `Stayed quiet in ${sp.name} · Client chat: ${why}`, me, m.id);
+  if (w?.ai_paused) {
+    await quiet('AI is paused for this workspace');
+    return no('assistant is off');
+  }
+  if (setting && !setting.enabled) {
+    await quiet('the Away assistant is switched off in Apps → AI agents');
+    return no('assistant is off');
+  }
   const tz = (w?.time_zone as string | null) || 'UTC';
 
   // the team on this client; a space with nobody on it falls back to the workspace's team
@@ -404,12 +492,14 @@ async function awayInSpace(admin: SupabaseClient, me: string, m: SpaceMsg): Prom
     ids = ((mem ?? []) as { user_id: string; role: string }[]).filter((x) => x.role !== 'guest').map((x) => x.user_id);
   }
   const team = await availability(admin, m.workspace_id, ids.filter((x) => x !== me), tz);
-  if (team.some((p) => p.here)) return no('someone is here');
+  if (team.some((p) => p.here)) {
+    await quiet('someone on the team is available right now');
+    return no('someone is here');
+  }
 
-  // at most one reply per space every 10 minutes
-  const since = new Date(Date.now() - 10 * 60_000).toISOString();
-  const { count: recent } = await admin.from('messages').select('id', { count: 'exact', head: true }).eq('space_id', m.space_id).eq('lane', 'client').eq('agent', 'away_assistant').gte('created_at', since);
-  if ((recent ?? 0) > 0) return no('replied recently');
+  // after the first reply, follow-ups only for questions; at most 3 replies per space every 15 minutes
+  const gate = await followUpGate(admin, { space_id: m.space_id, lane: 'client' }, me, m);
+  if (gate) return no('replied recently (' + gate + ')');
 
   // the Client chat so far (last 16 posts; never Team notes), with names and which side wrote them
   const { data: rows } = await admin.from('messages').select('user_id, agent, body, created_at').eq('space_id', m.space_id).eq('lane', 'client').is('parent_id', null).lte('created_at', m.created_at).order('created_at', { ascending: false }).limit(16);
@@ -440,22 +530,29 @@ async function awayInSpace(admin: SupabaseClient, me: string, m: SpaceMsg): Prom
     instructions: setting?.instructions ?? '',
     knowledge: setting?.knowledge ?? '',
   });
+  let text: string;
   try {
-    const text = tidy(await gemini(sys, transcript));
-    // two quick messages get one reply (the newer one's call answers, with both in view), and a reply that went out
-    // while this one was being written wins
-    const [{ count: newer }, { count: answered }] = await Promise.all([
-      admin.from('messages').select('id', { count: 'exact', head: true }).eq('space_id', m.space_id).eq('lane', 'client').eq('user_id', me).is('parent_id', null).gt('created_at', m.created_at),
-      admin.from('messages').select('id', { count: 'exact', head: true }).eq('space_id', m.space_id).eq('lane', 'client').eq('agent', 'away_assistant').gte('created_at', since),
-    ]);
-    if ((newer ?? 0) > 0 || (answered ?? 0) > 0) return no('already answered');
-    const { data: reply, error } = await admin.from('messages').insert({ space_id: m.space_id, lane: 'client', body: text, agent: 'away_assistant' }).select('id').single();
-    if (error) return json({ error: 'The assistant couldn’t post its reply' }, 500);
-    await admin.from('agent_log').insert({ workspace_id: m.workspace_id, agent: 'away_assistant', action: `Replied to ${sender} in ${sp.name} · Client chat while the team was away`, conv: 'sp:' + m.space_id + ':client', sources: [m.id, reply.id], actor_id: me });
-    return json({ replied: true, model: used });
+    text = tidy(await gemini(sys, transcript));
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : 'Something went wrong' }, 502);
+    const msg = e instanceof Error ? e.message : 'Something went wrong';
+    await logQuiet(admin, m.workspace_id, conv, `Couldn’t reply to ${sender} in ${sp.name} · Client chat: ${msg}`, me, m.id);
+    return json({ error: msg }, 502);
   }
+  // two quick messages get one reply: if they wrote again, the newer message's call answers (with both in view; it
+  // passes the follow-up check whenever this one did), and a reply posted after this message was sent wins
+  const [{ count: newer }, { count: answered }] = await Promise.all([
+    admin.from('messages').select('id', { count: 'exact', head: true }).eq('space_id', m.space_id).eq('lane', 'client').eq('user_id', me).is('parent_id', null).gt('created_at', m.created_at),
+    admin.from('messages').select('id', { count: 'exact', head: true }).eq('space_id', m.space_id).eq('lane', 'client').eq('agent', 'away_assistant').gt('created_at', m.created_at),
+  ]);
+  if ((newer ?? 0) > 0 || (answered ?? 0) > 0) return no('already answered');
+  const { data: reply, error } = await admin.from('messages').insert({ space_id: m.space_id, lane: 'client', body: text, agent: 'away_assistant' }).select('id').single();
+  if (error || !reply) {
+    console.error('away reply insert failed', error?.code);
+    await logQuiet(admin, m.workspace_id, conv, `Couldn’t post a reply to ${sender} in ${sp.name} · Client chat (saving the message failed)`, me, m.id);
+    return json({ error: 'The assistant couldn’t post its reply' }, 500);
+  }
+  await admin.from('agent_log').insert({ workspace_id: m.workspace_id, agent: 'away_assistant', action: `Replied to ${sender} in ${sp.name} · Client chat while the team was away`, conv, sources: [m.id, reply.id], actor_id: me });
+  return json({ replied: true, model: used });
 }
 
 Deno.serve(async (req) => {
@@ -495,19 +592,31 @@ Deno.serve(async (req) => {
       admin.from('channels').select('name').eq('id', m.channel_id).single(),
     ]);
     if (!ca) return json({ replied: false, why: 'no assistant in this channel' });
-    if (w?.ai_paused || (setting && !setting.enabled)) return json({ replied: false, why: 'assistant is off' });
+    const conv = 'ch:' + m.channel_id;
+    const where = '#' + (ch?.name ?? 'channel');
+    const quiet = (why: string) => logQuiet(admin, m.workspace_id, conv, `Stayed quiet in ${where}: ${why}`, user.id, m.id);
+    if (w?.ai_paused) {
+      await quiet('AI is paused for this workspace');
+      return json({ replied: false, why: 'assistant is off' });
+    }
+    if (setting && !setting.enabled) {
+      await quiet('the Away assistant is switched off in Apps → AI agents');
+      return json({ replied: false, why: 'assistant is off' });
+    }
     const mentioned = /(^|\s)@(assistant|seek|ai)\b/i.test(m.body);
     // everyone else in the channel (team only), with what's needed to say when they'll be back
     const { data: mem } = await admin.from('channel_members').select('user_id').eq('channel_id', m.channel_id).neq('user_id', user.id);
     const ids = ((mem ?? []) as { user_id: string }[]).map((x) => x.user_id);
     const team = await availability(admin, m.workspace_id, ids, (w?.time_zone as string | null) || 'UTC');
     if (!mentioned) {
-      // is anyone else in the channel around? (not Away, not paused, active in the last 5 minutes)
-      if (team.some((p) => p.here)) return json({ replied: false, why: 'someone is here' });
+      // is anyone else in the channel available? (see availability: status, paused, last seen, working hours)
+      if (team.some((p) => p.here)) {
+        await quiet('someone in the channel is available right now');
+        return json({ replied: false, why: 'someone is here' });
+      }
       // a holding reply, then follow-up questions; at most 3 replies per channel every 15 minutes
-      const { count: recent } = await admin.from('messages').select('id', { count: 'exact', head: true }).eq('channel_id', m.channel_id).eq('agent', 'away_assistant').gte('created_at', new Date(Date.now() - 15 * 60_000).toISOString());
-      const n = recent ?? 0;
-      if (n >= 3 || (n > 0 && !m.body.includes('?'))) return json({ replied: false, why: 'replied recently' });
+      const gate = await followUpGate(admin, { channel_id: m.channel_id }, user.id, m);
+      if (gate) return json({ replied: false, why: 'replied recently (' + gate + ')' });
     }
     // the conversation so far (last 16 posts), with names and times
     const { data: rows } = await admin.from('messages').select('user_id, agent, body, created_at').eq('channel_id', m.channel_id).is('parent_id', null).order('created_at', { ascending: false }).limit(16);
@@ -524,24 +633,31 @@ Deno.serve(async (req) => {
         })
         .join('\n');
     const sys = assistantPrompt({ org: w?.name ?? '', channel: ch?.name ?? 'channel', sender, mentioned, tz, team, instructions: setting?.instructions ?? '', knowledge: setting?.knowledge ?? '' });
+    let text: string;
     try {
-      const text = tidy(await gemini(sys, transcript));
-      // two quick messages get one reply: if they wrote again (that message gets the reply, with both in view) or a
-      // reply went out while this one was being written, stay quiet
-      if (!mentioned) {
-        const [{ count: newer }, { count: answered }] = await Promise.all([
-          admin.from('messages').select('id', { count: 'exact', head: true }).eq('channel_id', m.channel_id).eq('user_id', user.id).is('parent_id', null).gt('created_at', m.created_at),
-          admin.from('messages').select('id', { count: 'exact', head: true }).eq('channel_id', m.channel_id).eq('agent', 'away_assistant').gt('created_at', m.created_at),
-        ]);
-        if ((newer ?? 0) > 0 || (answered ?? 0) > 0) return json({ replied: false, why: 'already answered' });
-      }
-      const { error } = await admin.from('messages').insert({ channel_id: m.channel_id, body: text, agent: 'away_assistant' });
-      if (error) return json({ error: 'The assistant couldn’t post its reply' }, 500);
-      await admin.from('agent_log').insert({ workspace_id: m.workspace_id, agent: 'away_assistant', action: `Replied in #${ch?.name ?? 'channel'} to ${sender}${mentioned ? ' (asked directly)' : ' while the team was away'}`, conv: 'ch:' + m.channel_id, sources: [m.id], actor_id: user.id });
-      return json({ replied: true, model: used });
+      text = tidy(await gemini(sys, transcript));
     } catch (e) {
-      return json({ error: e instanceof Error ? e.message : 'Something went wrong' }, 502);
+      const msg = e instanceof Error ? e.message : 'Something went wrong';
+      await logQuiet(admin, m.workspace_id, conv, `Couldn’t reply to ${sender} in ${where}: ${msg}`, user.id, m.id);
+      return json({ error: msg }, 502);
     }
+    // two quick messages get one reply: if they wrote again, the newer message's call answers (with both in view; it
+    // passes the follow-up check whenever this one did), and a reply posted after this message was sent wins
+    if (!mentioned) {
+      const [{ count: newer }, { count: answered }] = await Promise.all([
+        admin.from('messages').select('id', { count: 'exact', head: true }).eq('channel_id', m.channel_id).eq('user_id', user.id).is('parent_id', null).gt('created_at', m.created_at),
+        admin.from('messages').select('id', { count: 'exact', head: true }).eq('channel_id', m.channel_id).eq('agent', 'away_assistant').gt('created_at', m.created_at),
+      ]);
+      if ((newer ?? 0) > 0 || (answered ?? 0) > 0) return json({ replied: false, why: 'already answered' });
+    }
+    const { error } = await admin.from('messages').insert({ channel_id: m.channel_id, body: text, agent: 'away_assistant' });
+    if (error) {
+      console.error('away reply insert failed', error.code);
+      await logQuiet(admin, m.workspace_id, conv, `Couldn’t post a reply to ${sender} in ${where} (saving the message failed)`, user.id, m.id);
+      return json({ error: 'The assistant couldn’t post its reply' }, 500);
+    }
+    await admin.from('agent_log').insert({ workspace_id: m.workspace_id, agent: 'away_assistant', action: `Replied in ${where} to ${sender}${mentioned ? ' (asked directly)' : ' while the team was away'}`, conv, sources: [m.id], actor_id: user.id });
+    return json({ replied: true, model: used });
   }
 
   // ---- try the assistant before it goes live: admins ask a question and see the reply (nothing is posted)
@@ -776,8 +892,8 @@ Deno.serve(async (req) => {
     agent = 'task_suggester';
     const { data } = await db.from('messages').select(cols + ', channel_id, dm_id, space_id, lane').eq('id', Number(body.message_id)).maybeSingle();
     if (!data) return json({ error: 'Message not found' }, 404);
-    msgs = [data as Msg];
-    const d = data as Msg & { channel_id: string | null; dm_id: string | null; space_id: string | null; lane: string | null };
+    const d = data as unknown as Msg & { channel_id: string | null; dm_id: string | null; space_id: string | null; lane: string | null };
+    msgs = [d];
     conv = d.channel_id ? 'ch:' + d.channel_id : d.dm_id ? 'dm:' + d.dm_id : 'sp:' + d.space_id + ':' + d.lane;
   } else return json({ error: 'Unknown action' }, 400);
 

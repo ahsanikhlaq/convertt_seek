@@ -34,11 +34,23 @@ export function checkScope(messageId: number) {
  */
 export function askAwayAssistant(messageId: number) {
   if (!clientSide) return;
+  // nothing is shown to the client either way; a failure goes to the console (and the server writes it to the
+  // agent log for the team's admins)
   void sb()
     .functions.invoke('seek-ai', { body: { action: 'away', message_id: messageId } })
     .then(
-      () => {},
-      () => {},
+      async ({ data, error }) => {
+        if (!error) {
+          if (data?.error) console.warn('Seek assistant:', data.error);
+          return;
+        }
+        let why = '';
+        try {
+          why = String((await (error as { context?: Response }).context?.json())?.error ?? '');
+        } catch {}
+        console.warn('Seek assistant:', why || error.message);
+      },
+      (e) => console.warn('Seek assistant:', e instanceof Error ? e.message : e),
     );
 }
 

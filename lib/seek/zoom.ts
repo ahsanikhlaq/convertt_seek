@@ -59,22 +59,39 @@ export function zoomStatus(fresh = false): Promise<ZoomStatus | null> {
 
 /** Sends you to Zoom's consent screen; it comes back to Apps. */
 export async function connectZoom(): Promise<string | null> {
-  // the consent screen comes back to Apps; remember where you were, to go back there afterwards
+  // the consent screen comes back to Apps; remember where you were, to go back there afterwards, and which app is
+  // connecting (a refusal can come back without a state saying whose it is)
   try {
+    sessionStorage.setItem('seek.connecting', 'zoom');
     if (!location.pathname.startsWith('/apps')) sessionStorage.setItem('seek.afterConnect', location.pathname + location.search);
+    else sessionStorage.removeItem('seek.afterConnect');
   } catch {}
   const r = await call<{ url: string }>({ action: 'start' });
-  if (!r.data?.url) return r.error ?? 'Couldn’t start connecting Zoom';
+  if (!r.data?.url) {
+    try {
+      sessionStorage.removeItem('seek.connecting');
+      sessionStorage.removeItem('seek.afterConnect');
+    } catch {}
+    return r.error ?? 'Couldn’t start connecting Zoom';
+  }
   location.assign(r.data.url);
   return null;
 }
 
-/** Back on Apps from Zoom with ?code&state (state starts with "zoom."): saves the connection. */
-export async function finishZoom(code: string, state: string): Promise<string | null> {
+/**
+ * Back on Apps from Zoom with ?code&state (state starts with "zoom."): saves the connection. Returns the error
+ * message, or the account's email.
+ */
+export async function finishZoom(code: string, state: string): Promise<{ error: string | null; email: string }> {
   const r = await call<{ email: string }>({ action: 'finish', code, state });
   cached = null;
-  keepStatus(null);
-  return r.error ?? null;
+  if (r.error || !r.data) {
+    keepStatus(null);
+    return { error: r.error ?? 'Couldn’t connect Zoom. Try again', email: '' };
+  }
+  const email = String(r.data.email ?? '');
+  keepStatus({ configured: true, connected: true, email });
+  return { error: null, email };
 }
 
 export async function disconnectZoom(): Promise<string | null> {

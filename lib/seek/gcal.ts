@@ -59,22 +59,36 @@ export function googleStatus(fresh = false): Promise<GoogleStatus | null> {
 
 /** Sends you to Google's consent screen; it comes back to Apps. */
 export async function connectGoogle(): Promise<string | null> {
-  // the consent screen comes back to Apps; remember where you were, to go back there afterwards
+  // the consent screen comes back to Apps; remember where you were, to go back there afterwards, and which app is
+  // connecting (a refusal can come back without a state saying whose it is)
   try {
+    sessionStorage.setItem('seek.connecting', 'google');
     if (!location.pathname.startsWith('/apps')) sessionStorage.setItem('seek.afterConnect', location.pathname + location.search);
+    else sessionStorage.removeItem('seek.afterConnect');
   } catch {}
   const r = await call<{ url: string }>({ action: 'start' });
-  if (!r.data?.url) return r.error ?? 'Couldn’t start connecting Google';
+  if (!r.data?.url) {
+    try {
+      sessionStorage.removeItem('seek.connecting');
+      sessionStorage.removeItem('seek.afterConnect');
+    } catch {}
+    return r.error ?? 'Couldn’t start connecting Google';
+  }
   location.assign(r.data.url);
   return null;
 }
 
-/** Back on Apps from Google with ?code&state: saves the connection. Returns an error message, or null. */
-export async function finishGoogle(code: string, state: string): Promise<string | null> {
+/** Back on Apps from Google with ?code&state: saves the connection. Returns the error message, or the account's email. */
+export async function finishGoogle(code: string, state: string): Promise<{ error: string | null; email: string }> {
   const r = await call<{ email: string }>({ action: 'finish', code, state });
   cached = null;
-  keepStatus(null);
-  return r.error ?? null;
+  if (r.error || !r.data) {
+    keepStatus(null);
+    return { error: r.error ?? 'Couldn’t connect Google. Try again', email: '' };
+  }
+  const email = String(r.data.email ?? '');
+  keepStatus({ configured: true, connected: true, email });
+  return { error: null, email };
 }
 
 export async function disconnectGoogle(): Promise<string | null> {

@@ -90,7 +90,9 @@ async function save(admin: Client, user: string, data: Record<string, string | n
     row.email = email;
     row.connected_at = new Date().toISOString();
   }
-  await admin.from('zoom_accounts').upsert(row);
+  const { error } = await admin.from('zoom_accounts').upsert(row);
+  if (error) console.error('zoom_accounts upsert failed', error.code, error.message);
+  return !error;
 }
 
 /** A working access token for this person, refreshed when needed; null when they aren't connected. */
@@ -178,8 +180,10 @@ Deno.serve(async (req) => {
           return json({ error: 'Zoom didn’t accept the sign-in' + why(r.data) + '. Try connecting again' }, 400);
         }
         const me = await zoom(String(r.data.access_token), '/users/me');
-        await save(admin, user.id, r.data, me.ok ? String(me.data.email ?? '') : '');
-        return json({ email: me.ok ? me.data.email : '' });
+        const email = me.ok ? String(me.data.email ?? '') : '';
+        if (!(await save(admin, user.id, r.data, email)))
+          return json({ error: 'Zoom signed you in, but Seek couldn’t save the connection. Try connecting again in a minute' }, 500);
+        return json({ email });
       }
       case 'disconnect': {
         const { data } = await admin.from('zoom_accounts').select('access_token').eq('user_id', user.id).maybeSingle();

@@ -181,8 +181,10 @@ Deno.serve(async (req) => {
           console.error('google token exchange failed', r.data.error, r.data.error_description);
           return json({ error: 'Google didn’t accept the sign-in' + why(r.data) + '. Try connecting again' }, 400);
         }
+        // Google's granular consent lets people leave the calendar box unticked: then Seek can't make events
         const scope = String(r.data.scope ?? '');
-        if (!scope.includes('calendar')) return json({ error: 'Connect again and tick the box that lets Seek use your calendar' }, 400);
+        if (!scope.split(/\s+/).includes('https://www.googleapis.com/auth/calendar.events') && !/auth\/calendar(\s|$)/.test(scope))
+          return json({ error: 'Google connected without calendar access. Click Connect again and tick the box that lets Seek manage your calendar events.' }, 400);
         let email = '';
         try {
           email = JSON.parse(unb64u(String(r.data.id_token).split('.')[1])).email ?? '';
@@ -190,7 +192,7 @@ Deno.serve(async (req) => {
         const { data: old } = await admin.from('google_accounts').select('refresh_token').eq('user_id', user.id).maybeSingle();
         const refresh = String(r.data.refresh_token ?? old?.refresh_token ?? '');
         if (!refresh) return json({ error: 'Google didn’t give Seek lasting access. Remove Seek in your Google account’s third-party access, then connect again' }, 400);
-        await admin.from('google_accounts').upsert({
+        const { error: saveError } = await admin.from('google_accounts').upsert({
           user_id: user.id,
           email,
           refresh_token: refresh,
@@ -198,6 +200,10 @@ Deno.serve(async (req) => {
           expires_at: new Date(Date.now() + Number(r.data.expires_in ?? 3600) * 1000).toISOString(),
           connected_at: new Date().toISOString(),
         });
+        if (saveError) {
+          console.error('google_accounts upsert failed', saveError.code, saveError.message);
+          return json({ error: 'Google signed you in, but Seek couldn’t save the connection. Try connecting again in a minute' }, 500);
+        }
         return json({ email });
       }
       case 'disconnect': {

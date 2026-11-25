@@ -81,36 +81,73 @@ export function LiveApps() {
 
   useEffect(() => {
     // back from Google's or Zoom's consent screen (?code&state, or ?error): finish connecting, then tidy the address.
-    // Zoom's state starts with "zoom."; anything else came from Google.
+    // Zoom's state starts with "zoom."; another state came from Google; with no state, the app we sent you to (saved
+    // when Connect was clicked) says whose it is.
     const q = new URLSearchParams(location.search);
     const code = q.get('code');
     const state = q.get('state') ?? '';
-    const cancelled = q.get('error');
-    const isZoom = state.startsWith('zoom.');
-    if (code || cancelled) history.replaceState(null, '', location.pathname);
-    void (async () => {
-      if (cancelled) toast(`Connecting ${isZoom ? 'Zoom' : 'Google'} was cancelled`);
-      else if (code && state) {
-        setBusy(true);
-        const err = isZoom ? await finishZoom(code, state) : await finishGoogle(code, state);
-        setBusy(false);
-        toast(
-          err ??
-            (isZoom
-              ? 'Zoom connected. New Zoom meetings get their link automatically'
-              : 'Google connected. New Google Meet meetings get a link and a calendar invite automatically'),
-        );
-        // connected from somewhere else (the schedule dialog): go back there
-        let back: string | null = null;
-        try {
-          back = sessionStorage.getItem('seek.afterConnect');
-          sessionStorage.removeItem('seek.afterConnect');
-        } catch {}
-        if (!err && back && back.startsWith('/') && !back.startsWith('//')) {
-          setTimeout(() => location.assign(back!), 1500);
-          return;
-        }
+    const failed = q.get('error');
+    const read = (k: string): string | null => {
+      try {
+        return sessionStorage.getItem(k);
+      } catch {
+        return null;
       }
+    };
+    const drop = (k: string) => {
+      try {
+        sessionStorage.removeItem(k);
+      } catch {}
+    };
+    const hint = read('seek.connecting');
+    const provider: 'google' | 'zoom' | null = state ? (state.startsWith('zoom.') ? 'zoom' : 'google') : hint === 'zoom' || hint === 'google' ? hint : null;
+    const label = provider === 'zoom' ? 'Zoom' : provider === 'google' ? 'Google' : '';
+    const returning = !!(code || failed);
+    if (returning) {
+      history.replaceState(null, '', location.pathname);
+      drop('seek.connecting');
+    }
+    // a failed or cancelled attempt: don't go back to the old page on a later, unrelated connect
+    const dropAfterConnect = () => drop('seek.afterConnect');
+    void (async () => {
+      if (failed) {
+        dropAfterConnect();
+        const what = label ? 'Connecting ' + label : 'Connecting the app';
+        toast(failed === 'access_denied' ? what + ' was cancelled' : what + ' didn’t work (' + failed.replace(/[^\w.-]/g, '').slice(0, 40) + '). Try again');
+      } else if (code && state && provider) {
+        setBusy(true);
+        let r: { error: string | null; email: string };
+        try {
+          r = provider === 'zoom' ? await finishZoom(code, state) : await finishGoogle(code, state);
+        } catch {
+          r = { error: `Couldn’t connect ${label}. Try again`, email: '' };
+        } finally {
+          setBusy(false);
+        }
+        if (r.error) {
+          dropAfterConnect();
+          toast(r.error);
+        } else {
+          // connected: show it at once (no need to wait for the status check)
+          const st = { configured: true, connected: true, email: r.email };
+          if (provider === 'zoom') setZ(st);
+          else setG(st);
+          toast(provider === 'zoom' ? 'Zoom connected. New Zoom meetings get their link automatically' : 'Google connected. New Google Meet meetings get a link and a calendar invite automatically');
+          // connected from somewhere else (the schedule dialog): go back there
+          const back = read('seek.afterConnect');
+          dropAfterConnect();
+          if (back && back.startsWith('/') && !back.startsWith('//')) {
+            setTimeout(() => location.assign(back), 1500);
+            return;
+          }
+        }
+        // the other app's card (and this one's, after a failure) from the server
+        await Promise.all([
+          provider === 'google' && !r.error ? null : googleStatus(true).then((gs) => gs && setG(gs)),
+          provider === 'zoom' && !r.error ? null : zoomStatus(true).then((zs) => zs && setZ(zs)),
+        ]);
+        return;
+      } else if (returning) dropAfterConnect();
       // each shows as soon as it arrives; a failed check keeps what is shown
       await Promise.all([googleStatus(true).then((gs) => gs && setG(gs)), zoomStatus(true).then((zs) => zs && setZ(zs))]);
     })();
@@ -118,11 +155,34 @@ export function LiveApps() {
 
   const connect = async (fn: () => Promise<string | null>) => {
     setBusy(true);
-    const e = await fn();
-    if (e) {
+    let e: string | null;
+    try {
+      e = await fn();
+    } catch {
+      e = 'Couldn’t start connecting. Check your connection';
+    } finally {
+      // on success the browser is already leaving for the consent screen; if that is stopped, or you come Back to
+      // this page, the buttons must work again
       setBusy(false);
-      toast(e);
     }
+    if (e) toast(e);
+  };
+
+  const disconnect = async (title: string, fn: () => Promise<string | null>, status: (fresh: boolean) => Promise<Status | null>, set: (st: Status) => void) => {
+    if (!(await ask({ title: `Disconnect ${title}?`, body: 'Meetings already scheduled keep their links. You can connect again at any time.', confirm: 'Disconnect', danger: true }))) return;
+    setBusy(true);
+    let e: string | null;
+    try {
+      e = await fn();
+    } catch {
+      e = 'Couldn’t disconnect. Check your connection';
+    } finally {
+      setBusy(false);
+    }
+    toast(e ?? `${title} disconnected`);
+    // a failed status check keeps what is shown
+    const st = await status(true);
+    if (st) set(st);
   };
 
   return (
@@ -137,19 +197,12 @@ export function LiveApps() {
         <AppCard
           name="Google Calendar & Meet"
           icon={GOOGLE_ICON}
-          about="Meetings you schedule with “Google Meet” get a Meet link and go into your Google Calendar, with invitations emailed to the guests. Huddles and calls use Google Meet too. Cancelling in Seek cancels the event. If Google says it “hasn’t verified this app”, choose Advanced → Go to Seek."
+          about="Meetings you schedule with “Google Meet” get a Meet link and go into your Google Calendar, with invitations emailed to the guests. Huddles and calls use Google Meet too. Cancelling in Seek cancels the event. If Google says it “hasn’t verified this app”, choose Advanced → Go to Seek, and tick the calendar box."
           st={g}
           busy={busy}
           setupHint="Not set up yet: an admin adds the Google client ID and secret in Supabase (Edge Functions → Secrets)."
           onConnect={() => void connect(connectGoogle)}
-          onDisconnect={async () => {
-            if (!(await ask({ title: 'Disconnect Google?', body: 'Meetings already scheduled keep their links. You can connect again at any time.', confirm: 'Disconnect', danger: true }))) return;
-            setBusy(true);
-            const e = await disconnectGoogle();
-            setBusy(false);
-            toast(e ?? 'Google disconnected');
-            setG(await googleStatus(true));
-          }}
+          onDisconnect={() => void disconnect('Google', disconnectGoogle, googleStatus, setG)}
         />
         <AppCard
           name="Zoom"
@@ -159,14 +212,7 @@ export function LiveApps() {
           busy={busy}
           setupHint="Not set up yet: an admin adds the Zoom client ID and secret in Supabase (Edge Functions → Secrets)."
           onConnect={() => void connect(connectZoom)}
-          onDisconnect={async () => {
-            if (!(await ask({ title: 'Disconnect Zoom?', body: 'Meetings already scheduled keep their links. You can connect again at any time.', confirm: 'Disconnect', danger: true }))) return;
-            setBusy(true);
-            const e = await disconnectZoom();
-            setBusy(false);
-            toast(e ?? 'Zoom disconnected');
-            setZ(await zoomStatus(true));
-          }}
+          onDisconnect={() => void disconnect('Zoom', disconnectZoom, zoomStatus, setZ)}
         />
       </div>
       {confirmDialog}
