@@ -31,6 +31,7 @@ import { markRead, spaceUnreadCounts, viewingSpace } from '@/lib/seek/liveSync';
 import { flashMessage } from '@/lib/seek/liveDecisions';
 import { toUiId } from '@/lib/seek/live';
 import type { SpaceSettingsTab } from '../SpaceSettings';
+import { SpaceAgentsButton, SpaceCatchUp } from '../SpaceTools';
 import dynamic from 'next/dynamic';
 
 // the new-client and space settings dialogs open on a click, so they load then (not with the page)
@@ -511,6 +512,9 @@ function TeamClients({ live, inviting }: { live: LiveClients; inviting?: boolean
                 <Avatar key={k} k={k} size={26} />
               ))}
             </span>
+            {/* AI for this client: catch up on the open lane, and the agents on this space (opens Space settings → AI agents) */}
+            <SpaceCatchUp space={sp.id} lane={lane} name={sp.name} />
+            <SpaceAgentsButton space={sp.id} ws={live.orgId} onOpen={() => setSettings('AI agents')} compact />
             <button type="button" className="btn sm" onClick={() => setDrafting(true)} title="Draft weekly update (Status drafter)" aria-label="Draft update">
               <Ic n="ai" /> <span className="hide-m hide-n">Draft update</span>
             </button>
