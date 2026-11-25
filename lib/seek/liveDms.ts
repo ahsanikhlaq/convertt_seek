@@ -6,7 +6,7 @@ import { notifyOut } from './push';
 import { accountFor, backendOn, DB_SCHEMA, sb } from './backend';
 import type { ChatMessage, FileRef, MessageCard, PersonKey } from './data';
 import { inviteByEmail, keyFor, learnProfiles, timeLabel, toUiId } from './live';
-import { hydrateReactions, markNotSent, markRead, messageSinks, unreadCounts, workspaceMembers } from './liveSync';
+import { dropEcho, hydrateReactions, keepLocal, markRead, messageSinks, SEND_TIMEOUT_MS, settle, showSending, unreadCounts, workspaceMembers } from './liveSync';
 import { useSeek } from './store';
 import { onLiveStatus, useResync } from './resync';
 
@@ -110,6 +110,8 @@ export function useLiveDmsEngine(viewing: boolean): LiveDms | null {
       t.last = r.body;
       if (d.dm === k) {
         if (t.msgs.some((m) => m.id === toUiId(r.id))) return;
+        // your own message: its "Sending…" (or "Not sent") copy goes
+        if (r.user_id === me.current) dropEcho(t.msgs, r.body);
         t.msgs.push(toMsg(r, r.user_id === me.current));
         // the open conversation stays up to date on other screens, and counts as unread until you're back
         if (!onScreen && r.user_id !== me.current) t.unread = (t.unread || 0) + 1;
@@ -239,7 +241,8 @@ export function useLiveDmsEngine(viewing: boolean): LiveDms | null {
       const msgs = rows.map((r) => toMsg(r));
       update((d) => {
         const t = (d.dms[current] ||= { last: '', unread: 0, msgs: [] });
-        t.msgs = msgs;
+        // your messages still sending (or not sent) stay
+        t.msgs = keepLocal(t.msgs, msgs);
         t.unread = 0;
       });
       done = true;
@@ -292,17 +295,27 @@ export function useLiveDmsEngine(viewing: boolean): LiveDms | null {
       const k = current;
       const thread = threadOf.current.get(k);
       if (!thread) return;
-      const { data, error } = await sb()
-        .from('messages')
-        .insert({ dm_id: thread, body: text })
-        .select('id, dm_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at, card')
-        .single();
-      if (error) {
-        markNotSent(update, (d) => (d.dms[k] ||= { last: '', unread: 0, msgs: [] }).msgs, text, () => send(text));
+      // it shows at once, marked "Sending…"; a send that hangs gives up after 20 seconds and shows as "Not sent"
+      const local = showSending(update, (d) => (d.dms[k] ||= { last: '', unread: 0, msgs: [] }).msgs, text);
+      let data: unknown = null;
+      let error: unknown = null;
+      try {
+        ({ data, error } = await sb()
+          .from('messages')
+          .insert({ dm_id: thread, body: text })
+          .select('id, dm_id, user_id, parent_id, body, created_at, files, pinned_at, edited_at, card')
+          .abortSignal(AbortSignal.timeout(SEND_TIMEOUT_MS))
+          .single());
+      } catch (e) {
+        error = e;
+      }
+      if (error || !data) {
+        settle(update, local, () => send(text));
         return;
       }
       notifyOut();
       await addRow(data as Row);
+      settle(update, local);
     },
     invite: (email, opts) => inviteByEmail(ws.current, me.current, email, opts),
   };

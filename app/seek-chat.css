@@ -233,3 +233,9 @@ html.dark .tmenu{box-shadow:0 14px 34px rgba(0,0,0,.5)}
 .comp textarea.mk::placeholder{-webkit-text-fill-color:var(--mu)}
 /* bold look without changing letter widths (so the caret stays in line): a hairline shadow and a tinted pill */
 .comp .cmk{font-weight:inherit;color:var(--v);background:var(--vs);border-radius:4px;box-shadow:0 0 0 2px var(--vs);text-shadow:.5px 0 0 currentColor,-.2px 0 0 currentColor}
+/* your message while it is being saved: dimmed, with "Sending…" (both only after a moment, so a quick send doesn't flicker) */
+.msg.sending .tx{animation:seek-sending-dim .2s ease .8s both}
+.msg .sendnote{font-size:12px;color:var(--mu);margin-top:2px;animation:seek-sending-in .2s ease .8s both}
+@keyframes seek-sending-dim{to{opacity:.55}}
+@keyframes seek-sending-in{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.msg.sending .tx{animation-duration:0s}.msg .sendnote{animation-duration:0s}}

@@ -6,7 +6,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { backendOn, currentAccount, DB_SCHEMA, inviteClient, completeStep, sb, type ClientRole } from './backend';
 import type { ChatMessage, FileRef, MessageCard } from './data';
 import { agentWho, keyFor, learnProfiles, timeLabel, toUiId } from './live';
-import { hydrateReactions, markNotSent } from './liveSync';
+import { debounced, dropEcho, hydrateReactions, keepLocal, messageSinks, SEND_TIMEOUT_MS, settle, showSending } from './liveSync';
 import { mentionIds } from './liveNotes';
 import { askAwayAssistant, checkScope, setSenderSide } from './liveScope';
 import { useSeek } from './store';
@@ -200,23 +200,33 @@ export function useLiveClients(): LiveClients | null {
     if (!enabled) return;
     let live: RealtimeChannel | null = null;
     let alive = true;
+    // a burst of changes (several steps ticked, people added) reloads the spaces once
+    const reloadSoon = debounced(() => void load(), 500);
+    const sink = async (row: Record<string, unknown>) => {
+      const r = row as unknown as Row;
+      if (!r.space_id || !r.lane || r.parent_id != null) return;
+      await learnProfiles(people([r.user_id]), me.current);
+      update((d) => {
+        const k = laneKey(r.space_id!, r.lane!);
+        const list = ((d.lc ||= {})[k] ||= []);
+        if (list.some((m) => m.id === toUiId(r.id))) return;
+        // your own message: its "Sending…" (or "Not sent") copy goes
+        if (r.user_id === me.current) dropEcho(list, r.body);
+        list.push(toMsg(r, r.user_id === me.current));
+      });
+    };
+    const spaceSink = (r: Record<string, unknown>) => void sink(r);
     (async () => {
       await load();
       if (!alive) return;
-      const reloadSoon = () => void load();
       const filter = side === 'team' && org.current ? `workspace_id=eq.${org.current}` : undefined;
-      live = sb()
-        .channel('seek-clients:' + (org.current ?? me.current))
-        .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'messages', ...(filter ? { filter } : {}) }, async (p) => {
-          const r = p.new as Row;
-          if (!r.space_id || !r.lane || r.parent_id != null) return;
-          await learnProfiles(people([r.user_id]), me.current);
-          update((d) => {
-            const k = laneKey(r.space_id!, r.lane!);
-            const list = ((d.lc ||= {})[k] ||= []);
-            if (!list.some((m) => m.id === toUiId(r.id))) list.push(toMsg(r, r.user_id === me.current));
-          });
-        })
+      // the team already gets every new message in the workspace (team chat's subscription, lib/seek/live.ts), which
+      // hands client space ones over here; a client (guest) has no team chat, so listens itself
+      const viaTeamChat = side === 'team';
+      if (viaTeamChat) messageSinks.space = spaceSink;
+      let ch = sb().channel('seek-clients:' + (org.current ?? me.current));
+      if (!viaTeamChat) ch = ch.on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'messages', ...(filter ? { filter } : {}) }, (p) => void sink(p.new as Record<string, unknown>));
+      live = ch
         // a meeting card changes when the meeting is cancelled
         .on('postgres_changes', { event: 'UPDATE', schema: DB_SCHEMA, table: 'messages', ...(filter ? { filter } : {}) }, (p) => {
           const r = p.new as Row;
@@ -234,6 +244,8 @@ export function useLiveClients(): LiveClients | null {
     })();
     return () => {
       alive = false;
+      reloadSoon.cancel();
+      if (messageSinks.space === spaceSink) messageSinks.space = null;
       if (live) sb().removeChannel(live);
     };
   }, [enabled, side]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -254,7 +266,9 @@ export function useLiveClients(): LiveClients | null {
       const rows = ((data ?? []) as Row[]).reverse();
       const msgs = rows.map((r) => toMsg(r));
       update((d) => {
-        (d.lc ||= {})[laneKey(open, lane)] = msgs;
+        const lc = (d.lc ||= {});
+        // your messages still sending (or not sent) stay
+        lc[laneKey(open, lane)] = keepLocal(lc[laneKey(open, lane)], msgs);
       });
       // names and reactions fill in after the messages are on screen
       await Promise.all([learnProfiles(people(rows.map((r) => r.user_id)), me.current), hydrateReactions(update, msgs.map((m) => m.id), me.current)]);
@@ -276,9 +290,22 @@ export function useLiveClients(): LiveClients | null {
     send: async function send(space: string, ln: Lane, text: string): Promise<void> {
       const sp = spaces.find((x) => x.id === space);
       const who = sp ? [...sp.team.map((t) => t.userId), ...(ln === 'client' ? sp.people.map((p) => p.userId).filter((v): v is string => !!v) : [])].filter((u) => u !== me.current) : [];
-      const { data, error } = await sb().from('messages').insert({ space_id: space, lane: ln, body: text, mentions: mentionIds(text, who) }).select(COLS).single();
-      if (error) {
-        markNotSent(update, (d) => ((d.lc ||= {})[laneKey(space, ln)] ||= []), text, () => send(space, ln, text));
+      // it shows at once, marked "Sending…"; a send that hangs gives up after 20 seconds and shows as "Not sent"
+      const local = showSending(update, (d) => ((d.lc ||= {})[laneKey(space, ln)] ||= []), text);
+      let data: unknown = null;
+      let error: unknown = null;
+      try {
+        ({ data, error } = await sb()
+          .from('messages')
+          .insert({ space_id: space, lane: ln, body: text, mentions: mentionIds(text, who) })
+          .select(COLS)
+          .abortSignal(AbortSignal.timeout(SEND_TIMEOUT_MS))
+          .single());
+      } catch (e) {
+        error = e;
+      }
+      if (error || !data) {
+        settle(update, local, () => send(space, ln, text));
         return;
       }
       notifyOut();
@@ -292,8 +319,12 @@ export function useLiveClients(): LiveClients | null {
       }
       update((d) => {
         const list = ((d.lc ||= {})[laneKey(space, ln)] ||= []);
-        if (!list.some((m) => m.id === toUiId(r.id))) list.push(toMsg(r, true));
+        if (!list.some((m) => m.id === toUiId(r.id))) {
+          dropEcho(list, r.body);
+          list.push(toMsg(r, true));
+        }
       });
+      settle(update, local);
     },
     tick: async (step, done) => {
       const err = await completeStep(step, done);

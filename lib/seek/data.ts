@@ -38,6 +38,8 @@ export type ChatMessage = {
   edited?: boolean;
   /** backend mode: your message that didn't reach the server (shown with Retry) */
   failed?: boolean;
+  /** backend mode: your message shown at once while it is being saved (dimmed, "Sending…") */
+  sending?: boolean;
   after?: string;
   task?: string;
   rx?: Record<string, number>;

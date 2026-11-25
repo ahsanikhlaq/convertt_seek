@@ -230,9 +230,30 @@ export async function remindMe(target: { uiId?: number; task?: number }, at: Dat
   return error ? 'Couldn’t set the reminder' : null;
 }
 
+// Only one tab on a device does the reminder rounds (they are per person, not per tab): the one holding this lease,
+// renewed on each round. Other tabs leave it alone while it is under 90 seconds old, unless they are on screen and
+// the holder is hidden (then the one you're looking at takes over).
+const LEASE = 'seek:tickLease';
+const LEASE_MS = 90_000;
+const tabId = Math.random().toString(36).slice(2);
+type Lease = { tab: string; at: number; fired: number; hidden: boolean };
+function readLease(): Lease | null {
+  try {
+    return JSON.parse(localStorage.getItem(LEASE) || 'null') as Lease | null;
+  } catch {
+    return null;
+  }
+}
+function writeLease(l: Lease) {
+  try {
+    localStorage.setItem(LEASE, JSON.stringify(l));
+  } catch {}
+}
+
 /**
  * Turns due reminders into notifications and sends due Send-later messages: on start and every minute while Seek is
- * open (in a hidden tab too, so a scheduled message isn't held back until someone looks at Seek).
+ * on screen, every 3 minutes while it is open in a hidden tab (so a scheduled message isn't held back until someone
+ * looks at Seek). With several tabs open, only one of them does it (see LEASE).
  */
 export function useReminders(me: string | null) {
   const { s } = useSeek();
@@ -242,20 +263,29 @@ export function useReminders(me: string | null) {
     // due reminders become notifications; due Send-later messages are sent
     let last = 0;
     const fire = () => {
-      last = Date.now();
       // supabase-js only sends a query once it is awaited (or then-ed)
       void sb().rpc('fire_my_reminders').then(() => {});
       void sb().rpc('send_my_scheduled').then(() => {});
     };
-    const onShow = () => {
-      if (document.visibilityState === 'visible' && Date.now() - last > 55e3) fire();
+    const round = () => {
+      const now = Date.now();
+      const hidden = document.visibilityState !== 'visible';
+      const l = readLease();
+      const mine = !l || l.tab === tabId || now - l.at >= LEASE_MS || (!hidden && l.hidden);
+      if (!mine) return;
+      // when it last ran on this device, in any tab
+      const prev = Math.max(last, l?.fired ?? 0);
+      const due = now - prev >= (hidden ? 180e3 : 60e3) - 5e3;
+      if (due) last = now;
+      writeLease({ tab: tabId, at: now, fired: due ? now : prev, hidden });
+      if (due) fire();
     };
-    fire();
-    const id = setInterval(fire, 60e3);
-    document.addEventListener('visibilitychange', onShow);
+    round();
+    const id = setInterval(round, 60e3);
+    document.addEventListener('visibilitychange', round);
     return () => {
       clearInterval(id);
-      document.removeEventListener('visibilitychange', onShow);
+      document.removeEventListener('visibilitychange', round);
     };
   }, [on, me]);
 }

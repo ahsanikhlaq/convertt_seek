@@ -74,7 +74,7 @@ function fullWhen(m: { at?: string; time: string }) {
  * without a caption gets the file's name as its text. The text stays on the message (notifications, search).
  */
 function textIsCardOnly(m: ChatMessage) {
-  if (m.failed) return false;
+  if (m.failed || m.sending) return false;
   if (m.card?.type === 'meeting' || m.card?.type === 'huddle') return true;
   const f = m.files;
   if (f?.length) {
@@ -444,7 +444,8 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
         (m.flash ? ' flash' : '') +
         (tapped ? ' tap' : '') +
         (cardOnly ? ' cardonly' : '') +
-        (m.failed ? ' failed' : '')
+        (m.failed ? ' failed' : '') +
+        (m.sending ? ' sending' : '')
       }
       data-id={m.id}
       onPointerDown={(e) => {
@@ -494,6 +495,9 @@ function MessageRow({ m, feed, inThread, compact }: { m: ChatMessage; feed: Feed
           <div className="tx">
             <RichText text={backendOn ? localMeetingText(m.text, m.at) : m.text} />
           </div>
+        )}
+        {m.sending && (
+          <div className="sendnote">Sending…</div>
         )}
         {m.failed && (
           <div className="unsent" role="status">

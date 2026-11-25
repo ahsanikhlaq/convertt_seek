@@ -6,7 +6,7 @@ import { notifyOut } from './push';
 import { accountFor, backendOn, DB_SCHEMA, sb, sendInvite } from './backend';
 import { PEOPLE, type ChatMessage, type FeedItem, type FileRef, type MessageCard, type PersonKey } from './data';
 import { initialsOf, channelId as toChannelName, isEmail } from './format';
-import { hydrateReactions, markNotSent, markRead, messageSinks, spaceUnreadCounts, unreadCounts, viewingSpace, workspaceMembers } from './liveSync';
+import { debounced, dropEcho, hydrateReactions, keepLocal, markRead, messageSinks, SEND_TIMEOUT_MS, settle, showSending, spaceUnreadCounts, unreadCounts, viewingSpace, workspaceMembers } from './liveSync';
 import { mentionIds } from './liveNotes';
 import { useSeek } from './store';
 import { onLiveStatus, useResync } from './resync';
@@ -19,11 +19,23 @@ import { onLiveStatus, useResync } from './resync';
 
 type Row = { id: number; channel_id: string; user_id: string | null; agent?: string | null; parent_id: number | null; body: string; created_at: string; files?: FileRef[]; pinned_at?: string | null; edited_at?: string | null; card?: MessageCard | null };
 type ChannelRow = { id: string; name: string; description: string; private?: boolean; created_by?: string | null };
+const COLS = 'id, channel_id, user_id, agent, parent_id, body, created_at, files, pinned_at, edited_at, card';
+// a catch-up asks from a little before the newest message on screen, in case one was saved slowly
+const OVERLAP_MS = 30_000;
+// the team changes rarely (and new members arrive live), so catching up asks for it at most this often
+const PEOPLE_EVERY_MS = 10 * 60_000;
 
 /** Database ids are offset so they never collide with ids the app hands out locally (decision cards, etc.). */
 const OFFSET = 1_000_000_000;
 export const toUiId = (dbId: number) => OFFSET + dbId;
 export const toDbId = (uiId: number) => (uiId > OFFSET ? uiId - OFFSET : null);
+
+/** When the newest saved message in this feed was written (ms), or null when there is none. */
+function newestAt(list: FeedItem[] | undefined): number | null {
+  let t = 0;
+  for (const m of list ?? []) if (m.kind === 'msg' && toDbId(m.id) != null && m.at) t = Math.max(t, Date.parse(m.at) || 0);
+  return t || null;
+}
 
 const COLORS = ['#6d4fc2', '#b4531f', '#b0306a', '#1f6b8a', '#8a5300', '#2f7a4f', '#4b154a', '#a03a3a'];
 export const colorFor = (id: string) => COLORS[[...id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % COLORS.length];
@@ -156,6 +168,7 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
   const allChans = useRef(new Map<string, string>()); // every channel you can see (joined or not), name → id
   const agentChans = useRef(new Set<string>()); // channel ids that have the AI assistant
   const syncSeen = useRef(0);
+  const peopleAt = useRef(0); // when the team was last asked for
   const current = s.workspaces.C.ch;
   const currentRef = useRef(current);
   currentRef.current = current;
@@ -209,6 +222,8 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
           if (list.some((m) => m.id === toUiId(r.id))) return;
           // the open channel stays up to date while you're on another screen, and counts as unread until you're back
           if (!onScreen) unread();
+          // your own message: its "Sending…" (or "Not sent") copy goes
+          if (r.user_id === meRef.current) dropEcho(list, r.body);
           list.push({ kind: 'msg', id: toUiId(r.id), who: whoOf(r), ai: !!r.agent || undefined, time: timeLabel(r.created_at), at: r.created_at, text: r.body, files: r.files?.length ? r.files : undefined, flash: r.user_id === meRef.current });
         } else {
           const root = list.find((m): m is ChatMessage => m.kind === 'msg' && m.id === toUiId(r.parent_id!));
@@ -287,6 +302,8 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
     if (!enabled) return;
     let live: RealtimeChannel | null = null;
     let alive = true;
+    // a burst of channel changes (someone adds several people, a channel and its members) reloads the list once
+    const channelsSoon = debounced(() => void loadChannels(), 400);
     setReady(false);
     (async () => {
       // the workspace that is open (when you switch, everything here starts again for the new one)
@@ -304,6 +321,7 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
       });
 
       // the team (names fill in as they load) and client-space unread counts don't hold up the channels
+      peopleAt.current = Date.now();
       void loadPeople(ws);
       void loadSpaceUnread();
       await loadChannels();
@@ -319,9 +337,11 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
             messageSinks.dm?.(p.new as Record<string, unknown>);
             return;
           }
-          // a client space message: one more unread there, unless it is yours or on screen
+          // a client space message: one more unread there, unless it is yours or on screen; the Clients screen, when
+          // open, adds it to the conversation (one subscription for both)
           const sp = p.new as { space_id?: string | null; lane?: string | null; parent_id?: number | null; user_id?: string | null };
           if (sp.space_id && sp.lane) {
+            messageSinks.space?.(p.new as Record<string, unknown>);
             const k = sp.space_id + ':' + sp.lane;
             if (sp.parent_id == null && sp.user_id !== meRef.current && viewingSpace.key !== k)
               update((d) => {
@@ -334,12 +354,12 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
           addRow(r);
         })
         // new channels you can see, and private channels you're added to or removed from
-        .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'channels', filter: `workspace_id=eq.${ws}` }, () => void loadChannels())
-        .on('postgres_changes', { event: '*', schema: DB_SCHEMA, table: 'channel_members', filter: `user_id=eq.${acc.id}` }, () => void loadChannels())
+        .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'channels', filter: `workspace_id=eq.${ws}` }, channelsSoon)
+        .on('postgres_changes', { event: '*', schema: DB_SCHEMA, table: 'channel_members', filter: `user_id=eq.${acc.id}` }, channelsSoon)
         // a channel deleted, or someone removed from one (deletes can't be filtered, so any of them reloads the list)
-        .on('postgres_changes', { event: 'DELETE', schema: DB_SCHEMA, table: 'channels' }, () => void loadChannels())
-        .on('postgres_changes', { event: '*', schema: DB_SCHEMA, table: 'channel_agents' }, () => void loadChannels())
-        .on('postgres_changes', { event: 'DELETE', schema: DB_SCHEMA, table: 'channel_members' }, () => void loadChannels())
+        .on('postgres_changes', { event: 'DELETE', schema: DB_SCHEMA, table: 'channels' }, channelsSoon)
+        .on('postgres_changes', { event: '*', schema: DB_SCHEMA, table: 'channel_agents' }, channelsSoon)
+        .on('postgres_changes', { event: 'DELETE', schema: DB_SCHEMA, table: 'channel_members' }, channelsSoon)
         .on('postgres_changes', { event: 'INSERT', schema: DB_SCHEMA, table: 'workspace_members', filter: `workspace_id=eq.${ws}` }, async (p) => {
           const m = p.new as { user_id: string; role: string };
           if (m.role === 'guest') return;
@@ -350,6 +370,7 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
     })();
     return () => {
       alive = false;
+      channelsSoon.cancel();
       if (live) sb().removeChannel(live);
     };
   }, [enabled, orgKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -359,11 +380,12 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
     if (!enabled || !viewing) return;
     const id = chans.current.get(current);
     if (!id) return;
-    // catching up reloads the open channel even if it was loaded already
-    if (syncSeen.current !== sync) {
-      syncSeen.current = sync;
-      loadedFor.current = '';
-    }
+    // catching up (back to the tab after a while, back online, reconnected) asks only for what is newer than the
+    // newest message on screen; with none on screen, the channel loads again in full
+    const catching = syncSeen.current !== sync;
+    syncSeen.current = sync;
+    const newest = catching && loadedFor.current === id ? newestAt(s.workspaces.C.msgs[current]) : null;
+    if (catching && newest == null) loadedFor.current = '';
     // loaded as soon as we know the channel (from this device's saved list); not again when the list refreshes,
     // nor when you come back to Home (it stayed live meanwhile): then it is only marked read
     if (loadedFor.current === id) {
@@ -372,6 +394,7 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
         const c = d.workspaces.C.channels.find((x) => x.id === current);
         if (c?.unread) c.unread = 0;
       });
+      if (newest != null) void catchUp(id, current, newest);
       return;
     }
     loadedFor.current = id;
@@ -379,12 +402,7 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
     let alive = true;
     let done = false;
     (async () => {
-      const { data, error } = await sb()
-        .from('messages')
-        .select('id, channel_id, user_id, agent, parent_id, body, created_at, files, pinned_at, edited_at, card')
-        .eq('channel_id', id)
-        .order('created_at', { ascending: false })
-        .limit(300);
+      const { data, error } = await sb().from('messages').select(COLS).eq('channel_id', id).order('created_at', { ascending: false }).limit(300);
       if (!alive) return;
       if (error) {
         loadedFor.current = '';
@@ -394,7 +412,8 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
       const rows = ((data ?? []) as Row[]).reverse();
       const feed = toFeed(rows);
       update((d) => {
-        d.workspaces.C.msgs[current] = feed;
+        // your messages still sending (or not sent) stay
+        d.workspaces.C.msgs[current] = keepLocal(d.workspaces.C.msgs[current], feed);
         const c = d.workspaces.C.channels.find((x) => x.id === current);
         if (c) c.unread = 0;
       });
@@ -410,30 +429,83 @@ export function useLiveChatEngine(viewing: boolean): LiveChat | null {
     };
   }, [enabled, ready, current, sync, viewing]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // catching up (back to the tab, back online, reconnected): reload the open channel and the unread counts
+  /**
+   * Catching up the open channel: the messages saved since the newest one on screen (from a little before it), added
+   * in time order with their replies, each once. As many as a full load replaces the feed, as a full load would.
+   */
+  const catchUp = async (id: string, name: string, newest: number) => {
+    const since = new Date(newest - OVERLAP_MS).toISOString();
+    const { data, error } = await sb().from('messages').select(COLS).eq('channel_id', id).gt('created_at', since).order('created_at', { ascending: false }).limit(300);
+    if (error || !data?.length || chans.current.get(name) !== id) return;
+    const rows = (data as Row[]).reverse();
+    await learnPeople(rows.map((r) => r.user_id).filter((x): x is string => !!x));
+    const fresh = toFeed(rows) as ChatMessage[];
+    update((d) => {
+      const w = d.workspaces.C;
+      const list = w.msgs[name];
+      if (!list) return;
+      if (rows.length >= 300) {
+        w.msgs[name] = keepLocal(list, fresh);
+        return;
+      }
+      const have = new Map(list.filter((x): x is ChatMessage => x.kind === 'msg').map((m) => [m.id, m]));
+      for (const m of fresh) {
+        if (have.has(m.id)) continue;
+        if (m.who === 'AH') dropEcho(list, m.text);
+        const at = Date.parse(m.at!);
+        const i = list.findIndex((x) => x.kind === 'msg' && toDbId(x.id) != null && !!x.at && Date.parse(x.at) > at);
+        list.splice(i < 0 ? list.length : i, 0, m);
+      }
+      // new replies to messages that were already on screen (new messages came with theirs)
+      for (const r of rows) {
+        const root = r.parent_id != null ? have.get(toUiId(r.parent_id)) : undefined;
+        if (!root) continue;
+        root.thread ||= [];
+        if (root.thread.some((x) => (x as { dbId?: number }).dbId === r.id)) continue;
+        const reply = { who: whoOf(r), time: timeLabel(r.created_at), text: r.body, dbId: r.id };
+        root.thread.push(reply);
+      }
+    });
+    void hydrateReactions(update, fresh.map((m) => m.id), meRef.current);
+  };
+
+  // catching up (back to the tab after a while, back online, reconnected): the channel list and unread counts (the
+  // open channel catches up above); the team at most every 10 minutes
   useEffect(() => {
     if (!enabled || !sync) return;
     void loadChannels();
     void loadSpaceUnread();
-    if (wsRef.current) void loadPeople(wsRef.current);
+    if (wsRef.current && Date.now() - peopleAt.current > PEOPLE_EVERY_MS) {
+      peopleAt.current = Date.now();
+      void loadPeople(wsRef.current);
+    }
   }, [sync]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const insert = async (channel: string, body: string, parent: number | null) => {
+  const insert = async (channel: string, body: string, parent: number | null): Promise<void> => {
     const channel_id = chans.current.get(channel);
     if (!channel_id) return;
-    const { data, error } = await sb()
-      .from('messages')
-      .insert({ channel_id, body, parent_id: parent, mentions: mentionIds(body, people.filter((k) => k !== 'AH')) })
-      .select('id, channel_id, user_id, agent, parent_id, body, created_at, files, pinned_at, edited_at, card')
-      .single();
-    if (error) {
-      if (parent == null) {
-        const name = channel;
-        markNotSent(update, (d) => (d.workspaces.C.msgs[name] ||= []), body, () => insert(channel, body, null));
-      } else toast('Reply not sent. Check your connection and try again');
+    // a message shows at once, marked "Sending…" (a thread reply shows when it is saved)
+    const local = parent == null ? showSending(update, (d) => (d.workspaces.C.msgs[channel] ||= []), body) : null;
+    let data: unknown = null;
+    let error: unknown = null;
+    try {
+      // a send that hangs (a busy server) gives up after 20 seconds and shows as "Not sent"
+      ({ data, error } = await sb()
+        .from('messages')
+        .insert({ channel_id, body, parent_id: parent, mentions: mentionIds(body, people.filter((k) => k !== 'AH')) })
+        .select(COLS)
+        .abortSignal(AbortSignal.timeout(SEND_TIMEOUT_MS))
+        .single());
+    } catch (e) {
+      error = e;
+    }
+    if (error || !data) {
+      if (local != null) settle(update, local, () => insert(channel, body, null));
+      else toast('Reply not sent. Check your connection and try again');
       return;
     }
     addRow(data as Row);
+    if (local != null) settle(update, local);
     notifyOut();
     if (parent == null && agentChans.current.has(channel_id))
       void sb()

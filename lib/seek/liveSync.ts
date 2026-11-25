@@ -18,21 +18,97 @@ function* feeds(d: State): Generator<FeedItem[]> {
   for (const list of Object.values(d.lc ?? {})) if (list) yield list;
 }
 
-// ---------------------------------------------------------------- messages that didn't send
-// A failed send stays in its conversation, marked "Not sent", with Retry; it is retried by itself when the
-// connection comes back. Local ids are negative, so they never clash with saved messages.
+// ---------------------------------------------------------------- messages on their way, and ones that didn't send
+// Your message shows in its conversation at once, dimmed and marked "Sending…", while it is saved; the saved one
+// replaces it when it arrives. A send that fails (or takes longer than SEND_TIMEOUT_MS) stays, marked "Not sent",
+// with Retry; it is retried by itself when the connection comes back. Local ids are negative, so they never clash
+// with saved messages (and start from the clock, so they don't clash with ones saved on this device last time).
 const retries = new Map<number, () => Promise<void>>();
-let localId = -1;
+let localId = -1 - (Date.now() % 1_000_000_000);
+// the local messages made since this page loaded (older ones saved on this device have nothing behind them)
+const ours = new Set<number>();
+type Update = (fn: (d: State) => void) => void;
 
-/** Shows your message as "Not sent" in the feed, with a way to send it again. */
-export function markNotSent(update: (fn: (d: State) => void) => void, list: (d: State) => FeedItem[], text: string, retry: () => Promise<void>) {
+/** A send that takes longer than this shows as "Not sent" (it may still be saved later; see dropEcho). */
+export const SEND_TIMEOUT_MS = 20_000;
+
+/** Shows your message in the feed straight away, marked "Sending…". Returns its local id, for settle(). */
+export function showSending(update: Update, list: (d: State) => FeedItem[], text: string): number {
   const id = localId--;
-  retries.set(id, retry);
+  ours.add(id);
   const t = new Date();
   const time = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
   update((d) => {
-    list(d).push({ kind: 'msg', id, who: 'AH', time, text, failed: true });
+    list(d).push({ kind: 'msg', id, who: 'AH', time, text, sending: true });
   });
+  return id;
+}
+
+/**
+ * The send finished. Saved (no retry given): the "Sending…" copy goes, as the caller adds the saved message.
+ * Failed: it turns into "Not sent", with Retry. Nothing happens if the saved copy already replaced it.
+ */
+export function settle(update: Update, id: number, retry?: () => Promise<void>) {
+  update((d) => {
+    if (!retry) {
+      dropLocal(d, id);
+      return;
+    }
+    onMessage(d, id, (m) => {
+      delete m.sending;
+      m.failed = true;
+      retries.set(id, retry);
+    });
+  });
+}
+
+/**
+ * Your own message has just been added to this conversation (live, or from the send): the local copy with the same
+ * text ("Sending…" or "Not sent") goes, so it never shows twice. A send that timed out can still be saved later.
+ * Call inside update(), only when the saved message was newly added.
+ */
+export function dropEcho(list: FeedItem[], text: string) {
+  const i = list.findIndex((x) => x.kind === 'msg' && x.id < 0 && x.who === 'AH' && (x.sending || x.failed) && x.text === text);
+  if (i < 0) return;
+  retries.delete(list[i].id);
+  list.splice(i, 1);
+}
+
+/**
+ * A conversation was (re)loaded from the server: your messages still sending or not sent stay at the end, unless
+ * their saved copy is among the messages that weren't there before.
+ */
+export function keepLocal(prev: FeedItem[] | undefined, next: FeedItem[]): FeedItem[] {
+  const local = (prev ?? []).filter((x): x is ChatMessage => x.kind === 'msg' && ours.has(x.id) && (!!x.sending || !!x.failed));
+  if (!local.length) return next;
+  const had = new Set((prev ?? []).map((x) => x.id));
+  const fresh = next.filter((x): x is ChatMessage => x.kind === 'msg' && x.who === 'AH' && !had.has(x.id)).map((x) => x.text);
+  const out = [...next];
+  for (const m of local) {
+    const j = fresh.indexOf(m.text);
+    if (j >= 0) {
+      fresh.splice(j, 1);
+      retries.delete(m.id);
+    } else out.push(m);
+  }
+  return out;
+}
+
+/** Runs fn once, ms after the last call (calls in between are folded into that one). cancel() drops a pending one. */
+export function debounced(fn: () => void, ms: number) {
+  let t: ReturnType<typeof setTimeout> | null = null;
+  const call = () => {
+    if (t) clearTimeout(t);
+    t = setTimeout(() => {
+      t = null;
+      fn();
+    }, ms);
+  };
+  call.cancel = () => {
+    if (t) clearTimeout(t);
+    t = null;
+  };
+  return call;
 }
 
 function dropLocal(d: State, id: number) {
@@ -186,9 +262,10 @@ export function workspaceMembers(orgId: string): Promise<{ user_id: string; role
 
 /**
  * New messages arrive on one live subscription (team chat's, filtered to the open organisation); the DM rows in it
- * are handed to DMs through here, so the two don't each subscribe to the same messages.
+ * are handed to DMs through here, so the two don't each subscribe to the same messages. Client space rows go to the
+ * team's Clients screen the same way while it is open (a client, signed in as a guest, has its own subscription).
  */
-export const messageSinks: { dm: ((row: Record<string, unknown>) => void) | null } = { dm: null };
+export const messageSinks: { dm: ((row: Record<string, unknown>) => void) | null; space: ((row: Record<string, unknown>) => void) | null } = { dm: null, space: null };
 
 /** Live reactions and deletions from everyone, applied to whatever is on screen. Mounted once, in the app frame. */
 export function useLiveSync(me: string | null) {
